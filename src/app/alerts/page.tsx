@@ -74,13 +74,54 @@ function saveArchived(ids: Set<string>) {
   localStorage.setItem(ARCHIVED_KEY, JSON.stringify(Array.from(ids)));
 }
 
+const CUSTOM_ALERTS_KEY = "redhorn_custom_alerts";
+
+function loadCustomAlerts(): AlertRow[] {
+  if (typeof window === "undefined") return [];
+  try { return JSON.parse(localStorage.getItem(CUSTOM_ALERTS_KEY) || "[]"); }
+  catch { return []; }
+}
+function saveCustomAlerts(alerts: AlertRow[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(CUSTOM_ALERTS_KEY, JSON.stringify(alerts));
+}
+
 export default function AlertsPage() {
   const gridRef = useRef<AgGridReact>(null);
   const historyGridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
+  const [customAlerts, setCustomAlerts] = useState<AlertRow[]>([]);
+  const [showAddAlert, setShowAddAlert] = useState(false);
+  const [newAlert, setNewAlert] = useState({ unit: "", category: "General", severity: "Warning" as AlertRow["severity"], detail: "" });
 
-  useEffect(() => { setArchivedIds(loadArchived()); }, []);
+  useEffect(() => { setArchivedIds(loadArchived()); setCustomAlerts(loadCustomAlerts()); }, []);
+
+  function addAlert() {
+    if (!newAlert.detail.trim()) return;
+    const alert: AlertRow = {
+      id: `custom-${Date.now()}`,
+      unit: newAlert.unit.trim() || "—",
+      tenant: tenants.find(t => t.unit === newAlert.unit.trim())?.tenant || "",
+      building: tenants.find(t => t.unit === newAlert.unit.trim())?.building || "",
+      category: newAlert.category,
+      severity: newAlert.severity,
+      detail: newAlert.detail.trim(),
+      amount: 0,
+      date: new Date().toISOString().slice(0, 10),
+    };
+    const updated = [alert, ...customAlerts];
+    setCustomAlerts(updated);
+    saveCustomAlerts(updated);
+    setNewAlert({ unit: "", category: "General", severity: "Warning", detail: "" });
+    setShowAddAlert(false);
+  }
+
+  function removeCustomAlert(id: string) {
+    const updated = customAlerts.filter(a => a.id !== id);
+    setCustomAlerts(updated);
+    saveCustomAlerts(updated);
+  }
 
   function archiveAlert(id: string) {
     const next = new Set(archivedIds);
@@ -146,8 +187,9 @@ export default function AlertsPage() {
     return alerts;
   }, []);
 
-  const activeAlerts = alertData.filter(a => !archivedIds.has(a.id));
-  const archivedAlerts = alertData.filter(a => archivedIds.has(a.id));
+  const allAlerts = [...customAlerts, ...alertData];
+  const activeAlerts = allAlerts.filter(a => !archivedIds.has(a.id));
+  const archivedAlerts = allAlerts.filter(a => archivedIds.has(a.id));
 
   function ArchiveCell(props: { data: AlertRow }) {
     return (
@@ -237,10 +279,53 @@ export default function AlertsPage() {
     <div>
       <PageHeader title="Alerts & Oversight" subtitle="Rule-based PM accountability tracking">
         <div className="flex items-center gap-3">
-          <span className="text-[11px] font-semibold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{criticalCount} Critical</span>
-          <span className="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{warningCount} Warnings</span>
+          <span className="text-[11px] font-medium text-[#dc2626]">{criticalCount} critical</span>
+          <span className="text-[11px] font-medium text-[#d97706]">{warningCount} warnings</span>
+          <button onClick={() => setShowAddAlert(!showAddAlert)}
+            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer transition-colors">
+            Add Alert
+          </button>
         </div>
       </PageHeader>
+
+      {/* Add Alert Form */}
+      {showAddAlert && (
+        <div className="bg-white border border-[#e4e4e7] rounded p-4 mb-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <input type="text" value={newAlert.unit} onChange={e => setNewAlert({ ...newAlert, unit: e.target.value })}
+              placeholder="Unit (e.g. A-102)"
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+            <select value={newAlert.category} onChange={e => setNewAlert({ ...newAlert, category: e.target.value })}
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] text-[#18181b]">
+              <option value="General">General</option>
+              <option value="Electric Not Posted">Electric Not Posted</option>
+              <option value="Past Due">Past Due</option>
+              <option value="Lease Expiring">Lease Expiring</option>
+              <option value="Holdover">Holdover</option>
+              <option value="Maintenance">Maintenance</option>
+              <option value="PM Follow-up">PM Follow-up</option>
+            </select>
+            <select value={newAlert.severity} onChange={e => setNewAlert({ ...newAlert, severity: e.target.value as AlertRow["severity"] })}
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] text-[#18181b]">
+              <option value="Critical">Critical</option>
+              <option value="Warning">Warning</option>
+              <option value="Info">Info</option>
+            </select>
+            <div className="flex gap-2">
+              <button onClick={addAlert} disabled={!newAlert.detail.trim()}
+                className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] disabled:bg-[#e4e4e7] disabled:text-[#a1a1aa] cursor-pointer transition-colors">
+                Add
+              </button>
+              <button onClick={() => setShowAddAlert(false)}
+                className="text-[11px] text-[#71717a] cursor-pointer px-2 py-1">Cancel</button>
+            </div>
+          </div>
+          <textarea value={newAlert.detail} onChange={e => setNewAlert({ ...newAlert, detail: e.target.value })}
+            placeholder="Alert description..."
+            rows={2}
+            className="w-full text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] resize-none" />
+        </div>
+      )}
 
       {/* Active Alerts Grid */}
       <div className="flex items-center justify-between mb-3">
