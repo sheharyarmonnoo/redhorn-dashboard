@@ -135,3 +135,9 @@ export function removeKanbanItem(id: string) {
   const items = loadKanban();
   saveKanban(items.filter(i => i.id !== id));
 }
+
+export function updateKanbanItem(id: string, updates: Partial<Pick<KanbanItem, "text" | "priority" | "unit">>) {
+  const items = loadKanban();
+  const updated = items.map(i => i.id === id ? { ...i, ...updates } : i);
+  saveKanban(updated);
+}

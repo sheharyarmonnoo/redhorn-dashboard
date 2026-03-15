@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import KPICard from "@/components/KPICard";
 import PageHeader from "@/components/PageHeader";
 import ActionItems from "@/components/ActionItems";
@@ -17,6 +17,22 @@ export default function DashboardPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [filteredUnits, setFilteredUnits] = useState<Set<string>>(allOccupiedUnits);
   const isFiltered = filteredUnits.size !== allOccupiedUnits.size;
+
+  // Persist filter to localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("redhorn_revenue_filter");
+      if (saved) {
+        const arr = JSON.parse(saved) as string[];
+        if (arr.length > 0) setFilteredUnits(new Set(arr));
+      }
+    } catch {}
+  }, []);
+
+  const handleFilterApply = useCallback((units: Set<string>) => {
+    setFilteredUnits(units);
+    localStorage.setItem("redhorn_revenue_filter", JSON.stringify(Array.from(units)));
+  }, []);
   const occupied = tenants.filter(t => t.status !== "vacant");
   const vacant = tenants.filter(t => t.status === "vacant");
   const totalSqft = tenants.reduce((sum, t) => sum + t.sqft, 0);
@@ -115,7 +131,7 @@ export default function DashboardPage() {
         open={filterOpen}
         onClose={() => setFilterOpen(false)}
         selectedUnits={filteredUnits}
-        onApply={setFilteredUnits}
+        onApply={handleFilterApply}
       />
         <div className="bg-white border border-[#e4e4e7] rounded p-4">
           <div className="flex items-baseline justify-between mb-3">

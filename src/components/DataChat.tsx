@@ -170,14 +170,35 @@ function renderMarkdown(text: string) {
   });
 }
 
+const CHAT_KEY = "redhorn_chat_messages";
+const defaultMessage: Message = { role: "assistant", content: "Hi! I'm your Hollister portfolio assistant. Ask me about tenants, revenue, alerts, vacant units, or anything else. Try **\"PM call prep\"** to get your meeting agenda." };
+
+function loadMessages(): Message[] {
+  if (typeof window === "undefined") return [defaultMessage];
+  try {
+    const raw = localStorage.getItem(CHAT_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Message[];
+      return parsed.length > 0 ? parsed : [defaultMessage];
+    }
+  } catch {}
+  return [defaultMessage];
+}
+
+function saveMessages(msgs: Message[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(CHAT_KEY, JSON.stringify(msgs));
+}
+
 export default function DataChat() {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "Hi! I'm your Hollister portfolio assistant. Ask me about tenants, revenue, alerts, vacant units, or anything else. Try **\"PM call prep\"** to get your meeting agenda." },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([defaultMessage]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load persisted messages on mount
+  useEffect(() => { setMessages(loadMessages()); }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -187,15 +208,23 @@ export default function DataChat() {
     if (!input.trim()) return;
     const userMsg = input.trim();
     setInput("");
-    setMessages(prev => [...prev, { role: "user", content: userMsg }]);
+    const updated = [...messages, { role: "user" as const, content: userMsg }];
+    setMessages(updated);
     setIsTyping(true);
 
-    // Simulate a brief delay
     setTimeout(() => {
       const response = answerQuestion(userMsg);
-      setMessages(prev => [...prev, { role: "assistant", content: response }]);
+      const withResponse = [...updated, { role: "assistant" as const, content: response }];
+      setMessages(withResponse);
+      saveMessages(withResponse);
       setIsTyping(false);
     }, 400);
+  }
+
+  function clearChat() {
+    const fresh = [defaultMessage];
+    setMessages(fresh);
+    saveMessages(fresh);
   }
 
   const alertCount = getAlerts().length;
