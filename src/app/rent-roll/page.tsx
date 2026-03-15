@@ -85,21 +85,23 @@ export default function RentRollPage() {
       <PageHeader title="Rent Roll" subtitle="All units as of March 2026 — Click any row for details" />
 
       {/* Summary bar */}
-      <div className="flex flex-wrap items-center gap-3 sm:gap-6 mb-4 text-[12px]">
-        <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-[#1e1e2d] font-semibold">
-          {tenants.length} Units
-        </span>
-        <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-[#1e1e2d]">
-          {totalSqft.toLocaleString()} SF
-        </span>
-        <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-emerald-700 font-semibold">
-          {formatCurrency(totalRent)}/mo
-        </span>
-        <div className="ml-auto">
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-[#1e1e2d] font-semibold whitespace-nowrap">
+            {tenants.length} Units
+          </span>
+          <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-[#1e1e2d] whitespace-nowrap">
+            {totalSqft.toLocaleString()} SF
+          </span>
+          <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-emerald-700 font-semibold whitespace-nowrap">
+            {formatCurrency(totalRent)}/mo
+          </span>
+        </div>
+        <div className="sm:ml-auto">
           <input
             type="text"
             placeholder="Quick search all data..."
-            className="px-3 py-1.5 bg-white border border-[#e8eaef] rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7] w-48 sm:w-64"
+            className="px-3 py-1.5 bg-white border border-[#e8eaef] rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7] w-full sm:w-64"
             onChange={(e) => {
               gridRef.current?.api?.setGridOption("quickFilterText", e.target.value);
             }}
@@ -108,7 +110,7 @@ export default function RentRollPage() {
       </div>
 
       {/* AG Grid Table */}
-      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: "calc(100vh - 260px)", minHeight: 400 }}>
+      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: "min(calc(100vh - 220px), 700px)", minHeight: 350 }}>
         <AgGridReact
           ref={gridRef}
           rowData={tenants}

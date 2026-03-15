@@ -89,13 +89,20 @@ body {
   .sidebar-desktop {
     display: none;
   }
-  .main-content {
-    margin-left: 0 !important;
-  }
 }
 
 @media (min-width: 1024px) {
   .mobile-nav {
     display: none;
+  }
+}
+
+/* AG Grid mobile */
+@media (max-width: 640px) {
+  .ag-theme-alpine {
+    --ag-font-size: 12px;
+    --ag-row-height: 38px;
+    --ag-header-height: 38px;
+    --ag-cell-horizontal-padding: 8px;
   }
 }

@@ -37,7 +37,7 @@ export default function SitePlanPage() {
       <SitePlan3D onSelect={setSelected} selectedUnit={selected?.unit || null} />
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mt-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-5">
         {[
           { label: "Total Units", value: tenants.length, color: "text-[#1e1e2d]" },
           { label: "Occupied", value: occupied.length, color: "text-emerald-600" },

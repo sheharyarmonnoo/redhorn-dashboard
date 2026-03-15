@@ -76,7 +76,7 @@ function BuildingSection({ title, subtitle, units, onSelect, selectedUnit, gridC
           <span>{units.filter(u => u.status === "vacant").length} vacant</span>
         </div>
       </div>
-      <div className={`grid ${gridCols} gap-2`}>
+      <div className={`grid grid-cols-3 sm:grid-cols-4 md:${gridCols} gap-1.5 sm:gap-2`}>
         {units.map(t => {
           const size = t.sqft > 8000 ? "xl" : t.sqft > 5000 ? "lg" : t.sqft > 2500 ? "md" : "sm";
           return (
@@ -117,8 +117,8 @@ export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: T
       {/* Site Plan Grid */}
       <div className="p-5 space-y-4">
         {/* Top Row: Building A + Building D */}
-        <div className="grid grid-cols-3 gap-4">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
             <BuildingSection
               title="Building A"
               subtitle="Industrial / Warehouse"
