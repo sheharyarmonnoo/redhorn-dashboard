@@ -1,13 +1,22 @@
 "use client";
+import { useState, useMemo } from "react";
 import KPICard from "@/components/KPICard";
 import PageHeader from "@/components/PageHeader";
 import ActionItems from "@/components/ActionItems";
+import RevenueFilter from "@/components/RevenueFilter";
 import { tenants, monthlyRevenue, formatCurrency, getAlerts } from "@/data/tenants";
+import { Filter } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 export default function DashboardPage() {
+  const allOccupiedUnits = useMemo(() =>
+    new Set(tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")).map(t => t.unit)),
+  []);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filteredUnits, setFilteredUnits] = useState<Set<string>>(allOccupiedUnits);
+  const isFiltered = filteredUnits.size !== allOccupiedUnits.size;
   const occupied = tenants.filter(t => t.status !== "vacant");
   const vacant = tenants.filter(t => t.status === "vacant");
   const totalSqft = tenants.reduce((sum, t) => sum + t.sqft, 0);

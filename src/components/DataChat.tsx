@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { tenants, monthlyRevenue, formatCurrency, getAlerts, Tenant } from "@/data/tenants";
+import { addKanbanItem, loadKanban, updateTenantNote } from "@/data/store";
 
 interface Message {
   role: "user" | "assistant";
@@ -115,8 +116,44 @@ function answerQuestion(q: string): string {
     return `**PM Call Agenda — March 2026:**\n\n1. **Collections** (${pastDue.length} items):\n${pastDue.map(t => `   - ${t.unit} (${t.tenant}): ${formatCurrency(t.pastDueAmount)}`).join("\n")}\n\n2. **Missing Electric Postings** (${missingElectric.length}):\n${missingElectric.map(t => `   - ${t.unit}: ~${formatCurrency(t.monthlyElectric)}/mo`).join("\n")}\n\n3. **Lease Renewals** (${expiring.length}):\n${expiring.map(t => `   - ${t.unit} (${t.tenant}): expires ${t.leaseTo}`).join("\n")}`;
   }
 
+  // Add action item: "add task: ..." or "action item: ..."
+  const addMatch = lower.match(/^(?:add task|action item|todo|add action|new task)[:\s]+(.+)/i);
+  if (addMatch) {
+    const text = addMatch[1].trim();
+    // Detect priority
+    let priority: "high" | "medium" | "low" = "medium";
+    if (lower.includes("urgent") || lower.includes("high") || lower.includes("asap")) priority = "high";
+    if (lower.includes("low") || lower.includes("minor")) priority = "low";
+    // Detect unit reference
+    const unitRef = text.match(/([ACD]-?\d+[A-Za-z]?)/i);
+    const unit = unitRef ? unitRef[1].toUpperCase().replace(/^([ACD])(\d)/, "$1-$2") : undefined;
+    addKanbanItem(text, priority, unit);
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("kanban-updated"));
+    return `Added to **To Do** board:\n- "${text}"\n- Priority: **${priority}**${unit ? `\n- Linked to unit: **${unit}**` : ""}\n\nCheck your Kanban board on the dashboard.`;
+  }
+
+  // Show kanban board items
+  if (lower.includes("kanban") || lower.includes("board") || lower.includes("action items") || lower.includes("tasks") || lower.includes("todo list")) {
+    const items = loadKanban();
+    const todo = items.filter(i => i.column === "todo");
+    const inProg = items.filter(i => i.column === "in_progress");
+    const done = items.filter(i => i.column === "done");
+    return `**Kanban Board:**\n\n**To Do** (${todo.length}):\n${todo.map(i => `- ${i.text}`).join("\n") || "- (empty)"}\n\n**In Progress** (${inProg.length}):\n${inProg.map(i => `- ${i.text}`).join("\n") || "- (empty)"}\n\n**Done** (${done.length}):\n${done.map(i => `- ${i.text}`).join("\n") || "- (empty)"}`;
+  }
+
+  // Update unit note: "note A-102: ..." or "update note for A-102: ..."
+  const noteMatch = lower.match(/^(?:note|update note|add note|set note)\s*(?:for\s*)?([acd]-?\d+[a-z]?)[:\s]+(.+)/i);
+  if (noteMatch) {
+    const unitId = noteMatch[1].toUpperCase().replace(/^([ACD])(\d)/, "$1-$2");
+    const noteText = noteMatch[2].trim();
+    const tenant = tenants.find(t => t.unit === unitId);
+    if (!tenant) return `Unit **${unitId}** not found.`;
+    updateTenantNote(unitId, noteText);
+    return `Updated note for **${unitId}**${tenant.tenant ? ` (${tenant.tenant})` : ""}:\n"${noteText}"\n\nView it on the Site Plan by clicking the unit.`;
+  }
+
   // Help / default
-  return `I can help with:\n- **"What's past due?"** — delinquent tenants & amounts\n- **"Show revenue"** — monthly revenue breakdown\n- **"Vacant units"** — available spaces\n- **"Electric status"** — missing utility postings\n- **"Expiring leases"** — renewal pipeline\n- **"Unit A-102"** — specific unit details\n- **"Alerts"** — active issues\n- **"PM call prep"** — meeting agenda\n- **"Largest tenants"** — top 5 by rent\n- **"Buildings"** — building summaries\n\nAsk me anything about the Hollister portfolio!`;
+  return `I can help with:\n- **"What's past due?"** — delinquent tenants & amounts\n- **"Show revenue"** — monthly revenue breakdown\n- **"Vacant units"** — available spaces\n- **"Electric status"** — missing utility postings\n- **"Expiring leases"** — renewal pipeline\n- **"Unit A-102"** — specific unit details\n- **"Alerts"** — active issues\n- **"PM call prep"** — meeting agenda\n- **"Largest tenants"** — top 5 by rent\n- **"Add task: [text]"** — add to Kanban board\n- **"Note A-102: [text]"** — update unit notes\n- **"Show kanban"** — view action items\n\nAsk me anything about the Hollister portfolio!`;
 }
 
 function renderMarkdown(text: string) {
@@ -231,7 +268,7 @@ export default function DataChat() {
 
           {/* Quick Actions */}
           <div className="px-3 py-1.5 flex gap-1.5 overflow-x-auto shrink-0 border-t border-gray-100">
-            {["PM call prep", "What's past due?", "Vacant units", "Alerts"].map(q => (
+            {["PM call prep", "What's past due?", "Show kanban", "Alerts", "Add task:"].map(q => (
               <button
                 key={q}
                 onClick={() => { setInput(q); }}
