@@ -97,12 +97,24 @@ body {
   }
 }
 
-/* AG Grid mobile */
+/* AG Grid mobile — larger touch targets, readable text */
 @media (max-width: 640px) {
   .ag-theme-alpine {
     --ag-font-size: 12px;
-    --ag-row-height: 38px;
-    --ag-header-height: 38px;
-    --ag-cell-horizontal-padding: 8px;
+    --ag-row-height: 44px;
+    --ag-header-height: 40px;
+    --ag-cell-horizontal-padding: 10px;
   }
+  .ag-theme-alpine .ag-header-cell-label {
+    font-size: 10px;
+  }
+  .ag-theme-alpine .ag-paging-panel {
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+}
+
+/* AG Grid comfortable row height on all screens */
+.ag-theme-alpine .ag-row {
+  border-bottom: 1px solid #f0f0f5;
 }
