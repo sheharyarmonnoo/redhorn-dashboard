@@ -253,17 +253,20 @@ export default function DataChat() {
         <div className="fixed bottom-0 left-0 right-0 sm:bottom-0 sm:right-0 sm:left-auto lg:left-[240px] lg:right-auto z-50 w-full sm:w-[400px] lg:w-[440px] h-[85vh] sm:h-[50vh] lg:h-screen bg-white border-l border-t sm:border-t-0 border-[#e4e4e7] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="bg-[#18181b] text-white px-4 py-2.5 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2">
-              <div>
-                <p className="text-[13px] font-bold">Portfolio Chat</p>
-                <p className="text-[10px] text-slate-300">Ask about your data</p>
-              </div>
+            <div>
+              <p className="text-[13px] font-bold">Portfolio Chat</p>
+              <p className="text-[10px] text-[#71717a]">{messages.length - 1} messages</p>
             </div>
-            <button onClick={() => setIsOpen(false)} className="text-slate-300 hover:text-white transition-colors cursor-pointer">
-              <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={clearChat} className="text-[10px] text-[#71717a] hover:text-white transition-colors cursor-pointer px-1.5 py-0.5" title="Clear chat history">
+                Clear
+              </button>
+              <button onClick={() => setIsOpen(false)} className="text-[#71717a] hover:text-white transition-colors cursor-pointer">
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Messages */}

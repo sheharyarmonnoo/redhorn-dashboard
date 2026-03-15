@@ -296,7 +296,7 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {ledger.slice(-10).map((entry, i) => (
+                    {[...ledger].reverse().slice(0, 10).map((entry, i) => (
                       <tr key={i} className="border-t border-[#f4f4f5]">
                         <td className="px-2.5 py-1.5 text-[#a1a1aa]">{entry.date}</td>
                         <td className="px-2.5 py-1.5 text-[#18181b] truncate max-w-[160px]">{entry.description}</td>

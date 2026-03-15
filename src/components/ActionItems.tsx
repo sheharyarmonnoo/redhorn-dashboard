@@ -148,6 +148,11 @@ export default function ActionItems() {
     setItems(loadKanban());
   }
 
+  function handleEdit(id: string, updates: Partial<Pick<KanbanItem, "text" | "priority" | "unit">>) {
+    updateKanbanItem(id, updates);
+    setItems(loadKanban());
+  }
+
   function handleAdd() {
     if (!newText.trim()) return;
     addKanbanItem(newText.trim(), newPriority);
@@ -199,7 +204,7 @@ export default function ActionItems() {
               </div>
               <div className="space-y-2">
                 {colItems.map(item => (
-                  <KanbanCard key={item.id} item={item} onMove={handleMove} onRemove={handleRemove} />
+                  <KanbanCard key={item.id} item={item} onMove={handleMove} onRemove={handleRemove} onEdit={handleEdit} />
                 ))}
                 {colItems.length === 0 && (
                   <p className="text-[10px] text-[#d4d4d8] text-center py-4">No items</p>
