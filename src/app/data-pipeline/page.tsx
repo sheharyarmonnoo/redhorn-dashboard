@@ -61,8 +61,8 @@ const fileSyncHistory: FileSyncRow[] = [
     affectedUnits: ["C-212", "C-305", "A-90"],
     resolution: "Manually verify CenterPoint meter-to-unit mapping with PM. Update Yardi utility account codes for these 3 units. Re-run sync after correction.",
   },
-  { id: 8, filename: "RentRoll02_01_2026.xlsx", source: "Yardi", type: "Rent Roll", records: 52, size: "13.0 KB", status: "Success", syncedAt: "2026-02-01 08:30" },
-  { id: 9, filename: "LeaseLedger02_01_2026.xlsx", source: "Yardi", type: "Lease Ledger", records: 42, size: "13.5 KB", status: "Success", syncedAt: "2026-02-01 08:29" },
+  { id: 8, filename: "RentRoll02_01_2026.xlsx", source: "Yardi", type: "Rent Roll", records: 52, size: "13.0 KB", status: "Success", syncedAt: "2026-02-01 08:30", statusDetail: "52 units parsed. All matched January baseline." },
+  { id: 9, filename: "LeaseLedger02_01_2026.xlsx", source: "Yardi", type: "Lease Ledger", records: 42, size: "13.5 KB", status: "Success", syncedAt: "2026-02-01 08:29", statusDetail: "42 entries processed. Balances reconciled to zero." },
   {
     id: 10,
     filename: "CAM_Reconciliation_2025.xlsx",
@@ -400,6 +400,39 @@ function SyncApprovalQueue() {
   );
 }
 
+function ScheduledTriggers() {
+  const triggers = [
+    { id: "t1", name: "Daily Rent Roll Sync", schedule: "Every day at 8:00 AM CT", source: "Yardi", status: "Active", lastRun: "2026-03-15 08:00", nextRun: "2026-03-16 08:00" },
+    { id: "t2", name: "Daily Lease Ledger Sync", schedule: "Every day at 8:05 AM CT", source: "Yardi", status: "Active", lastRun: "2026-03-15 08:05", nextRun: "2026-03-16 08:05" },
+    { id: "t3", name: "Monthly Income Statement", schedule: "1st of month at 9:00 AM CT", source: "Yardi", status: "Active", lastRun: "2026-03-01 09:00", nextRun: "2026-04-01 09:00" },
+    { id: "t4", name: "Utility Bill PDF Scan", schedule: "15th of month at 10:00 AM CT", source: "CenterPoint", status: "Paused", lastRun: "2026-02-15 10:05", nextRun: "—" },
+    { id: "t5", name: "Alert Evaluation", schedule: "Every 3 hours", source: "System", status: "Active", lastRun: "2026-03-15 14:00", nextRun: "2026-03-15 17:00" },
+  ];
+  return (
+    <div className="mt-4 space-y-3">
+      <p className="text-[12px] text-[#71717a]">Automated sync schedules. Paused triggers will not run until re-enabled.</p>
+      <div className="space-y-0 border border-[#e4e4e7] rounded overflow-hidden">
+        {triggers.map(t => (
+          <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-[#f4f4f5] last:border-0 bg-white">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${t.status === "Active" ? "bg-[#16a34a]" : "bg-[#a1a1aa]"}`} />
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-medium text-[#18181b]">{t.name}</p>
+              <p className="text-[10px] text-[#a1a1aa]">{t.schedule} · Source: {t.source}</p>
+            </div>
+            <div className="text-right flex-shrink-0 hidden sm:block">
+              <p className="text-[10px] text-[#a1a1aa]">Last: {t.lastRun}</p>
+              <p className="text-[10px] text-[#71717a]">Next: {t.nextRun}</p>
+            </div>
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded flex-shrink-0 ${
+              t.status === "Active" ? "text-[#16a34a] bg-emerald-50" : "text-[#a1a1aa] bg-[#f4f4f5]"
+            }`}>{t.status}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DataPipelinePage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
@@ -509,6 +542,7 @@ export default function DataPipelinePage() {
       <div className="mt-8 flex gap-1 border-b border-[#e4e4e7]">
         {([
           { key: "approval" as const, label: "Approval Queue" },
+          { key: "triggers" as const, label: "Scheduled Triggers" },
           { key: "workflow" as const, label: "Processing Workflow" },
           { key: "protocol" as const, label: "Training Protocol" },
         ]).map(tab => (
@@ -523,6 +557,10 @@ export default function DataPipelinePage() {
 
       {activeSection === "approval" && (
         <SyncApprovalQueue />
+      )}
+
+      {activeSection === "triggers" && (
+        <ScheduledTriggers />
       )}
 
       {activeSection === "workflow" && (

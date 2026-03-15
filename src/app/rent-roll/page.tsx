@@ -48,38 +48,27 @@ export default function RentRollPage() {
   const isMobile = useIsMobile();
 
   const columnDefs = useMemo<ColDef[]>(() => {
-    if (isMobile) {
-      // Mobile: show only essential columns
-      return [
-        { field: "unit", headerName: "Unit", width: 90, pinned: "left", sort: "asc" },
-        { field: "tenant", headerName: "Tenant", minWidth: 130, flex: 1,
-          valueFormatter: (p: { value: string }) => p.value || "Vacant" },
-        { field: "monthlyRent", headerName: "Rent", width: 90, type: "numericColumn",
-          cellRenderer: CurrencyCellRenderer },
-        { field: "status", headerName: "Status", width: 110, cellRenderer: StatusCellRenderer },
-      ];
-    }
-    // Desktop: full columns
+    const unitWidth = isMobile ? 90 : 120;
     return [
-      { field: "unit", headerName: "Unit", width: 120, pinned: "left", sort: "asc" },
-      { field: "tenant", headerName: "Tenant", minWidth: 200, flex: 1,
+      { field: "unit", headerName: "Unit", width: unitWidth, pinned: "left", sort: "asc" },
+      { field: "tenant", headerName: "Tenant", minWidth: 180, flex: isMobile ? 0 : 1, width: isMobile ? 180 : undefined,
         valueFormatter: (p: { value: string }) => p.value || "— Vacant —" },
-      { field: "leaseType", headerName: "Lease Type", width: 140,
+      { field: "leaseType", headerName: "Lease Type", width: 130,
         valueFormatter: (p: { value: string }) => p.value?.replace("Office ", "") || "" },
-      { field: "building", headerName: "Bldg", width: 80, filter: true },
-      { field: "sqft", headerName: "Sq Ft", width: 100, type: "numericColumn",
+      { field: "building", headerName: "Bldg", width: 70, filter: true },
+      { field: "sqft", headerName: "Sq Ft", width: 90, type: "numericColumn",
         valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
-      { field: "leaseFrom", headerName: "Lease Start", width: 120,
+      { field: "leaseFrom", headerName: "Lease Start", width: 110,
         valueFormatter: (p: { value: string }) => p.value || "—" },
-      { field: "leaseTo", headerName: "Lease End", width: 120,
+      { field: "leaseTo", headerName: "Lease End", width: 110,
         valueFormatter: (p: { value: string }) => p.value || "—" },
-      { field: "monthlyRent", headerName: "Monthly Rent", width: 130, type: "numericColumn",
+      { field: "monthlyRent", headerName: "Rent", width: 110, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
-      { field: "monthlyElectric", headerName: "Electric", width: 100, type: "numericColumn",
+      { field: "monthlyElectric", headerName: "Electric", width: 90, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
-      { field: "pastDueAmount", headerName: "Past Due", width: 110, type: "numericColumn",
+      { field: "pastDueAmount", headerName: "Past Due", width: 100, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
-      { field: "status", headerName: "Status", width: 140, cellRenderer: StatusCellRenderer, filter: true },
+      { field: "status", headerName: "Status", width: 130, cellRenderer: StatusCellRenderer, filter: true },
     ];
   }, [isMobile]);
 
@@ -91,7 +80,10 @@ export default function RentRollPage() {
   }), []);
 
   const onGridReady = useCallback((params: GridReadyEvent) => {
-    params.api.sizeColumnsToFit();
+    // Only auto-fit on desktop — on mobile let columns keep their width for horizontal scroll
+    if (window.innerWidth >= 768) {
+      params.api.sizeColumnsToFit();
+    }
   }, []);
 
   const onRowClicked = useCallback((event: RowClickedEvent) => {
