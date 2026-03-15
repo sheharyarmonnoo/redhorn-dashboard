@@ -1,7 +1,7 @@
 "use client";
-import { DollarSign, Building2, AlertTriangle, Zap, Users, CalendarClock } from "lucide-react";
 import KPICard from "@/components/KPICard";
 import PageHeader from "@/components/PageHeader";
+import ActionItems from "@/components/ActionItems";
 import { tenants, monthlyRevenue, formatCurrency, getAlerts } from "@/data/tenants";
 import dynamic from "next/dynamic";
 
@@ -19,14 +19,16 @@ export default function DashboardPage() {
   const alerts = getAlerts();
   const expiringCount = tenants.filter(t => t.status === "expiring_soon").length;
 
+  const chartFont = "'Inter', -apple-system, system-ui, sans-serif";
+
   const revenueChartOptions: ApexCharts.ApexOptions = {
-    chart: { type: "bar", toolbar: { show: false }, fontFamily: "inherit", stacked: false },
-    plotOptions: { bar: { borderRadius: 4, columnWidth: "60%" } },
-    colors: ["#4f6ef7", "#f59e0b", "#7c5cfc"],
-    xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: "#8b8fa3", fontSize: "11px" } } },
-    yaxis: { labels: { style: { colors: "#8b8fa3", fontSize: "11px" }, formatter: (v: number) => `$${(v / 1000).toFixed(0)}k` } },
-    grid: { borderColor: "#f0f0f5", strokeDashArray: 3 },
-    legend: { position: "top", horizontalAlign: "right", fontSize: "11px", markers: { size: 8, shape: "square" as const } },
+    chart: { type: "bar", toolbar: { show: false }, fontFamily: chartFont },
+    plotOptions: { bar: { borderRadius: 2, columnWidth: "55%" } },
+    colors: ["#18181b", "#71717a", "#d4d4d8"],
+    xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: "#a1a1aa", fontSize: "11px" } } },
+    yaxis: { labels: { style: { colors: "#a1a1aa", fontSize: "11px" }, formatter: (v: number) => `$${(v / 1000).toFixed(0)}k` } },
+    grid: { borderColor: "#f4f4f5", strokeDashArray: 0 },
+    legend: { position: "top", horizontalAlign: "right", fontSize: "11px", markers: { size: 6, shape: "square" as const } },
     tooltip: { y: { formatter: (v: number) => formatCurrency(v) } },
     dataLabels: { enabled: false },
   };
@@ -38,14 +40,14 @@ export default function DashboardPage() {
   ];
 
   const occupancyChartOptions: ApexCharts.ApexOptions = {
-    chart: { type: "area", toolbar: { show: false }, fontFamily: "inherit", sparkline: { enabled: false } },
-    colors: ["#10b981"],
-    fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.25, opacityTo: 0, stops: [0, 100] } },
-    stroke: { curve: "smooth", width: 2.5 },
-    xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: "#8b8fa3", fontSize: "11px" } } },
-    yaxis: { min: 70, max: 100, labels: { style: { colors: "#8b8fa3", fontSize: "11px" }, formatter: (v: number) => `${v}%` } },
-    grid: { borderColor: "#f0f0f5", strokeDashArray: 3 },
-    markers: { size: 4, colors: ["#10b981"], strokeColors: "#fff", strokeWidth: 2 },
+    chart: { type: "area", toolbar: { show: false }, fontFamily: chartFont },
+    colors: ["#18181b"],
+    fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.12, opacityTo: 0, stops: [0, 100] } },
+    stroke: { curve: "smooth", width: 2 },
+    xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: "#a1a1aa", fontSize: "11px" } } },
+    yaxis: { min: 70, max: 100, labels: { style: { colors: "#a1a1aa", fontSize: "11px" }, formatter: (v: number) => `${v}%` } },
+    grid: { borderColor: "#f4f4f5", strokeDashArray: 0 },
+    markers: { size: 3, colors: ["#18181b"], strokeColors: "#fff", strokeWidth: 2 },
     tooltip: { y: { formatter: (v: number) => `${v}%` } },
     dataLabels: { enabled: false },
   };
@@ -54,107 +56,85 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Monthly KPI Dashboard" subtitle="Hollister Business Park — March 2026 Overview" badge="Live" />
+      <PageHeader title="Monthly KPI Dashboard" subtitle="Hollister Business Park — March 2026" />
 
-      {/* KPI Cards — responsive grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 mb-7">
-        <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} icon={DollarSign} trend="1.5%" trendUp={true} iconBg="bg-emerald-50" iconColor="text-emerald-600" />
-        <KPICard title="Occupancy Rate" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${tenants.length} units`} icon={Building2} />
-        <KPICard title="Total Past Due" value={formatCurrency(totalPastDue)} icon={AlertTriangle} color="text-red-500" iconBg="bg-red-50" iconColor="text-red-500" />
-        <KPICard title="Vacant Units" value={String(vacant.length)} subtitle={`${vacant.reduce((s, t) => s + t.sqft, 0).toLocaleString()} sq ft`} icon={Users} iconBg="bg-gray-100" iconColor="text-gray-500" />
-        <KPICard title="Electric Posting" value={electricMissing.length > 0 ? `${electricMissing.length} Missing` : "All Posted"} icon={Zap} color={electricMissing.length > 0 ? "text-amber-500" : "text-emerald-600"} iconBg={electricMissing.length > 0 ? "bg-amber-50" : "bg-emerald-50"} iconColor={electricMissing.length > 0 ? "text-amber-500" : "text-emerald-600"} />
-        <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" icon={CalendarClock} color={expiringCount > 3 ? "text-amber-500" : "text-[#1e1e2d]"} iconBg="bg-blue-50" iconColor="text-blue-500" />
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3 mb-6">
+        <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} />
+        <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${tenants.length} units`} />
+        <KPICard title="Past Due" value={formatCurrency(totalPastDue)} color="text-[#dc2626]" />
+        <KPICard title="Vacant" value={String(vacant.length)} subtitle={`${vacant.reduce((s, t) => s + t.sqft, 0).toLocaleString()} SF`} />
+        <KPICard title="Electric Posting" value={electricMissing.length > 0 ? `${electricMissing.length} Missing` : "All Posted"} color={electricMissing.length > 0 ? "text-[#d97706]" : "text-[#16a34a]"} />
+        <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" />
       </div>
 
-      {/* Alerts Banner */}
+      {/* Action Items */}
       {alerts.filter(a => a.type === "critical").length > 0 && (
-        <div className="bg-white rounded-2xl border border-red-200 p-4 sm:p-5 mb-7 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="p-1.5 bg-red-50 rounded-lg">
-              <AlertTriangle size={14} className="text-red-500" />
-            </div>
-            <h3 className="text-[13px] font-bold text-red-600">Action Required — {alerts.filter(a => a.type === "critical").length} Items</h3>
-          </div>
+        <div className="bg-white border border-[#e4e4e7] rounded p-4 mb-6">
+          <p className="text-[12px] font-semibold text-[#dc2626] mb-3">Action Required — {alerts.filter(a => a.type === "critical").length} items</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {alerts.filter(a => a.type === "critical").map((alert, i) => (
-              <div key={i} className="flex items-center gap-2 bg-red-50/60 rounded-xl px-3 py-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                <p className="text-[12px] text-[#1e1e2d]">
-                  <span className="font-semibold">{alert.unit}</span>
-                  <span className="text-[#8b8fa3] mx-1">·</span>
-                  {alert.message}
-                </p>
+              <div key={i} className="flex items-center gap-2 text-[12px] text-[#18181b]">
+                <span className="w-1 h-1 rounded-full bg-[#dc2626] flex-shrink-0" />
+                <span><span className="font-medium">{alert.unit}</span> — {alert.message}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Charts — ApexCharts */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-7">
-        <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] border border-[#e8eaef]">
-          <h3 className="text-[14px] font-bold text-[#1e1e2d] mb-1">Revenue Breakdown</h3>
-          <p className="text-[11px] text-[#8b8fa3] mb-4">Last 9 months by category</p>
-          <Chart options={revenueChartOptions} series={revenueSeries} type="bar" height={280} />
+      {/* Charts */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mb-6">
+        <div className="bg-white border border-[#e4e4e7] rounded p-4">
+          <p className="text-[13px] font-semibold text-[#18181b] mb-1">Revenue Breakdown</p>
+          <p className="text-[11px] text-[#a1a1aa] mb-3">Last 9 months by category</p>
+          <Chart options={revenueChartOptions} series={revenueSeries} type="bar" height={260} />
         </div>
-
-        <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] border border-[#e8eaef]">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white border border-[#e4e4e7] rounded p-4">
+          <div className="flex items-baseline justify-between mb-3">
             <div>
-              <h3 className="text-[14px] font-bold text-[#1e1e2d]">Occupancy Trend</h3>
-              <p className="text-[11px] text-[#8b8fa3] mt-0.5">Portfolio-wide occupancy rate</p>
+              <p className="text-[13px] font-semibold text-[#18181b]">Occupancy Trend</p>
+              <p className="text-[11px] text-[#a1a1aa] mt-0.5">Portfolio-wide rate</p>
             </div>
-            <span className="text-[12px] font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">{occupancyPct}% Current</span>
+            <p className="text-[12px] font-medium text-[#16a34a]">{occupancyPct}%</p>
           </div>
-          <Chart options={occupancyChartOptions} series={occupancySeries} type="area" height={280} />
+          <Chart options={occupancyChartOptions} series={occupancySeries} type="area" height={260} />
         </div>
       </div>
 
       {/* PM Call Prep */}
-      <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] border border-[#e8eaef]">
-        <div className="flex items-center gap-2 mb-5">
-          <h3 className="text-[14px] font-bold text-[#1e1e2d]">Weekly PM Call Prep</h3>
-          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#eef1fe] text-[#4f6ef7]">Meeting Ready</span>
-        </div>
+      <div className="bg-white border border-[#e4e4e7] rounded p-4">
+        <p className="text-[13px] font-semibold text-[#18181b] mb-4">Weekly PM Call Prep</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="w-1.5 h-6 rounded-full bg-red-400" />
-              <p className="text-[12px] font-semibold text-[#1e1e2d]">Past Due Tenants</p>
-            </div>
+            <p className="text-[11px] font-medium text-[#dc2626] uppercase tracking-wide mb-2">Past Due</p>
             <div className="space-y-2">
               {tenants.filter(t => t.pastDueAmount > 0).map(t => (
-                <div key={t.unit} className="bg-red-50/60 rounded-xl px-3 py-2.5">
-                  <p className="text-[12px] font-semibold text-[#1e1e2d]">{t.unit} · {t.tenant}</p>
-                  <p className="text-[11px] text-red-500 font-medium mt-0.5">{formatCurrency(t.pastDueAmount)} past due</p>
+                <div key={t.unit} className="text-[12px]">
+                  <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
+                  <p className="text-[#dc2626]">{formatCurrency(t.pastDueAmount)}</p>
                 </div>
               ))}
             </div>
           </div>
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="w-1.5 h-6 rounded-full bg-amber-400" />
-              <p className="text-[12px] font-semibold text-[#1e1e2d]">Electric Not Posted</p>
-            </div>
+            <p className="text-[11px] font-medium text-[#d97706] uppercase tracking-wide mb-2">Electric Not Posted</p>
             <div className="space-y-2">
               {electricMissing.map(t => (
-                <div key={t.unit} className="bg-amber-50/60 rounded-xl px-3 py-2.5">
-                  <p className="text-[12px] font-semibold text-[#1e1e2d]">{t.unit} · {t.tenant}</p>
-                  <p className="text-[11px] text-amber-600 font-medium mt-0.5">~{formatCurrency(t.monthlyElectric)}/mo expected</p>
+                <div key={t.unit} className="text-[12px]">
+                  <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
+                  <p className="text-[#71717a]">~{formatCurrency(t.monthlyElectric)}/mo expected</p>
                 </div>
               ))}
             </div>
           </div>
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="w-1.5 h-6 rounded-full bg-[#4f6ef7]" />
-              <p className="text-[12px] font-semibold text-[#1e1e2d]">Upcoming Expirations</p>
-            </div>
+            <p className="text-[11px] font-medium text-[#2563eb] uppercase tracking-wide mb-2">Expiring Soon</p>
             <div className="space-y-2">
               {tenants.filter(t => t.status === "expiring_soon").slice(0, 5).map(t => (
-                <div key={t.unit} className="bg-blue-50/60 rounded-xl px-3 py-2.5">
-                  <p className="text-[12px] font-semibold text-[#1e1e2d]">{t.unit} · {t.tenant}</p>
-                  <p className="text-[11px] text-[#4f6ef7] font-medium mt-0.5">Expires {t.leaseTo}</p>
+                <div key={t.unit} className="text-[12px]">
+                  <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
+                  <p className="text-[#71717a]">Expires {t.leaseTo}</p>
                 </div>
               ))}
             </div>

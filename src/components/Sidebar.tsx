@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, ChevronRight, Menu, X } from "lucide-react";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X } from "lucide-react";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
@@ -18,62 +18,38 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <>
-      {/* Logo */}
-      <div className="px-5 pt-5 pb-4">
-        <img src="/redhorn-logo.png" alt="Redhorn Capital Partners" className="h-10 w-auto brightness-0 invert opacity-90" />
-        <p className="text-[9px] text-[#8b8fa3] font-medium tracking-[0.15em] uppercase mt-1.5 pl-0.5">Powered by Deal Manager AI</p>
+      <div className="px-5 pt-5 pb-3 border-b border-white/[0.06]">
+        <img src="/redhorn-logo.png" alt="Redhorn Capital Partners" className="h-9 w-auto brightness-0 invert opacity-90" />
+        <p className="text-[9px] text-[#52525b] font-medium tracking-[0.12em] uppercase mt-2">Deal Manager AI</p>
       </div>
 
-      {/* Client Selector */}
-      <div className="mx-4 mb-5">
-        <div className="bg-white/[0.06] hover:bg-white/[0.08] rounded-xl px-4 py-3 cursor-pointer transition-colors border border-white/[0.06]">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] text-[#8b8fa3] font-medium uppercase tracking-wider">Portfolio</p>
-              <p className="text-[13px] font-semibold text-white mt-0.5">Redhorn Capital</p>
-            </div>
-            <ChevronRight size={14} className="text-[#8b8fa3]" />
-          </div>
-        </div>
+      <div className="mx-4 mt-4 mb-3">
+        <p className="text-[9px] text-[#52525b] font-medium uppercase tracking-[0.12em] mb-1 px-2">Portfolio</p>
+        <div className="text-[12px] font-medium text-[#d4d4d8] px-2 py-1.5">Hollister Business Park</div>
+        <p className="text-[10px] text-[#52525b] px-2">Houston, TX · ~325K SF</p>
       </div>
 
-      {/* Navigation */}
-      <div className="px-4 mb-3">
-        <p className="text-[10px] font-semibold text-[#8b8fa3] uppercase tracking-[0.15em] px-3">Navigation</p>
+      <div className="px-4 mt-4 mb-2">
+        <p className="text-[9px] text-[#52525b] font-medium uppercase tracking-[0.12em] px-2">Navigation</p>
       </div>
-      <nav className="flex-1 px-4 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
         {nav.map(({ href, label, icon: Icon, badge }) => {
           const active = pathname === href;
           return (
-            <Link
-              key={href}
-              href={href}
-              onClick={onNavigate}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all duration-150 group ${
-                active
-                  ? "bg-[#4f6ef7] text-white shadow-lg shadow-[#4f6ef7]/25 font-medium"
-                  : "text-[#8b8fa3] hover:text-white hover:bg-white/[0.06]"
-              }`}
-            >
-              <Icon size={18} strokeWidth={active ? 2 : 1.5} />
+            <Link key={href} href={href} onClick={onNavigate}
+              className={`flex items-center gap-2.5 px-2.5 py-2 rounded text-[12px] transition-colors ${
+                active ? "bg-white/[0.08] text-white font-medium" : "text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]"
+              }`}>
+              <Icon size={15} strokeWidth={1.5} />
               <span className="flex-1">{label}</span>
-              {badge && (
-                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
-                  active ? "bg-white/20 text-white" : "bg-white/[0.08] text-[#8b8fa3]"
-                }`}>{badge}</span>
-              )}
+              {badge && <span className="text-[10px] text-[#52525b] font-medium">{badge}</span>}
             </Link>
           );
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-6 py-4 border-t border-white/[0.06]">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50" />
-          <p className="text-[11px] text-[#8b8fa3]">System Online</p>
-        </div>
-        <p className="text-[10px] text-[#5a5e73]">Hollister Business Park · Houston, TX</p>
+      <div className="px-5 py-3 border-t border-white/[0.06]">
+        <p className="text-[10px] text-[#52525b]">Last updated: Mar 15, 2026 2:30 PM</p>
       </div>
     </>
   );
@@ -81,34 +57,28 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
-
   return (
     <>
-      {/* Desktop Sidebar */}
-      <aside className="sidebar-desktop fixed left-0 top-0 h-screen w-[260px] bg-[#1e1e2d] flex flex-col z-50 shadow-xl">
+      <aside className="sidebar-desktop fixed left-0 top-0 h-screen w-[240px] bg-[#18181b] flex flex-col z-50">
         <SidebarContent />
       </aside>
 
-      {/* Mobile Header */}
-      <div className="mobile-nav fixed top-0 left-0 right-0 h-14 bg-[#1e1e2d] flex items-center justify-between px-4 z-50 shadow-lg">
-        <img src="/redhorn-logo.png" alt="Redhorn Capital" className="h-7 w-auto brightness-0 invert opacity-90" />
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="text-white p-1">
-          {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+      <div className="mobile-nav fixed top-0 left-0 right-0 h-12 bg-[#18181b] flex items-center justify-between px-4 z-50">
+        <img src="/redhorn-logo.png" alt="Redhorn Capital" className="h-6 w-auto brightness-0 invert opacity-90" />
+        <button onClick={() => setMobileOpen(!mobileOpen)} className="text-[#a1a1aa] p-1">
+          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
       </div>
 
-      {/* Mobile Sidebar Overlay */}
       {mobileOpen && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
-          <aside className="fixed left-0 top-0 h-screen w-[280px] bg-[#1e1e2d] flex flex-col z-50 shadow-xl lg:hidden">
+          <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
+          <aside className="fixed left-0 top-0 h-screen w-[260px] bg-[#18181b] flex flex-col z-50 lg:hidden">
             <SidebarContent onNavigate={() => setMobileOpen(false)} />
           </aside>
         </>
       )}
-
-      {/* Mobile spacer */}
-      <div className="h-14 lg:hidden" />
+      <div className="h-12 lg:hidden" />
     </>
   );
 }
