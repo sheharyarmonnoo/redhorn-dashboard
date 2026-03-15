@@ -204,6 +204,13 @@ export default function DataChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Scroll to bottom when chat opens
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "auto" }), 50);
+    }
+  }, [isOpen]);
+
   function handleSend() {
     if (!input.trim()) return;
     const userMsg = input.trim();
