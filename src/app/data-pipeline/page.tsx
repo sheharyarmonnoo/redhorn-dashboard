@@ -4,7 +4,7 @@ import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
 import { exportRentRoll, exportLeaseLedger, exportIncomeStatement, exportFullPackage } from "@/data/export";
 import PageHeader from "@/components/PageHeader";
-import { Download, X } from "lucide-react";
+import { Download, X, Plus, Trash2, Save } from "lucide-react";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -138,10 +138,139 @@ function DetailPanel({ file, onClose }: { file: FileSyncRow; onClose: () => void
   );
 }
 
+// --- Training Protocol ---
+const RULES_KEY = "redhorn_processing_rules";
+
+interface ProcessingRule {
+  id: string;
+  condition: string;
+  action: string;
+  enabled: boolean;
+}
+
+const defaultRules: ProcessingRule[] = [
+  { id: "r1", condition: "Electric charge not posted by 10th of month for Net Lease tenants", action: "Flag as critical alert, create Kanban task, notify via email", enabled: true },
+  { id: "r2", condition: "Tenant past due > 5 days with no late fee assessed", action: "Flag as warning, add to PM call prep, create action item", enabled: true },
+  { id: "r3", condition: "Lease expiring within 120 days with no renewal activity in notes", action: "Flag as warning, create Kanban task for PM follow-up", enabled: true },
+  { id: "r4", condition: "Revenue for any category drops > 15% month-over-month", action: "Flag as anomaly on dashboard, send email alert to owner", enabled: true },
+  { id: "r5", condition: "New tenant appears in rent roll not previously tracked", action: "Auto-create unit record, flag for review, request lease docs", enabled: true },
+  { id: "r6", condition: "Tenant in lockout_pending stage for > 14 days", action: "Escalate to auction_pending stage, notify legal team", enabled: false },
+  { id: "r7", condition: "Utility bill PDF cannot be parsed or meter IDs unmatched", action: "Flag as warning, hold charges for manual review, do NOT auto-post", enabled: true },
+  { id: "r8", condition: "User note exists on unit — preserve during all data syncs", action: "Merge note into override layer, never overwrite with Yardi data", enabled: true },
+];
+
+function loadRules(): ProcessingRule[] {
+  if (typeof window === "undefined") return defaultRules;
+  try { const raw = localStorage.getItem(RULES_KEY); return raw ? JSON.parse(raw) : defaultRules; }
+  catch { return defaultRules; }
+}
+function saveRules(rules: ProcessingRule[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(RULES_KEY, JSON.stringify(rules));
+}
+
+function TrainingProtocol() {
+  const [rules, setRules] = useState<ProcessingRule[]>(defaultRules);
+  const [newCondition, setNewCondition] = useState("");
+  const [newAction, setNewAction] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+
+  useEffect(() => { setRules(loadRules()); }, []);
+
+  function toggle(id: string) {
+    const updated = rules.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r);
+    setRules(updated); saveRules(updated);
+  }
+  function remove(id: string) {
+    const updated = rules.filter(r => r.id !== id);
+    setRules(updated); saveRules(updated);
+  }
+  function add() {
+    if (!newCondition.trim() || !newAction.trim()) return;
+    const rule: ProcessingRule = { id: Date.now().toString(), condition: newCondition.trim(), action: newAction.trim(), enabled: true };
+    const updated = [...rules, rule];
+    setRules(updated); saveRules(updated);
+    setNewCondition(""); setNewAction(""); setShowAdd(false);
+  }
+
+  const enabledCount = rules.filter(r => r.enabled).length;
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[12px] text-[#71717a]">Define rules that the system evaluates on every data sync. These train how the pipeline processes, flags, and acts on incoming data.</p>
+          <p className="text-[11px] text-[#a1a1aa] mt-1">{enabledCount} of {rules.length} rules active</p>
+        </div>
+        <button onClick={() => setShowAdd(!showAdd)}
+          className="flex items-center gap-1 text-[11px] font-medium text-[#71717a] hover:text-[#18181b] cursor-pointer">
+          <Plus size={14} /> Add Rule
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="bg-white border border-[#e4e4e7] rounded p-3 space-y-2">
+          <div>
+            <label className="text-[10px] text-[#71717a] uppercase tracking-wide font-medium">If (condition)</label>
+            <input type="text" value={newCondition} onChange={e => setNewCondition(e.target.value)}
+              placeholder="e.g. Tenant past due > 30 days with no payment plan..."
+              className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+          </div>
+          <div>
+            <label className="text-[10px] text-[#71717a] uppercase tracking-wide font-medium">Then (action)</label>
+            <input type="text" value={newAction} onChange={e => setNewAction(e.target.value)}
+              placeholder="e.g. Escalate to locked_out status, create action item, email PM..."
+              className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={() => setShowAdd(false)} className="text-[11px] text-[#71717a] px-3 py-1 cursor-pointer">Cancel</button>
+            <button onClick={add} className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer">
+              <Save size={12} className="inline mr-1" />Save Rule
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Rules list */}
+      <div className="space-y-0">
+        {rules.map((rule, i) => (
+          <div key={rule.id} className={`flex gap-3 py-3 border-b border-[#f4f4f5] last:border-0 ${!rule.enabled ? "opacity-50" : ""}`}>
+            <button onClick={() => toggle(rule.id)}
+              className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors ${
+                rule.enabled ? "bg-[#18181b] border-[#18181b]" : "border-[#d4d4d8]"
+              }`}>
+              {rule.enabled && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>}
+            </button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start gap-1">
+                <span className="text-[10px] text-[#a1a1aa] font-medium uppercase shrink-0 mt-0.5 w-4">If</span>
+                <p className="text-[12px] text-[#18181b] leading-relaxed">{rule.condition}</p>
+              </div>
+              <div className="flex items-start gap-1 mt-1">
+                <span className="text-[10px] text-[#a1a1aa] font-medium uppercase shrink-0 mt-0.5 w-4">→</span>
+                <p className="text-[12px] text-[#71717a] leading-relaxed">{rule.action}</p>
+              </div>
+            </div>
+            <button onClick={() => remove(rule.id)}
+              className="text-[#d4d4d8] hover:text-[#dc2626] cursor-pointer p-0.5 flex-shrink-0 mt-0.5 transition-colors">
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-[#fafafa] border border-[#e4e4e7] rounded p-3 text-[11px] text-[#71717a]">
+        These rules are evaluated in order during Step 5 of the processing workflow. Disabled rules are skipped. Rules can reference unit statuses, delinquency stages, financial thresholds, and date-based conditions.
+      </div>
+    </div>
+  );
+}
+
 export default function DataPipelinePage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const [selectedFile, setSelectedFile] = useState<FileSyncRow | null>(null);
+  const [activeSection, setActiveSection] = useState<"workflow" | "protocol">("workflow");
 
   const columnDefs = useMemo<ColDef[]>(() => {
     if (isMobile) {
@@ -222,6 +351,55 @@ export default function DataPipelinePage() {
 
       {selectedFile && (
         <DetailPanel file={selectedFile} onClose={() => setSelectedFile(null)} />
+      )}
+
+      {/* Tabs: Workflow / Training Protocol */}
+      <div className="mt-8 flex gap-1 border-b border-[#e4e4e7]">
+        {(["workflow", "protocol"] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveSection(tab)}
+            className={`text-[12px] font-medium px-3 py-2 border-b-2 transition-colors cursor-pointer ${
+              activeSection === tab ? "border-[#18181b] text-[#18181b]" : "border-transparent text-[#a1a1aa] hover:text-[#71717a]"
+            }`}>
+            {tab === "workflow" ? "Processing Workflow" : "Training Protocol"}
+          </button>
+        ))}
+      </div>
+
+      {activeSection === "workflow" && (
+        <div className="mt-4 space-y-4">
+          <p className="text-[12px] text-[#71717a]">How data flows from Yardi to the dashboard while preserving your notes and overrides.</p>
+
+          <div className="space-y-0">
+            {[
+              { step: "1", label: "Export", desc: "Yardi generates rent roll, lease ledger, income statement, and utility reports. Triggered by cron (auto) or manual upload.", status: "Automated via Playwright" },
+              { step: "2", label: "Validate", desc: "Parser checks file format, column headers, and data types. Flags warnings if columns are missing or values are out of range.", status: "Schema validation" },
+              { step: "3", label: "Transform", desc: "Raw data is normalized: dates standardized, currency parsed, unit IDs matched to master list, new tenants detected.", status: "ETL pipeline" },
+              { step: "4", label: "Merge with Overrides", desc: "User notes, status overrides, delinquency stages, and action items from previous cycles are preserved. New data is merged — never overwrites manual entries.", status: "Note preservation" },
+              { step: "5", label: "Alert Evaluation", desc: "Training protocol rules are evaluated against new data. Alerts generated for: missing postings, late fees, lease expirations, threshold breaches.", status: "Rule engine" },
+              { step: "6", label: "Push to Dashboard", desc: "Processed data replaces stale data. Charts, KPIs, site plan, and grids update. Kanban items auto-created for critical alerts if protocol says so.", status: "Live update" },
+            ].map((s, i) => (
+              <div key={i} className="flex gap-3 py-3 border-b border-[#f4f4f5] last:border-0">
+                <div className="w-6 h-6 rounded bg-[#18181b] text-white text-[11px] font-semibold flex items-center justify-center flex-shrink-0 mt-0.5">{s.step}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-[13px] font-medium text-[#18181b]">{s.label}</p>
+                    <span className="text-[10px] text-[#a1a1aa]">{s.status}</span>
+                  </div>
+                  <p className="text-[12px] text-[#71717a] mt-0.5 leading-relaxed">{s.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-[#fafafa] border border-[#e4e4e7] rounded p-3 text-[11px] text-[#71717a]">
+            Key guarantee: User notes, manual status changes, and Kanban items are <strong className="text-[#18181b]">never overwritten</strong> by data syncs.
+            They live in a separate override layer that merges on top of incoming Yardi data.
+          </div>
+        </div>
+      )}
+
+      {activeSection === "protocol" && (
+        <TrainingProtocol />
       )}
     </div>
   );
