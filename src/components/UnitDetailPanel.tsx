@@ -217,6 +217,35 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
                 </div>
               </div>
 
+              {/* Payment History — shown first */}
+              {ledger.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium mb-2">Payment History ({ledger.length})</p>
+                  <div className="max-h-56 overflow-y-auto rounded border border-[#e4e4e7]">
+                    <table className="w-full text-[11px]">
+                      <thead className="sticky top-0 bg-[#fafafa]">
+                        <tr className="text-[#a1a1aa] font-medium uppercase tracking-wider text-[9px]">
+                          <th className="text-left px-2.5 py-2">Date</th>
+                          <th className="text-left px-2.5 py-2">Description</th>
+                          <th className="text-right px-2.5 py-2">Charge</th>
+                          <th className="text-right px-2.5 py-2">Payment</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...ledger].reverse().slice(0, 10).map((entry, i) => (
+                          <tr key={i} className="border-t border-[#f4f4f5]">
+                            <td className="px-2.5 py-1.5 text-[#a1a1aa]">{entry.date}</td>
+                            <td className="px-2.5 py-1.5 text-[#18181b] truncate max-w-[160px]">{entry.description}</td>
+                            <td className="px-2.5 py-1.5 text-right text-[#dc2626] font-medium">{entry.charge > 0 ? formatCurrency(entry.charge) : ""}</td>
+                            <td className="px-2.5 py-1.5 text-right text-[#16a34a] font-medium">{entry.payment > 0 ? formatCurrency(entry.payment) : ""}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Past Due */}
               {tenant.pastDueAmount > 0 && (
                 <div className="bg-red-50 border border-red-200 rounded p-3">
@@ -351,34 +380,6 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
             )}
           </div>
 
-          {/* Ledger */}
-          {ledger.length > 0 && (
-            <div>
-              <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium mb-2">Payment History ({ledger.length})</p>
-              <div className="max-h-56 overflow-y-auto rounded border border-[#e4e4e7]">
-                <table className="w-full text-[11px]">
-                  <thead className="sticky top-0 bg-[#fafafa]">
-                    <tr className="text-[#a1a1aa] font-medium uppercase tracking-wider text-[9px]">
-                      <th className="text-left px-2.5 py-2">Date</th>
-                      <th className="text-left px-2.5 py-2">Description</th>
-                      <th className="text-right px-2.5 py-2">Charge</th>
-                      <th className="text-right px-2.5 py-2">Payment</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...ledger].reverse().slice(0, 10).map((entry, i) => (
-                      <tr key={i} className="border-t border-[#f4f4f5]">
-                        <td className="px-2.5 py-1.5 text-[#a1a1aa]">{entry.date}</td>
-                        <td className="px-2.5 py-1.5 text-[#18181b] truncate max-w-[160px]">{entry.description}</td>
-                        <td className="px-2.5 py-1.5 text-right text-[#dc2626] font-medium">{entry.charge > 0 ? formatCurrency(entry.charge) : ""}</td>
-                        <td className="px-2.5 py-1.5 text-right text-[#16a34a] font-medium">{entry.payment > 0 ? formatCurrency(entry.payment) : ""}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
