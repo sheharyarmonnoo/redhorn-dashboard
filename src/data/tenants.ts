@@ -1,5 +1,8 @@
 export type TenantStatus = "current" | "past_due" | "locked_out" | "vacant" | "expiring_soon";
 
+// Delinquency workflow: current → past_due → lockout_pending → locked_out → auction_pending → auction
+export type DelinquencyStage = "none" | "past_due" | "default_notice" | "lockout_pending" | "locked_out" | "auction_pending" | "auction";
+
 export interface Tenant {
   unit: string;
   building: "A" | "C" | "D";
@@ -16,6 +19,14 @@ export interface Tenant {
   electricPosted: boolean;
   lastPaymentDate: string;
   notes: string;
+  // Unit metadata (from meeting: Ori wanted amps, make-ready, splittable)
+  amps?: number;             // electrical capacity (200, 400)
+  makeReady?: boolean;       // unit needs make-ready work
+  splittable?: boolean;      // can be split into smaller units
+  splitDetail?: string;      // e.g. "2,500 + 1,250 SF"
+  // Delinquency workflow stage
+  delinquencyStage?: DelinquencyStage;
+  delinquencyDate?: string;  // date stage was set
 }
 
 export interface LedgerEntry {
@@ -46,9 +57,9 @@ export const tenants: Tenant[] = [
   // Building A — occupied
   { unit: "A-85", building: "A", tenant: "Gulf Coast Logistics LLC", leaseType: "Office Gross Lease", sqft: 4200, leaseFrom: "2024-06-01", leaseTo: "2027-05-31", monthlyRent: 4620, monthlyElectric: 380, securityDeposit: 4620, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
   { unit: "A-85A", building: "A", tenant: "Bayou City Printing", leaseType: "Office Gross Lease", sqft: 2100, leaseFrom: "2025-01-01", leaseTo: "2026-12-31", monthlyRent: 2310, monthlyElectric: 190, securityDeposit: 2310, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "A-90", building: "A", tenant: "Houston Hydraulics Inc", leaseType: "Office Net Lease", sqft: 6800, leaseFrom: "2023-03-01", leaseTo: "2026-02-28", monthlyRent: 6120, monthlyElectric: 520, securityDeposit: 6120, status: "past_due", pastDueAmount: 12760, electricPosted: false, lastPaymentDate: "2026-01-05", notes: "Lease expired — holdover tenant. 2 months past due. No renewal signed." },
+  { unit: "A-90", building: "A", tenant: "Houston Hydraulics Inc", leaseType: "Office Net Lease", sqft: 6800, leaseFrom: "2023-03-01", leaseTo: "2026-02-28", monthlyRent: 6120, monthlyElectric: 520, securityDeposit: 6120, status: "past_due", pastDueAmount: 12760, electricPosted: false, lastPaymentDate: "2026-01-05", notes: "Lease expired — holdover tenant. 2 months past due. No renewal signed.", amps: 400, delinquencyStage: "default_notice", delinquencyDate: "2026-03-10" },
   { unit: "A-95", building: "A", tenant: "Precision CNC Services", leaseType: "Office Net Lease", sqft: 3800, leaseFrom: "2024-09-01", leaseTo: "2027-08-31", monthlyRent: 3420, monthlyElectric: 310, securityDeposit: 3420, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "A-102", building: "A", tenant: "Lone Star Electric Co", leaseType: "Office Net Lease", sqft: 5200, leaseFrom: "2024-12-01", leaseTo: "2026-11-30", monthlyRent: 4680, monthlyElectric: 420, securityDeposit: 4680, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "ACH auto-pay. Good tenant." },
+  { unit: "A-102", building: "A", tenant: "Lone Star Electric Co", leaseType: "Office Net Lease", sqft: 5200, leaseFrom: "2024-12-01", leaseTo: "2026-11-30", monthlyRent: 4680, monthlyElectric: 420, securityDeposit: 4680, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "ACH auto-pay. Good tenant.", amps: 200 },
   { unit: "A-103", building: "A", tenant: "Gulf Coast Logistics LLC", leaseType: "Office Gross Lease", sqft: 3100, leaseFrom: "2024-06-01", leaseTo: "2027-05-31", monthlyRent: 3410, monthlyElectric: 0, securityDeposit: 3410, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant as A-85" },
   { unit: "A-106", building: "A", tenant: "Fiesta Party Supplies", leaseType: "Office Gross Lease", sqft: 2800, leaseFrom: "2025-04-01", leaseTo: "2028-03-31", monthlyRent: 3080, monthlyElectric: 0, securityDeposit: 3080, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
   { unit: "A-106A", building: "A", tenant: "QuickShip Packaging", leaseType: "Office Gross Lease", sqft: 1400, leaseFrom: "2025-07-01", leaseTo: "2026-06-30", monthlyRent: 1540, monthlyElectric: 0, securityDeposit: 1540, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Lease expires in ~3.5 months. No renewal discussion." },
@@ -67,7 +78,7 @@ export const tenants: Tenant[] = [
   { unit: "C-203", building: "C", tenant: "Westchase Accounting", leaseType: "Office Gross Lease", sqft: 1200, leaseFrom: "2024-11-01", leaseTo: "2026-10-31", monthlyRent: 1440, monthlyElectric: 0, securityDeposit: 1440, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
   { unit: "C-205", building: "C", tenant: "ProTech Security Systems", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "2025-03-01", leaseTo: "2027-02-28", monthlyRent: 2160, monthlyElectric: 0, securityDeposit: 2160, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
   { unit: "C-206", building: "C", tenant: "Katy Freight Brokers", leaseType: "Office Gross Lease", sqft: 1600, leaseFrom: "2024-08-01", leaseTo: "2026-07-31", monthlyRent: 1920, monthlyElectric: 0, securityDeposit: 1920, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Lease expires in ~4.5 months." },
-  { unit: "C-207", building: "C", tenant: "Brazos Valley Imports", leaseType: "Office Gross Lease", sqft: 1400, leaseFrom: "2025-01-01", leaseTo: "2026-12-31", monthlyRent: 1680, monthlyElectric: 0, securityDeposit: 1680, status: "past_due", pastDueAmount: 3360, electricPosted: true, lastPaymentDate: "2026-01-03", notes: "Feb + March past due. PM sent default letter 03/10." },
+  { unit: "C-207", building: "C", tenant: "Brazos Valley Imports", leaseType: "Office Gross Lease", sqft: 1400, leaseFrom: "2025-01-01", leaseTo: "2026-12-31", monthlyRent: 1680, monthlyElectric: 0, securityDeposit: 1680, status: "past_due", pastDueAmount: 3360, electricPosted: true, lastPaymentDate: "2026-01-03", notes: "Feb + March past due. PM sent default letter 03/10.", delinquencyStage: "lockout_pending", delinquencyDate: "2026-03-12" },
   { unit: "C-208", building: "C", tenant: "Galleria Copy Center", leaseType: "Office Gross Lease", sqft: 1100, leaseFrom: "2025-05-01", leaseTo: "2027-04-30", monthlyRent: 1320, monthlyElectric: 0, securityDeposit: 1320, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
   { unit: "C-209", building: "C", tenant: "Pearland Tax Services", leaseType: "Office Gross Lease", sqft: 1000, leaseFrom: "2024-04-01", leaseTo: "2027-03-31", monthlyRent: 1200, monthlyElectric: 0, securityDeposit: 1200, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
   { unit: "C-210", building: "C", tenant: "Greenway Chiropractic", leaseType: "Office Gross Lease", sqft: 1300, leaseFrom: "2025-09-01", leaseTo: "2027-08-31", monthlyRent: 1560, monthlyElectric: 0, securityDeposit: 1560, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
@@ -91,15 +102,15 @@ export const tenants: Tenant[] = [
 
   // Building D
   { unit: "D-150", building: "D", tenant: "Redhorn Capital (Owner)", leaseType: "Office Gross Lease", sqft: 8000, leaseFrom: "2022-01-01", leaseTo: "2030-12-31", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Owner-occupied warehouse." },
-  { unit: "D-154", building: "D", tenant: "Westpark Industrial", leaseType: "Office Net Lease", sqft: 12000, leaseFrom: "2023-06-01", leaseTo: "2028-05-31", monthlyRent: 9600, monthlyElectric: 850, securityDeposit: 9600, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
+  { unit: "D-154", building: "D", tenant: "Westpark Industrial", leaseType: "Office Net Lease", sqft: 12000, leaseFrom: "2023-06-01", leaseTo: "2028-05-31", monthlyRent: 9600, monthlyElectric: 850, securityDeposit: 9600, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "", amps: 400 },
   { unit: "D-155", building: "D", tenant: "Redhorn Capital (Owner)", leaseType: "Office Gross Lease", sqft: 6000, leaseFrom: "2022-01-01", leaseTo: "2030-12-31", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Owner-occupied." },
-  { unit: "D-160", building: "D", tenant: "Westpark Industrial", leaseType: "Office Net Lease", sqft: 8500, leaseFrom: "2023-06-01", leaseTo: "2028-05-31", monthlyRent: 6800, monthlyElectric: 610, securityDeposit: 6800, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant as D-154" },
+  { unit: "D-160", building: "D", tenant: "Westpark Industrial", leaseType: "Office Net Lease", sqft: 8500, leaseFrom: "2023-06-01", leaseTo: "2028-05-31", monthlyRent: 6800, monthlyElectric: 610, securityDeposit: 6800, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant as D-154", amps: 400 },
 
   // Vacant units (from rent roll rows 44-52, no lease type = vacant)
   { unit: "C-101", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 2800, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant since 2025-09." },
   { unit: "C-102", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 2400, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant since 2025-11." },
-  { unit: "C-103", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 2200, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant since 2025-07." },
-  { unit: "C-200", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant since 2026-01." },
+  { unit: "C-103", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 2200, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant since 2025-07.", makeReady: true },
+  { unit: "C-200", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 3700, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant since 2026-01. Splittable — lock door to create 2 units.", splittable: true, splitDetail: "2,500 + 1,250 SF", makeReady: true },
   { unit: "C-201", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1500, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "" },
   { unit: "C-204", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1200, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "" },
   { unit: "C-214", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 900, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "" },

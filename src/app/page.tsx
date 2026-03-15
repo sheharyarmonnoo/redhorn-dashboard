@@ -42,11 +42,19 @@ export default function DashboardPage() {
     dataLabels: { enabled: false },
   };
 
-  const revenueSeries = [
-    { name: "Rent", data: monthlyRevenue.map(m => m.rent) },
-    { name: "Electric", data: monthlyRevenue.map(m => m.electric) },
-    { name: "CAM", data: monthlyRevenue.map(m => m.cam) },
-  ];
+  // Scale chart data based on filtered units
+  const filteredRent = tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyRent, 0);
+  const filteredElectric = tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyElectric, 0);
+  const totalRentAll = tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")).reduce((s, t) => s + t.monthlyRent, 0);
+  const totalElectricAll = tenants.filter(t => t.status !== "vacant" && t.monthlyElectric > 0 && !t.tenant.includes("Owner")).reduce((s, t) => s + t.monthlyElectric, 0);
+  const rentRatio = totalRentAll > 0 ? filteredRent / totalRentAll : 1;
+  const electricRatio = totalElectricAll > 0 ? filteredElectric / totalElectricAll : 1;
+
+  const revenueSeries = useMemo(() => [
+    { name: "Rent", data: monthlyRevenue.map(m => Math.round(m.rent * rentRatio)) },
+    { name: "Electric", data: monthlyRevenue.map(m => Math.round(m.electric * electricRatio)) },
+    { name: "CAM", data: monthlyRevenue.map(m => Math.round(m.cam * rentRatio)) },
+  ], [rentRatio, electricRatio]);
 
   const occupancyChartOptions: ApexCharts.ApexOptions = {
     chart: { type: "area", toolbar: { show: false }, fontFamily: chartFont },

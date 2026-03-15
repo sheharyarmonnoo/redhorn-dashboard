@@ -67,12 +67,26 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
 
         <div className="px-6 py-6 space-y-6">
           {tenant.status === "vacant" ? (
-            <div className="text-center py-10">
-              <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                <Building2 size={28} className="text-gray-400" />
-              </div>
-              <p className="text-[#8b8fa3] text-[16px] font-medium">Vacant Unit</p>
-              <p className="text-[#b0b4c5] text-[13px] mt-1">{tenant.sqft.toLocaleString()} sq ft available for lease</p>
+            <div className="py-6">
+              <p className="text-[#71717a] text-[14px] font-medium">Vacant Unit</p>
+              <p className="text-[#a1a1aa] text-[12px] mt-1">{tenant.sqft.toLocaleString()} sq ft available for lease</p>
+              {(tenant.makeReady || tenant.splittable || tenant.amps) && (
+                <div className="mt-4 space-y-2">
+                  {tenant.makeReady && (
+                    <div className="text-[12px] text-[#d97706] bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      Make-ready required before leasing
+                    </div>
+                  )}
+                  {tenant.splittable && (
+                    <div className="text-[12px] text-[#2563eb] bg-blue-50 border border-blue-200 rounded px-3 py-2">
+                      Splittable: {tenant.splitDetail || "Can be divided into smaller units"}
+                    </div>
+                  )}
+                  {tenant.amps && (
+                    <div className="text-[12px] text-[#71717a]">Electrical: {tenant.amps} AMP</div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -94,7 +108,35 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
                   <InfoItem icon={Zap} label="Monthly Electric" value={tenant.monthlyElectric > 0 ? formatCurrency(tenant.monthlyElectric) : "Included"} />
                   <InfoItem icon={CreditCard} label="Security Deposit" value={formatCurrency(tenant.securityDeposit)} />
                   <InfoItem icon={Zap} label="Electric Posted" value={tenant.electricPosted ? "Yes" : "NOT POSTED"} valueColor={tenant.electricPosted ? "text-emerald-600" : "text-red-500"} />
+                  {tenant.amps && <InfoItem icon={Zap} label="Electrical" value={`${tenant.amps} AMP`} />}
                 </div>
+
+                {/* Delinquency Workflow */}
+                {tenant.delinquencyStage && tenant.delinquencyStage !== "none" && (
+                  <div className="mt-4 pt-4 border-t border-[#e4e4e7]">
+                    <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium mb-2">Delinquency Workflow</p>
+                    <div className="flex items-center gap-1">
+                      {(["past_due", "default_notice", "lockout_pending", "locked_out", "auction_pending", "auction"] as const).map((stage, i) => {
+                        const stageLabels: Record<string, string> = { past_due: "Past Due", default_notice: "Default Notice", lockout_pending: "Lockout Pending", locked_out: "Locked Out", auction_pending: "Auction Pending", auction: "Auction" };
+                        const stages = ["past_due", "default_notice", "lockout_pending", "locked_out", "auction_pending", "auction"];
+                        const currentIdx = stages.indexOf(tenant.delinquencyStage || "");
+                        const isActive = i <= currentIdx;
+                        const isCurrent = stages[i] === tenant.delinquencyStage;
+                        return (
+                          <div key={stage} className="flex items-center gap-1">
+                            {i > 0 && <div className={`w-3 h-px ${isActive ? "bg-[#dc2626]" : "bg-[#e4e4e7]"}`} />}
+                            <div className={`text-[8px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
+                              isCurrent ? "bg-[#dc2626] text-white" : isActive ? "bg-red-100 text-[#dc2626]" : "bg-[#f4f4f5] text-[#a1a1aa]"
+                            }`}>
+                              {stageLabels[stage]}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {tenant.delinquencyDate && <p className="text-[10px] text-[#a1a1aa] mt-1.5">Since {tenant.delinquencyDate}</p>}
+                  </div>
+                )}
               </div>
 
               {/* Past Due Alert */}
