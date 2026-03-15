@@ -1,11 +1,9 @@
 "use client";
 import { useState } from "react";
-import dynamic from "next/dynamic";
 import { tenants, Tenant } from "@/data/tenants";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
-
-const SitePlan3D = dynamic(() => import("@/components/SitePlan3D"), { ssr: false });
+import SitePlan3D from "@/components/SitePlan3D";
 
 export default function SitePlanPage() {
   const [selected, setSelected] = useState<Tenant | null>(null);

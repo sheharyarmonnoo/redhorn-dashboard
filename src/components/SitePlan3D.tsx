@@ -1,257 +1,178 @@
 "use client";
-import { Canvas, useFrame, ThreeEvent } from "@react-three/fiber";
-import { OrbitControls, Text, RoundedBox } from "@react-three/drei";
-import { useState, useRef, useMemo } from "react";
-import * as THREE from "three";
 import { tenants, Tenant, TenantStatus } from "@/data/tenants";
 
-function getColor(status: TenantStatus): string {
+function getColor(status: TenantStatus) {
   switch (status) {
-    case "current": return "#10b981";
-    case "past_due": return "#ef4444";
-    case "locked_out": return "#f59e0b";
-    case "vacant": return "#9ca3af";
-    case "expiring_soon": return "#4f6ef7";
+    case "current": return { bg: "bg-emerald-500", border: "border-emerald-600", text: "text-white" };
+    case "past_due": return { bg: "bg-red-500", border: "border-red-600", text: "text-white" };
+    case "locked_out": return { bg: "bg-amber-500", border: "border-amber-600", text: "text-white" };
+    case "vacant": return { bg: "bg-gray-300", border: "border-gray-400", text: "text-gray-600" };
+    case "expiring_soon": return { bg: "bg-blue-500", border: "border-blue-600", text: "text-white" };
   }
 }
 
-function UnitBox({
-  tenant,
-  position,
-  size,
-  onSelect,
-  isSelected,
-}: {
+function UnitBlock({ tenant, onSelect, isSelected, size = "md" }: {
   tenant: Tenant;
-  position: [number, number, number];
-  size: [number, number, number];
   onSelect: (t: Tenant) => void;
   isSelected: boolean;
+  size?: "sm" | "md" | "lg" | "xl";
 }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const [hovered, setHovered] = useState(false);
-  const color = getColor(tenant.status);
-
-  useFrame(() => {
-    if (meshRef.current) {
-      const target = isSelected ? position[1] + 0.3 : hovered ? position[1] + 0.15 : position[1];
-      meshRef.current.position.y += (target - meshRef.current.position.y) * 0.1;
-    }
-  });
+  const colors = getColor(tenant.status);
+  const sizeClasses = {
+    sm: "min-w-[60px] h-[52px]",
+    md: "min-w-[72px] h-[58px]",
+    lg: "min-w-[90px] h-[64px]",
+    xl: "min-w-[110px] h-[70px]",
+  };
 
   return (
-    <group>
-      <mesh
-        ref={meshRef}
-        position={position}
-        onClick={(e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onSelect(tenant); }}
-        onPointerOver={(e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = "pointer"; }}
-        onPointerOut={() => { setHovered(false); document.body.style.cursor = "auto"; }}
-      >
-        <boxGeometry args={size} />
-        <meshStandardMaterial
-          color={color}
-          transparent
-          opacity={hovered || isSelected ? 0.95 : 0.75}
-          emissive={color}
-          emissiveIntensity={hovered || isSelected ? 0.3 : 0.05}
-        />
-      </mesh>
-      {/* Unit label */}
-      <Text
-        position={[position[0], position[1] + size[1] / 2 + 0.15, position[2]]}
-        fontSize={0.18}
-        color="#1a1a2e"
-        anchorX="center"
-        anchorY="bottom"
-        font={undefined}
-      >
-        {tenant.unit}
-      </Text>
-    </group>
+    <button
+      onClick={() => onSelect(tenant)}
+      className={`
+        ${sizeClasses[size]} ${colors.bg} ${colors.border} ${colors.text}
+        border-2 rounded-lg flex flex-col items-center justify-center
+        transition-all duration-150 cursor-pointer relative
+        ${isSelected ? "ring-2 ring-offset-2 ring-indigo-500 scale-105 shadow-lg z-10" : "hover:scale-105 hover:shadow-md"}
+      `}
+    >
+      <span className="text-[11px] font-bold leading-tight">{tenant.unit}</span>
+      {tenant.tenant && !tenant.tenant.includes("Owner") ? (
+        <span className="text-[8px] opacity-80 leading-tight px-1 text-center truncate max-w-full">
+          {tenant.tenant.split(" ").slice(0, 2).join(" ")}
+        </span>
+      ) : tenant.status === "vacant" ? (
+        <span className="text-[8px] opacity-60 leading-tight">VACANT</span>
+      ) : (
+        <span className="text-[8px] opacity-60 leading-tight">Owner</span>
+      )}
+      {tenant.pastDueAmount > 0 && (
+        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-600 rounded-full border border-white animate-pulse" />
+      )}
+      {!tenant.electricPosted && tenant.leaseType === "Office Net Lease" && tenant.tenant && !tenant.tenant.includes("Owner") && (
+        <span className="absolute -top-1 -left-1 w-3 h-3 bg-yellow-400 rounded-full border border-white" title="Electric not posted" />
+      )}
+    </button>
   );
 }
 
-function BuildingLabel({ position, text, subtitle }: { position: [number, number, number]; text: string; subtitle: string }) {
+function BuildingSection({ title, subtitle, units, onSelect, selectedUnit, gridCols }: {
+  title: string;
+  subtitle: string;
+  units: Tenant[];
+  onSelect: (t: Tenant) => void;
+  selectedUnit: string | null;
+  gridCols: string;
+}) {
   return (
-    <group position={position}>
-      <Text fontSize={0.35} color="#1a1a2e" anchorX="center" anchorY="bottom" font={undefined} fontWeight={700}>
-        {text}
-      </Text>
-      <Text position={[0, -0.35, 0]} fontSize={0.18} color="#6b7280" anchorX="center" anchorY="bottom" font={undefined}>
-        {subtitle}
-      </Text>
-    </group>
-  );
-}
-
-function Ground() {
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-      <planeGeometry args={[60, 40]} />
-      <meshStandardMaterial color="#e8ebe4" />
-    </mesh>
-  );
-}
-
-function ParkingLot({ position, size }: { position: [number, number, number]; size: [number, number] }) {
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={position}>
-      <planeGeometry args={size} />
-      <meshStandardMaterial color="#d1d5db" />
-    </mesh>
-  );
-}
-
-function Road({ position, size }: { position: [number, number, number]; size: [number, number] }) {
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={position}>
-      <planeGeometry args={size} />
-      <meshStandardMaterial color="#374151" />
-    </mesh>
-  );
-}
-
-function Scene({ onSelect, selectedUnit }: { onSelect: (t: Tenant) => void; selectedUnit: string | null }) {
-  // Layout: Building A (left), Building C (center), Building D (right)
-  // Building A units
-  const buildingA = tenants.filter(t => t.building === "A");
-  const buildingC1 = tenants.filter(t => t.building === "C" && !t.unit.startsWith("C-3"));
-  const buildingC3 = tenants.filter(t => t.building === "C" && t.unit.startsWith("C-3"));
-  const buildingD = tenants.filter(t => t.building === "D");
-
-  return (
-    <>
-      {/* Lighting */}
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[10, 15, 10]} intensity={0.8} castShadow />
-      <directionalLight position={[-5, 10, -5]} intensity={0.3} />
-
-      {/* Ground & Infrastructure */}
-      <Ground />
-      <Road position={[0, 0.01, -8]} size={[50, 2]} />
-      <Road position={[0, 0.01, 8]} size={[50, 1.5]} />
-      <ParkingLot position={[-12, 0.01, -5.5]} size={[14, 3]} />
-      <ParkingLot position={[2, 0.01, -5.5]} size={[18, 3]} />
-      <ParkingLot position={[17, 0.01, -5.5]} size={[10, 3]} />
-
-      {/* Building A — Industrial / Warehouse (left side) */}
-      <BuildingLabel position={[-12, 3.5, 2]} text="Building A" subtitle="Industrial / Warehouse" />
-      {/* Building A base platform */}
-      <mesh position={[-12, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[15, 7]} />
-        <meshStandardMaterial color="#f3f4f6" />
-      </mesh>
-      {buildingA.map((t, i) => {
-        const col = i % 7;
-        const row = Math.floor(i / 7);
-        const x = -17.5 + col * 1.8;
-        const z = -1.5 + row * 3;
-        const height = t.sqft > 5000 ? 1.8 : t.sqft > 3000 ? 1.4 : 1.0;
-        return (
-          <UnitBox
-            key={t.unit}
-            tenant={t}
-            position={[x, height / 2, z]}
-            size={[1.5, height, 2.2]}
-            onSelect={onSelect}
-            isSelected={selectedUnit === t.unit}
-          />
-        );
-      })}
-
-      {/* Building C Floor 1-2 (center) */}
-      <BuildingLabel position={[2, 4.5, 2]} text="Building C" subtitle="Office (Floors 1-2)" />
-      <mesh position={[2, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[20, 7]} />
-        <meshStandardMaterial color="#f3f4f6" />
-      </mesh>
-      {buildingC1.map((t, i) => {
-        const col = i % 9;
-        const row = Math.floor(i / 9);
-        const x = -5.5 + col * 1.7;
-        const z = -1.5 + row * 3;
-        const height = t.sqft > 4000 ? 1.6 : t.sqft > 2000 ? 1.2 : 0.9;
-        return (
-          <UnitBox
-            key={t.unit}
-            tenant={t}
-            position={[x, height / 2, z]}
-            size={[1.4, height, 2.2]}
-            onSelect={onSelect}
-            isSelected={selectedUnit === t.unit}
-          />
-        );
-      })}
-
-      {/* Building C Floor 3 (center, elevated) */}
-      <BuildingLabel position={[2, 5.5, 5.5]} text="Floor 3" subtitle="" />
-      <mesh position={[2, 0.05, 5]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[16, 3.5]} />
-        <meshStandardMaterial color="#f3f4f6" />
-      </mesh>
-      {buildingC3.map((t, i) => {
-        const x = -4 + i * 1.7;
-        const height = t.sqft > 2000 ? 1.3 : 1.0;
-        return (
-          <UnitBox
-            key={t.unit}
-            tenant={t}
-            position={[x, height / 2, 5]}
-            size={[1.4, height, 2.5]}
-            onSelect={onSelect}
-            isSelected={selectedUnit === t.unit}
-          />
-        );
-      })}
-
-      {/* Building D — Warehouse (right side) */}
-      <BuildingLabel position={[17, 4, 2]} text="Building D" subtitle="Warehouse / Industrial" />
-      <mesh position={[17, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[10, 7]} />
-        <meshStandardMaterial color="#f3f4f6" />
-      </mesh>
-      {buildingD.map((t, i) => {
-        const col = i % 2;
-        const row = Math.floor(i / 2);
-        const x = 14.5 + col * 3;
-        const z = -1.5 + row * 3;
-        const height = t.sqft > 8000 ? 2.5 : t.sqft > 5000 ? 2.0 : 1.5;
-        return (
-          <UnitBox
-            key={t.unit}
-            tenant={t}
-            position={[x, height / 2, z]}
-            size={[2.5, height, 2.2]}
-            onSelect={onSelect}
-            isSelected={selectedUnit === t.unit}
-          />
-        );
-      })}
-
-      <OrbitControls
-        enablePan={true}
-        enableZoom={true}
-        enableRotate={true}
-        minPolarAngle={0.3}
-        maxPolarAngle={Math.PI / 2.2}
-        minDistance={5}
-        maxDistance={35}
-        target={[2, 0, 1]}
-      />
-    </>
+    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-[13px] font-bold text-[#1e1e2d]">{title}</h3>
+          <p className="text-[10px] text-[#8b8fa3]">{subtitle}</p>
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-[#8b8fa3]">
+          <span>{units.filter(u => u.status !== "vacant").length} occupied</span>
+          <span className="text-gray-300">|</span>
+          <span>{units.filter(u => u.status === "vacant").length} vacant</span>
+        </div>
+      </div>
+      <div className={`grid ${gridCols} gap-2`}>
+        {units.map(t => {
+          const size = t.sqft > 8000 ? "xl" : t.sqft > 5000 ? "lg" : t.sqft > 2500 ? "md" : "sm";
+          return (
+            <UnitBlock
+              key={t.unit}
+              tenant={t}
+              onSelect={onSelect}
+              isSelected={selectedUnit === t.unit}
+              size={size}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
 export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: Tenant) => void; selectedUnit: string | null }) {
+  const buildingA = tenants.filter(t => t.building === "A");
+  const buildingC_lower = tenants.filter(t => t.building === "C" && !t.unit.startsWith("C-3"));
+  const buildingC_upper = tenants.filter(t => t.building === "C" && t.unit.startsWith("C-3"));
+  const buildingD = tenants.filter(t => t.building === "D");
+
   return (
-    <div className="w-full h-[600px] bg-gradient-to-b from-[#dbeafe] to-[#e0e7ff] rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-      <Canvas
-        camera={{ position: [0, 18, 22], fov: 50 }}
-        shadows
-      >
-        <Scene onSelect={onSelect} selectedUnit={selectedUnit} />
-      </Canvas>
+    <div className="w-full bg-white rounded-2xl border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      {/* Property Header Bar */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white px-6 py-3 flex items-center justify-between">
+        <div>
+          <h2 className="text-[14px] font-bold">Hollister Business Park</h2>
+          <p className="text-[11px] text-slate-300">Houston, TX — ~325,000 SF Industrial/Office</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[10px] text-slate-300">Live</span>
+        </div>
+      </div>
+
+      {/* Site Plan Grid */}
+      <div className="p-5 space-y-4">
+        {/* Top Row: Building A + Building D */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="col-span-2">
+            <BuildingSection
+              title="Building A"
+              subtitle="Industrial / Warehouse"
+              units={buildingA}
+              onSelect={onSelect}
+              selectedUnit={selectedUnit}
+              gridCols="grid-cols-7"
+            />
+          </div>
+          <BuildingSection
+            title="Building D"
+            subtitle="Warehouse / Industrial"
+            units={buildingD}
+            onSelect={onSelect}
+            selectedUnit={selectedUnit}
+            gridCols="grid-cols-2"
+          />
+        </div>
+
+        {/* Parking / Road divider */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-6 bg-gray-700 rounded flex items-center justify-center">
+            <span className="text-[9px] text-gray-300 tracking-widest font-medium">HOLLISTER RD</span>
+          </div>
+          <div className="flex-1 h-6 bg-gray-200 rounded flex items-center justify-center">
+            <span className="text-[9px] text-gray-500 tracking-wider font-medium">PARKING</span>
+          </div>
+        </div>
+
+        {/* Building C */}
+        <BuildingSection
+          title="Building C — Floors 1 & 2"
+          subtitle="Office Suites"
+          units={buildingC_lower}
+          onSelect={onSelect}
+          selectedUnit={selectedUnit}
+          gridCols="grid-cols-9"
+        />
+
+        <BuildingSection
+          title="Building C — Floor 3"
+          subtitle="Office Suites (Upper)"
+          units={buildingC_upper}
+          onSelect={onSelect}
+          selectedUnit={selectedUnit}
+          gridCols="grid-cols-8"
+        />
+      </div>
+
+      {/* Indicators Legend */}
+      <div className="px-5 pb-4 flex items-center gap-4 text-[10px] text-[#8b8fa3]">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse inline-block" /> Past due indicator</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" /> Electric not posted</span>
+      </div>
     </div>
   );
 }
