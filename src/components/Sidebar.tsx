@@ -19,20 +19,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
       {/* Logo */}
-      <div className="px-6 pt-6 pb-5">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#4f6ef7] to-[#7c5cfc] flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#4f6ef7]/25">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="white" opacity="0.95"/>
-              <path d="M2 17L12 22L22 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
-              <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>
-            </svg>
-          </div>
-          <div>
-            <p className="text-[15px] font-semibold text-white tracking-tight leading-tight">Deal Manager</p>
-            <p className="text-[10px] text-[#8b8fa3] font-medium tracking-[0.15em] uppercase">AI Platform</p>
-          </div>
-        </div>
+      <div className="px-5 pt-5 pb-4">
+        <img src="/redhorn-logo.png" alt="Redhorn Capital Partners" className="h-10 w-auto brightness-0 invert opacity-90" />
+        <p className="text-[9px] text-[#8b8fa3] font-medium tracking-[0.15em] uppercase mt-1.5 pl-0.5">Powered by Deal Manager AI</p>
       </div>
 
       {/* Client Selector */}
@@ -85,7 +74,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <p className="text-[11px] text-[#8b8fa3]">System Online</p>
         </div>
         <p className="text-[10px] text-[#5a5e73]">Hollister Business Park · Houston, TX</p>
-        <p className="text-[10px] text-[#5a5e73] mt-0.5">Powered by Deal Manager AI</p>
       </div>
     </>
   );
@@ -103,16 +91,7 @@ export default function Sidebar() {
 
       {/* Mobile Header */}
       <div className="mobile-nav fixed top-0 left-0 right-0 h-14 bg-[#1e1e2d] flex items-center justify-between px-4 z-50 shadow-lg">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#4f6ef7] to-[#7c5cfc] flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="white" opacity="0.95"/>
-              <path d="M2 17L12 22L22 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
-              <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>
-            </svg>
-          </div>
-          <span className="text-white text-sm font-semibold">Redhorn Capital</span>
-        </div>
+        <img src="/redhorn-logo.png" alt="Redhorn Capital" className="h-7 w-auto brightness-0 invert opacity-90" />
         <button onClick={() => setMobileOpen(!mobileOpen)} className="text-white p-1">
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
         </button>

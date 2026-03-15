@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useRef, useCallback } from "react";
+import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
 import { tenants, formatCurrency } from "@/data/tenants";
@@ -39,8 +39,20 @@ function UrgencyCellRenderer(props: { value: string }) {
   );
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isMobile;
+}
+
 export default function LeasesPage() {
   const gridRef = useRef<AgGridReact>(null);
+  const isMobile = useIsMobile();
 
   const leaseData = useMemo(() => {
     return tenants
@@ -58,24 +70,39 @@ export default function LeasesPage() {
   const warning = leaseData.filter(t => t.urgency === "Warning (90-180d)").length;
   const ok = leaseData.filter(t => t.urgency === "OK (180d+)").length;
 
-  const columnDefs = useMemo<ColDef[]>(() => [
-    { field: "unit", headerName: "Unit", width: 90, sort: "asc" },
-    { field: "tenant", headerName: "Tenant", minWidth: 180, flex: 1 },
-    { field: "building", headerName: "Bldg", width: 70 },
-    { field: "sqft", headerName: "Sq Ft", width: 90, type: "numericColumn",
-      valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
-    { field: "leaseFrom", headerName: "Start", width: 110 },
-    { field: "leaseTo", headerName: "End", width: 110 },
-    { field: "daysLeft", headerName: "Days Left", width: 100, type: "numericColumn",
-      cellRenderer: (p: { value: number }) => (
-        <span className={`font-semibold ${p.value <= 0 ? "text-red-600" : p.value <= 90 ? "text-red-500" : p.value <= 180 ? "text-amber-500" : "text-emerald-600"}`}>
-          {p.value <= 0 ? "EXPIRED" : `${p.value}d`}
-        </span>
-      )},
-    { field: "monthlyRent", headerName: "Rent/Mo", width: 110, type: "numericColumn",
-      valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
-    { field: "urgency", headerName: "Urgency", width: 150, cellRenderer: UrgencyCellRenderer, filter: true },
-  ], []);
+  const columnDefs = useMemo<ColDef[]>(() => {
+    if (isMobile) {
+      return [
+        { field: "unit", headerName: "Unit", width: 75, sort: "asc" },
+        { field: "tenant", headerName: "Tenant", minWidth: 120, flex: 1 },
+        { field: "daysLeft", headerName: "Days", width: 70, type: "numericColumn",
+          cellRenderer: (p: { value: number }) => (
+            <span className={`font-semibold text-[12px] ${p.value <= 0 ? "text-red-600" : p.value <= 90 ? "text-red-500" : p.value <= 180 ? "text-amber-500" : "text-emerald-600"}`}>
+              {p.value <= 0 ? "EXP" : `${p.value}d`}
+            </span>
+          )},
+        { field: "urgency", headerName: "Urgency", width: 120, cellRenderer: UrgencyCellRenderer },
+      ];
+    }
+    return [
+      { field: "unit", headerName: "Unit", width: 90, sort: "asc" },
+      { field: "tenant", headerName: "Tenant", minWidth: 180, flex: 1 },
+      { field: "building", headerName: "Bldg", width: 70 },
+      { field: "sqft", headerName: "Sq Ft", width: 90, type: "numericColumn",
+        valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
+      { field: "leaseFrom", headerName: "Start", width: 110 },
+      { field: "leaseTo", headerName: "End", width: 110 },
+      { field: "daysLeft", headerName: "Days Left", width: 100, type: "numericColumn",
+        cellRenderer: (p: { value: number }) => (
+          <span className={`font-semibold ${p.value <= 0 ? "text-red-600" : p.value <= 90 ? "text-red-500" : p.value <= 180 ? "text-amber-500" : "text-emerald-600"}`}>
+            {p.value <= 0 ? "EXPIRED" : `${p.value}d`}
+          </span>
+        )},
+      { field: "monthlyRent", headerName: "Rent/Mo", width: 110, type: "numericColumn",
+        valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
+      { field: "urgency", headerName: "Urgency", width: 150, cellRenderer: UrgencyCellRenderer, filter: true },
+    ];
+  }, [isMobile]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true, resizable: true, filter: true,

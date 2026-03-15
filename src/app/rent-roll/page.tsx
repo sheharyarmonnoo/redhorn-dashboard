@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
 import { tenants, formatCurrency, getStatusLabel, Tenant } from "@/data/tenants";
@@ -36,31 +36,57 @@ function CurrencyCellRenderer(props: { value: number }) {
   return <span>{props.value > 0 ? formatCurrency(props.value) : "—"}</span>;
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isMobile;
+}
+
 export default function RentRollPage() {
   const [selected, setSelected] = useState<Tenant | null>(null);
   const gridRef = useRef<AgGridReact>(null);
+  const isMobile = useIsMobile();
 
-  const columnDefs = useMemo<ColDef[]>(() => [
-    { field: "unit", headerName: "Unit", width: 100, pinned: "left", sort: "asc" },
-    { field: "tenant", headerName: "Tenant", minWidth: 200, flex: 1,
-      valueFormatter: (p: { value: string }) => p.value || "— Vacant —" },
-    { field: "leaseType", headerName: "Lease Type", width: 140,
-      valueFormatter: (p: { value: string }) => p.value?.replace("Office ", "") || "" },
-    { field: "building", headerName: "Bldg", width: 80, filter: true },
-    { field: "sqft", headerName: "Sq Ft", width: 100, type: "numericColumn",
-      valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
-    { field: "leaseFrom", headerName: "Lease Start", width: 120,
-      valueFormatter: (p: { value: string }) => p.value || "—" },
-    { field: "leaseTo", headerName: "Lease End", width: 120,
-      valueFormatter: (p: { value: string }) => p.value || "—" },
-    { field: "monthlyRent", headerName: "Monthly Rent", width: 130, type: "numericColumn",
-      cellRenderer: CurrencyCellRenderer },
-    { field: "monthlyElectric", headerName: "Electric", width: 100, type: "numericColumn",
-      cellRenderer: CurrencyCellRenderer },
-    { field: "pastDueAmount", headerName: "Past Due", width: 110, type: "numericColumn",
-      cellRenderer: CurrencyCellRenderer },
-    { field: "status", headerName: "Status", width: 140, cellRenderer: StatusCellRenderer, filter: true },
-  ], []);
+  const columnDefs = useMemo<ColDef[]>(() => {
+    if (isMobile) {
+      // Mobile: show only essential columns
+      return [
+        { field: "unit", headerName: "Unit", width: 75, pinned: "left", sort: "asc" },
+        { field: "tenant", headerName: "Tenant", minWidth: 130, flex: 1,
+          valueFormatter: (p: { value: string }) => p.value || "Vacant" },
+        { field: "monthlyRent", headerName: "Rent", width: 90, type: "numericColumn",
+          cellRenderer: CurrencyCellRenderer },
+        { field: "status", headerName: "Status", width: 110, cellRenderer: StatusCellRenderer },
+      ];
+    }
+    // Desktop: full columns
+    return [
+      { field: "unit", headerName: "Unit", width: 100, pinned: "left", sort: "asc" },
+      { field: "tenant", headerName: "Tenant", minWidth: 200, flex: 1,
+        valueFormatter: (p: { value: string }) => p.value || "— Vacant —" },
+      { field: "leaseType", headerName: "Lease Type", width: 140,
+        valueFormatter: (p: { value: string }) => p.value?.replace("Office ", "") || "" },
+      { field: "building", headerName: "Bldg", width: 80, filter: true },
+      { field: "sqft", headerName: "Sq Ft", width: 100, type: "numericColumn",
+        valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
+      { field: "leaseFrom", headerName: "Lease Start", width: 120,
+        valueFormatter: (p: { value: string }) => p.value || "—" },
+      { field: "leaseTo", headerName: "Lease End", width: 120,
+        valueFormatter: (p: { value: string }) => p.value || "—" },
+      { field: "monthlyRent", headerName: "Monthly Rent", width: 130, type: "numericColumn",
+        cellRenderer: CurrencyCellRenderer },
+      { field: "monthlyElectric", headerName: "Electric", width: 100, type: "numericColumn",
+        cellRenderer: CurrencyCellRenderer },
+      { field: "pastDueAmount", headerName: "Past Due", width: 110, type: "numericColumn",
+        cellRenderer: CurrencyCellRenderer },
+      { field: "status", headerName: "Status", width: 140, cellRenderer: StatusCellRenderer, filter: true },
+    ];
+  }, [isMobile]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -82,7 +108,7 @@ export default function RentRollPage() {
 
   return (
     <div>
-      <PageHeader title="Rent Roll" subtitle="All units as of March 2026 — Click any row for details" />
+      <PageHeader title="Rent Roll" subtitle="All units as of March 2026 — Tap any row for details" />
 
       {/* Summary bar */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">
@@ -97,7 +123,7 @@ export default function RentRollPage() {
             {formatCurrency(totalRent)}/mo
           </span>
         </div>
-        <div className="sm:ml-auto">
+        <div className="sm:ml-auto w-full sm:w-auto">
           <input
             type="text"
             placeholder="Quick search all data..."

@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useRef, useCallback } from "react";
+import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
 import { tenants, formatCurrency } from "@/data/tenants";
@@ -50,9 +50,21 @@ function CategoryCellRenderer(props: { value: string }) {
   );
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isMobile;
+}
+
 export default function AlertsPage() {
   const gridRef = useRef<AgGridReact>(null);
   const historyGridRef = useRef<AgGridReact>(null);
+  const isMobile = useIsMobile();
 
   const alertData = useMemo<AlertRow[]>(() => {
     const alerts: AlertRow[] = [];
@@ -104,17 +116,27 @@ export default function AlertsPage() {
     return alerts;
   }, []);
 
-  const columnDefs = useMemo<ColDef[]>(() => [
-    { field: "severity", headerName: "Severity", width: 110, cellRenderer: SeverityCellRenderer, filter: true },
-    { field: "category", headerName: "Category", width: 170, cellRenderer: CategoryCellRenderer, filter: true },
-    { field: "unit", headerName: "Unit", width: 80 },
-    { field: "tenant", headerName: "Tenant", minWidth: 160, flex: 1 },
-    { field: "building", headerName: "Bldg", width: 70 },
-    { field: "detail", headerName: "Details", minWidth: 280, flex: 2 },
-    { field: "amount", headerName: "Amount", width: 110, type: "numericColumn",
-      valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
-    { field: "date", headerName: "Date", width: 110 },
-  ], []);
+  const columnDefs = useMemo<ColDef[]>(() => {
+    if (isMobile) {
+      return [
+        { field: "severity", headerName: "Sev", width: 85, cellRenderer: SeverityCellRenderer },
+        { field: "unit", headerName: "Unit", width: 70 },
+        { field: "category", headerName: "Type", width: 140, cellRenderer: CategoryCellRenderer },
+        { field: "detail", headerName: "Details", minWidth: 180, flex: 1 },
+      ];
+    }
+    return [
+      { field: "severity", headerName: "Severity", width: 110, cellRenderer: SeverityCellRenderer, filter: true },
+      { field: "category", headerName: "Category", width: 170, cellRenderer: CategoryCellRenderer, filter: true },
+      { field: "unit", headerName: "Unit", width: 80 },
+      { field: "tenant", headerName: "Tenant", minWidth: 160, flex: 1 },
+      { field: "building", headerName: "Bldg", width: 70 },
+      { field: "detail", headerName: "Details", minWidth: 280, flex: 2 },
+      { field: "amount", headerName: "Amount", width: 110, type: "numericColumn",
+        valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
+      { field: "date", headerName: "Date", width: 110 },
+    ];
+  }, [isMobile]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true, resizable: true, filter: true,
@@ -135,17 +157,25 @@ export default function AlertsPage() {
     { date: "2026-01-20", message: "Lease renewal discussion initiated for A-111/C-216", type: "Action", category: "Lease" },
   ];
 
-  const historyColDefs = useMemo<ColDef[]>(() => [
-    { field: "date", headerName: "Date", width: 110, sort: "desc" },
-    { field: "type", headerName: "Type", width: 90,
-      cellRenderer: (p: { value: string }) => {
-        const c: Record<string, string> = { Alert: "bg-amber-100 text-amber-700", Action: "bg-blue-100 text-blue-700", System: "bg-gray-100 text-gray-500" };
-        return <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${c[p.value] || ""}`}>{p.value}</span>;
-      }
-    },
-    { field: "category", headerName: "Category", width: 100 },
-    { field: "message", headerName: "Description", minWidth: 300, flex: 1 },
-  ], []);
+  const historyColDefs = useMemo<ColDef[]>(() => {
+    const typeRenderer = (p: { value: string }) => {
+      const c: Record<string, string> = { Alert: "bg-amber-100 text-amber-700", Action: "bg-blue-100 text-blue-700", System: "bg-gray-100 text-gray-500" };
+      return <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${c[p.value] || ""}`}>{p.value}</span>;
+    };
+    if (isMobile) {
+      return [
+        { field: "date", headerName: "Date", width: 90, sort: "desc" },
+        { field: "type", headerName: "Type", width: 75, cellRenderer: typeRenderer },
+        { field: "message", headerName: "Description", minWidth: 180, flex: 1 },
+      ];
+    }
+    return [
+      { field: "date", headerName: "Date", width: 110, sort: "desc" },
+      { field: "type", headerName: "Type", width: 90, cellRenderer: typeRenderer },
+      { field: "category", headerName: "Category", width: 100 },
+      { field: "message", headerName: "Description", minWidth: 300, flex: 1 },
+    ];
+  }, [isMobile]);
 
   const criticalCount = alertData.filter(a => a.severity === "Critical").length;
   const warningCount = alertData.filter(a => a.severity === "Warning").length;

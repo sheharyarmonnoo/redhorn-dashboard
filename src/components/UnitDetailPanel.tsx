@@ -23,7 +23,7 @@ export default function UnitDetailPanel({ tenant, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-[#1e1e2d]/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-[540px] bg-white h-full overflow-y-auto shadow-2xl animate-[slideIn_0.25s_ease-out]">
+      <div className="relative w-full sm:w-[540px] bg-white h-full overflow-y-auto shadow-2xl animate-[slideIn_0.25s_ease-out]">
         {/* Header */}
         <div className="sticky top-0 bg-white/95 backdrop-blur-md border-b border-[#e8eaef] px-6 py-5 flex items-center justify-between z-10">
           <div>
