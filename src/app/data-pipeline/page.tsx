@@ -433,16 +433,199 @@ function ScheduledTriggers() {
   );
 }
 
+// --- Smart Upload Flow ---
+type UploadStep = "idle" | "classify" | "context" | "processing" | "done";
+type FileCategory = "rent_roll" | "lease_ledger" | "income_statement" | "utility_bill" | "meeting_recording" | "other";
+
+const fileCategoryLabels: Record<FileCategory, string> = {
+  rent_roll: "Rent Roll",
+  lease_ledger: "Lease Ledger",
+  income_statement: "Income Statement",
+  utility_bill: "Utility Bill",
+  meeting_recording: "Meeting Recording",
+  other: "Other",
+};
+
+function detectCategory(filename: string): FileCategory | null {
+  const lower = filename.toLowerCase();
+  if (lower.includes("rentroll") || lower.includes("rent_roll") || lower.includes("rent roll")) return "rent_roll";
+  if (lower.includes("leaseledger") || lower.includes("lease_ledger") || lower.includes("ledger")) return "lease_ledger";
+  if (lower.includes("income") || lower.includes("p&l") || lower.includes("financial")) return "income_statement";
+  if (lower.includes("electric") || lower.includes("utility") || lower.includes("billing") || lower.includes("centerpoint")) return "utility_bill";
+  if (lower.match(/\.(mp3|mp4|m4a|wav|webm|ogg)$/)) return "meeting_recording";
+  if (lower.match(/otter|transcript|recording|meeting/)) return "meeting_recording";
+  return null;
+}
+
+const contextQuestions: Record<FileCategory, string[]> = {
+  meeting_recording: [
+    "Who was on this call?",
+    "What property/units does this pertain to?",
+    "Any follow-up actions needed?",
+  ],
+  utility_bill: [
+    "Which utility provider?",
+    "Which billing period does this cover?",
+  ],
+  other: [
+    "What type of document is this?",
+    "Which property/units does it relate to?",
+    "Any special processing instructions?",
+  ],
+  rent_roll: [],
+  lease_ledger: [],
+  income_statement: [],
+};
+
+function SmartUploadModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState<UploadStep>("classify");
+  const [file, setFile] = useState<File | null>(null);
+  const [category, setCategory] = useState<FileCategory | null>(null);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [notes, setNotes] = useState("");
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    const detected = detectCategory(f.name);
+    if (detected) {
+      setCategory(detected);
+      const qs = contextQuestions[detected];
+      if (qs.length > 0) {
+        setStep("context");
+      } else {
+        setStep("processing");
+        setTimeout(() => setStep("done"), 2000);
+      }
+    } else {
+      setStep("classify");
+    }
+  }
+
+  function handleCategorySelect(cat: FileCategory) {
+    setCategory(cat);
+    const qs = contextQuestions[cat];
+    if (qs.length > 0) {
+      setStep("context");
+    } else {
+      setStep("processing");
+      setTimeout(() => setStep("done"), 2000);
+    }
+  }
+
+  function handleSubmitContext() {
+    setStep("processing");
+    setTimeout(() => setStep("done"), 2000);
+  }
+
+  const questions = category ? contextQuestions[category] : [];
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white border border-[#e4e4e7] rounded w-full max-w-[480px] mx-4 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#e4e4e7]">
+          <p className="text-[14px] font-semibold text-[#18181b]">Upload File</p>
+          <button onClick={onClose} className="text-[#a1a1aa] hover:text-[#18181b] cursor-pointer"><X size={16} /></button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* File picker */}
+          {!file && (
+            <label className="flex flex-col items-center justify-center border-2 border-dashed border-[#e4e4e7] rounded p-8 cursor-pointer hover:border-[#a1a1aa] transition-colors">
+              <p className="text-[13px] font-medium text-[#18181b]">Drop a file or click to browse</p>
+              <p className="text-[11px] text-[#a1a1aa] mt-1">.xlsx, .csv, .pdf, .mp3, .mp4, .m4a</p>
+              <input type="file" className="hidden" accept=".xlsx,.csv,.pdf,.mp3,.mp4,.m4a,.wav,.webm,.ogg,.txt" onChange={handleFileSelect} />
+            </label>
+          )}
+
+          {/* File selected — show name */}
+          {file && (
+            <div className="flex items-center gap-2 bg-[#fafafa] border border-[#e4e4e7] rounded px-3 py-2">
+              <p className="text-[12px] font-medium text-[#18181b] flex-1 truncate">{file.name}</p>
+              <p className="text-[10px] text-[#a1a1aa]">{(file.size / 1024).toFixed(0)} KB</p>
+            </div>
+          )}
+
+          {/* Classify — if auto-detect failed */}
+          {step === "classify" && file && !category && (
+            <div>
+              <p className="text-[12px] text-[#71717a] mb-2">What type of file is this?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(Object.keys(fileCategoryLabels) as FileCategory[]).map(cat => (
+                  <button key={cat} onClick={() => handleCategorySelect(cat)}
+                    className="text-left text-[12px] px-3 py-2 border border-[#e4e4e7] rounded hover:border-[#71717a] hover:bg-[#fafafa] cursor-pointer transition-colors">
+                    {fileCategoryLabels[cat]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Context questions */}
+          {step === "context" && category && (
+            <div className="space-y-3">
+              <p className="text-[12px] font-medium text-[#18181b]">{fileCategoryLabels[category]} — Additional Context</p>
+              {questions.map((q, i) => (
+                <div key={i}>
+                  <label className="text-[11px] text-[#71717a] font-medium">{q}</label>
+                  <input type="text" value={answers[i] || ""} onChange={e => setAnswers({ ...answers, [i]: e.target.value })}
+                    className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+                </div>
+              ))}
+              <div>
+                <label className="text-[11px] text-[#71717a] font-medium">Additional notes (optional)</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                  placeholder="Any other context for processing this file..."
+                  rows={2}
+                  className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] resize-none" />
+              </div>
+              <button onClick={handleSubmitContext}
+                className="text-[11px] font-medium px-4 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer transition-colors">
+                Process File
+              </button>
+            </div>
+          )}
+
+          {/* Processing */}
+          {step === "processing" && (
+            <div className="text-center py-6">
+              <div className="w-5 h-5 border-2 border-[#18181b] border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-[12px] text-[#71717a] mt-3">Processing {file?.name}...</p>
+            </div>
+          )}
+
+          {/* Done */}
+          {step === "done" && (
+            <div className="text-center py-6">
+              <p className="text-[14px] font-medium text-[#18181b]">File processed</p>
+              <p className="text-[12px] text-[#a1a1aa] mt-1">
+                {file?.name} uploaded as {category ? fileCategoryLabels[category] : "file"}. Check the approval queue for any pending changes.
+              </p>
+              <button onClick={onClose}
+                className="mt-4 text-[11px] font-medium px-4 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer transition-colors">
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DataPipelinePage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const [selectedFile, setSelectedFile] = useState<FileSyncRow | null>(null);
   const [activeSection, setActiveSection] = useState<"approval" | "workflow" | "protocol" | "triggers">("approval");
   const [syncing, setSyncing] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
 
-  function handleManualSync() {
+  function handleUpdateNow() {
     setSyncing(true);
-    setTimeout(() => setSyncing(false), 3000); // simulate
+    setTimeout(() => setSyncing(false), 3000);
   }
 
   const columnDefs = useMemo<ColDef[]>(() => {
@@ -492,25 +675,27 @@ export default function DataPipelinePage() {
     <div>
       <PageHeader title="Data Pipeline" subtitle="File sync history — click any row for details">
         <div className="flex items-center gap-2">
-          <button onClick={handleManualSync} disabled={syncing}
-            className={`flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded cursor-pointer transition-colors ${
-              syncing ? "bg-[#d4d4d8] text-[#71717a]" : "border border-[#e4e4e7] text-[#71717a] hover:text-[#18181b] hover:border-[#71717a]"
-            }`}>
-            {syncing ? "Syncing..." : "Trigger Sync"}
+          <button onClick={() => setShowUpload(true)}
+            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer transition-colors">
+            Upload
           </button>
-          <label className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 border border-[#e4e4e7] rounded text-[#71717a] hover:text-[#18181b] hover:border-[#71717a] cursor-pointer transition-colors">
-            Upload File
-            <input type="file" className="hidden" accept=".xlsx,.csv,.pdf" onChange={() => {}} />
-          </label>
           <button onClick={exportFullPackage}
-            className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] transition-colors cursor-pointer">
+            className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 border border-[#e4e4e7] text-[#71717a] hover:text-[#18181b] rounded cursor-pointer transition-colors">
             <Download size={13} /> Export
           </button>
         </div>
       </PageHeader>
 
+      {showUpload && <SmartUploadModal onClose={() => setShowUpload(false)} />}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-        <p className="text-[12px] text-[#71717a]">{fileSyncHistory.length} files · Last sync Mar 12, 2026</p>
+        <div className="flex items-center gap-3">
+          <p className="text-[12px] text-[#71717a]">{fileSyncHistory.length} files · Last sync Mar 12, 2026</p>
+          <button onClick={handleUpdateNow} disabled={syncing}
+            className={`text-[10px] cursor-pointer transition-colors ${syncing ? "text-[#a1a1aa]" : "text-[#71717a] hover:text-[#18181b] underline decoration-dotted"}`}>
+            {syncing ? "Updating..." : "Update now"}
+          </button>
+        </div>
         <input
           type="text"
           placeholder="Search files..."
