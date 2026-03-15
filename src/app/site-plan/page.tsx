@@ -1,121 +1,87 @@
 "use client";
 import { useState } from "react";
-import { tenants, Tenant, getStatusColor, getStatusLabel } from "@/data/tenants";
+import dynamic from "next/dynamic";
+import { tenants, Tenant, getStatusColor, getStatusLabel, formatCurrency } from "@/data/tenants";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 
-function UnitBlock({ tenant, onClick }: { tenant: Tenant; onClick: () => void }) {
-  const statusColors: Record<string, string> = {
-    current: "bg-emerald-500/20 border-emerald-500/40 hover:bg-emerald-500/30",
-    past_due: "bg-red-500/20 border-red-500/40 hover:bg-red-500/30",
-    locked_out: "bg-yellow-500/20 border-yellow-500/40 hover:bg-yellow-500/30",
-    vacant: "bg-gray-500/10 border-gray-500/30 hover:bg-gray-500/20",
-    expiring_soon: "bg-blue-500/20 border-blue-500/40 hover:bg-blue-500/30",
-  };
-
-  const dotColors: Record<string, string> = {
-    current: "bg-emerald-400",
-    past_due: "bg-red-400",
-    locked_out: "bg-yellow-400",
-    vacant: "bg-gray-500",
-    expiring_soon: "bg-blue-400",
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      className={`border rounded-lg p-3 text-left transition-all cursor-pointer ${statusColors[tenant.status]}`}
-    >
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-bold text-white">{tenant.unit}</span>
-        <span className={`w-2.5 h-2.5 rounded-full ${dotColors[tenant.status]}`} />
-      </div>
-      <p className="text-xs text-gray-300 truncate">{tenant.tenant || "Vacant"}</p>
-      <p className="text-xs text-gray-500">{tenant.sqft.toLocaleString()} sf</p>
-    </button>
-  );
-}
+// Dynamic import to avoid SSR issues with Three.js
+const SitePlan3D = dynamic(() => import("@/components/SitePlan3D"), { ssr: false });
 
 export default function SitePlanPage() {
   const [selected, setSelected] = useState<Tenant | null>(null);
 
-  const buildingA = tenants.filter(t => t.building === "A").sort((a, b) => a.unit.localeCompare(b.unit));
-  const buildingC1 = tenants.filter(t => t.building === "C" && !t.unit.startsWith("C-3")).sort((a, b) => a.unit.localeCompare(b.unit));
-  const buildingC3 = tenants.filter(t => t.building === "C" && t.unit.startsWith("C-3")).sort((a, b) => a.unit.localeCompare(b.unit));
-  const buildingD = tenants.filter(t => t.building === "D").sort((a, b) => a.unit.localeCompare(b.unit));
-
   const legend = [
-    { status: "current", label: "Current", color: "bg-emerald-400" },
-    { status: "past_due", label: "Past Due", color: "bg-red-400" },
-    { status: "locked_out", label: "Locked Out", color: "bg-yellow-400" },
-    { status: "vacant", label: "Vacant", color: "bg-gray-500" },
-    { status: "expiring_soon", label: "Expiring Soon", color: "bg-blue-400" },
+    { status: "current", label: "Current", color: "bg-emerald-500" },
+    { status: "past_due", label: "Past Due", color: "bg-red-500" },
+    { status: "locked_out", label: "Locked Out", color: "bg-amber-500" },
+    { status: "vacant", label: "Vacant", color: "bg-gray-400" },
+    { status: "expiring_soon", label: "Expiring Soon", color: "bg-[#4f6ef7]" },
   ];
+
+  // Summary stats
+  const occupied = tenants.filter(t => t.status !== "vacant");
+  const pastDue = tenants.filter(t => t.status === "past_due");
+  const expiring = tenants.filter(t => t.status === "expiring_soon");
+  const vacant = tenants.filter(t => t.status === "vacant");
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Interactive Site Plan</h1>
-          <p className="text-gray-500 text-sm mt-1">Click any unit for tenant details & payment history</p>
+          <h1 className="text-2xl font-bold text-gray-900">Interactive Site Plan</h1>
+          <p className="text-gray-500 text-sm mt-1">3D property map — click any unit, drag to rotate, scroll to zoom</p>
         </div>
         <div className="flex items-center gap-4">
           {legend.map(l => (
             <div key={l.status} className="flex items-center gap-1.5">
               <span className={`w-3 h-3 rounded-full ${l.color}`} />
-              <span className="text-xs text-gray-400">{l.label}</span>
+              <span className="text-xs text-gray-600">{l.label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Building A */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-          <span className="bg-blue-600/20 text-blue-400 px-2 py-0.5 rounded text-xs font-bold">A</span>
-          Building A — Industrial / Warehouse
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-          {buildingA.map(t => (
-            <UnitBlock key={t.unit} tenant={t} onClick={() => setSelected(t)} />
-          ))}
+      {/* 3D View */}
+      <SitePlan3D onSelect={setSelected} selectedUnit={selected?.unit || null} />
+
+      {/* Quick Stats Below Map */}
+      <div className="grid grid-cols-4 gap-4 mt-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm text-center">
+          <p className="text-2xl font-bold text-gray-900">{tenants.length}</p>
+          <p className="text-xs text-gray-500">Total Units</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm text-center">
+          <p className="text-2xl font-bold text-emerald-600">{occupied.length}</p>
+          <p className="text-xs text-gray-500">Occupied</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm text-center">
+          <p className="text-2xl font-bold text-red-500">{pastDue.length}</p>
+          <p className="text-xs text-gray-500">Past Due</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm text-center">
+          <p className="text-2xl font-bold text-gray-400">{vacant.length}</p>
+          <p className="text-xs text-gray-500">Vacant</p>
         </div>
       </div>
 
-      {/* Building C — Floors 1-2 */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-          <span className="bg-purple-600/20 text-purple-400 px-2 py-0.5 rounded text-xs font-bold">C</span>
-          Building C — Office (1st & 2nd Floor)
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-3">
-          {buildingC1.map(t => (
-            <UnitBlock key={t.unit} tenant={t} onClick={() => setSelected(t)} />
-          ))}
-        </div>
-      </div>
-
-      {/* Building C — Floor 3 */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-          <span className="bg-purple-600/20 text-purple-400 px-2 py-0.5 rounded text-xs font-bold">C</span>
-          Building C — Office (3rd Floor)
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-3">
-          {buildingC3.map(t => (
-            <UnitBlock key={t.unit} tenant={t} onClick={() => setSelected(t)} />
-          ))}
-        </div>
-      </div>
-
-      {/* Building D */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-          <span className="bg-amber-600/20 text-amber-400 px-2 py-0.5 rounded text-xs font-bold">D</span>
-          Building D — Warehouse / Industrial
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {buildingD.map(t => (
-            <UnitBlock key={t.unit} tenant={t} onClick={() => setSelected(t)} />
+      {/* Unit Grid Fallback / Quick Reference */}
+      <div className="mt-6 bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">All Units — Quick Reference</h3>
+        <div className="grid grid-cols-4 md:grid-cols-8 lg:grid-cols-13 gap-2">
+          {tenants.map(t => (
+            <button
+              key={t.unit}
+              onClick={() => setSelected(t)}
+              className={`px-2 py-1.5 rounded text-xs font-medium border transition-all cursor-pointer ${
+                t.status === "current" ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100" :
+                t.status === "past_due" ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100" :
+                t.status === "expiring_soon" ? "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100" :
+                t.status === "vacant" ? "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100" :
+                "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+              }`}
+            >
+              {t.unit}
+            </button>
           ))}
         </div>
       </div>
