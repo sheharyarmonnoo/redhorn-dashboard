@@ -26,14 +26,15 @@ function daysUntil(date: string) {
 }
 
 function UrgencyCellRenderer(props: { value: string }) {
-  const colors: Record<string, string> = {
-    "Expired": "bg-red-100 text-red-700 border-red-200",
-    "Critical (<90d)": "bg-red-50 text-red-600 border-red-200",
-    "Warning (90-180d)": "bg-amber-50 text-amber-700 border-amber-200",
-    "OK (180d+)": "bg-emerald-50 text-emerald-700 border-emerald-200",
+  const dots: Record<string, string> = {
+    "Expired": "bg-[#dc2626]",
+    "Critical (<90d)": "bg-[#dc2626]",
+    "Warning (90-180d)": "bg-[#d97706]",
+    "OK (180d+)": "bg-[#16a34a]",
   };
   return (
-    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border ${colors[props.value] || ""}`}>
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b]">
+      <span className={`w-1.5 h-1.5 rounded-full ${dots[props.value] || "bg-[#a1a1aa]"}`} />
       {props.value}
     </span>
   );

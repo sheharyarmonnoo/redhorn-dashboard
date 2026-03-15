@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, Plus } from "lucide-react";
+import { useState, useEffect } from "react";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
@@ -18,11 +18,35 @@ const portfolioProperties = [
   { id: "rv-ohio", name: "RV Park — Ohio", location: "Ohio", sqft: "~40 lots", active: false },
 ];
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const pathname = usePathname();
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   const [activeProperty, setActiveProperty] = useState("hollister");
   const current = portfolioProperties.find(p => p.id === activeProperty) || portfolioProperties[0];
+
+  if (collapsed) {
+    return (
+      <>
+        <div className="px-2 pt-4 pb-3 flex justify-center">
+          <span className="text-[14px] font-bold text-white">R</span>
+        </div>
+        <nav className="flex-1 px-2 py-2 space-y-1">
+          {nav.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href;
+            return (
+              <Link key={href} href={href}
+                title={label}
+                className={`flex items-center justify-center w-9 h-9 rounded transition-colors ${
+                  active ? "bg-white/[0.08] text-white" : "text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]"
+                }`}>
+                <Icon size={16} strokeWidth={1.5} />
+              </Link>
+            );
+          })}
+        </nav>
+      </>
+    );
+  }
 
   return (
     <>
@@ -87,25 +111,53 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
 
-      <div className="px-5 py-3 border-t border-white/[0.06] space-y-2">
-        <button className="w-full flex items-center justify-between px-2 py-1.5 rounded bg-white/[0.04] hover:bg-white/[0.08] transition-colors cursor-pointer group">
-          <span className="text-[11px] text-[#71717a] group-hover:text-[#d4d4d8]">Search</span>
-          <kbd className="text-[10px] text-[#52525b] bg-white/[0.06] border border-white/[0.06] rounded px-1.5 py-0.5 font-mono">⌘K</kbd>
-        </button>
+      <div className="px-5 py-3 border-t border-white/[0.06]">
         <p className="text-[10px] text-[#52525b]">Updated Mar 15, 2026 2:30 PM</p>
       </div>
     </>
   );
 }
 
+const COLLAPSED_KEY = "redhorn_sidebar_collapsed";
+
 export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(COLLAPSED_KEY);
+    if (saved === "true") setCollapsed(true);
+  }, []);
+
+  function toggle() {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem(COLLAPSED_KEY, String(next));
+    window.dispatchEvent(new CustomEvent("sidebar-toggle", { detail: { collapsed: next } }));
+  }
+
+  // Emit initial state
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("sidebar-toggle", { detail: { collapsed } }));
+  }, [collapsed]);
+
+  const width = collapsed ? "w-[52px]" : "w-[240px]";
+
   return (
     <>
-      <aside className="sidebar-desktop fixed left-0 top-0 h-screen w-[240px] bg-[#18181b] flex flex-col z-50">
-        <SidebarContent />
+      {/* Desktop */}
+      <aside className={`sidebar-desktop fixed left-0 top-0 h-screen ${width} bg-[#18181b] flex flex-col z-50 transition-all duration-200`}>
+        <SidebarContent collapsed={collapsed} />
+        <button
+          onClick={toggle}
+          className="absolute top-3 -right-3 w-6 h-6 bg-[#18181b] border border-[#3f3f46] rounded-full flex items-center justify-center text-[#71717a] hover:text-white cursor-pointer transition-colors z-50"
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <PanelLeftOpen size={12} /> : <PanelLeftClose size={12} />}
+        </button>
       </aside>
 
+      {/* Mobile Header */}
       <div className="mobile-nav fixed top-0 left-0 right-0 h-12 bg-[#18181b] flex items-center justify-between px-4 z-50">
         <img src="/redhorn-logo.png" alt="Redhorn Capital" className="h-6 w-auto brightness-0 invert opacity-90" />
         <button onClick={() => setMobileOpen(!mobileOpen)} className="text-[#a1a1aa] p-1">
@@ -113,6 +165,7 @@ export default function Sidebar() {
         </button>
       </div>
 
+      {/* Mobile Overlay */}
       {mobileOpen && (
         <>
           <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />

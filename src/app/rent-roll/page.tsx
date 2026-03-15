@@ -12,23 +12,16 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 
 function StatusCellRenderer(props: { value: string }) {
   const status = props.value;
-  const colors: Record<string, string> = {
-    current: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    past_due: "bg-red-50 text-red-700 border-red-200",
-    expiring_soon: "bg-blue-50 text-blue-700 border-blue-200",
-    vacant: "bg-gray-100 text-gray-500 border-gray-200",
-    locked_out: "bg-amber-50 text-amber-700 border-amber-200",
-  };
   const dotColors: Record<string, string> = {
-    current: "bg-emerald-500",
-    past_due: "bg-red-500",
-    expiring_soon: "bg-blue-500",
-    vacant: "bg-gray-400",
-    locked_out: "bg-amber-500",
+    current: "bg-[#16a34a]",
+    past_due: "bg-[#dc2626]",
+    expiring_soon: "bg-[#2563eb]",
+    vacant: "bg-[#a1a1aa]",
+    locked_out: "bg-[#d97706]",
   };
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border ${colors[status] || ""}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${dotColors[status] || ""}`} />
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b]">
+      <span className={`w-1.5 h-1.5 rounded-full ${dotColors[status] || "bg-[#a1a1aa]"}`} />
       {getStatusLabel(status as Tenant["status"])}
     </span>
   );
@@ -142,7 +135,7 @@ export default function RentRollPage() {
       </div>
 
       {/* AG Grid Table */}
-      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: "min(calc(100vh - 220px), 700px)", minHeight: 350 }}>
+      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7]" style={{ height: "min(calc(100vh - 220px), 700px)", minHeight: 350 }}>
         <AgGridReact
           ref={gridRef}
           rowData={tenants}

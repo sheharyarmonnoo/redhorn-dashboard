@@ -21,13 +21,14 @@ interface AlertRow {
 }
 
 function SeverityCellRenderer(props: { value: string }) {
-  const colors: Record<string, string> = {
-    Critical: "bg-red-100 text-red-700 border-red-200",
-    Warning: "bg-amber-50 text-amber-700 border-amber-200",
-    Info: "bg-blue-50 text-blue-700 border-blue-200",
+  const dots: Record<string, string> = {
+    Critical: "bg-[#dc2626]",
+    Warning: "bg-[#d97706]",
+    Info: "bg-[#2563eb]",
   };
   return (
-    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold border ${colors[props.value] || ""}`}>
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b]">
+      <span className={`w-1.5 h-1.5 rounded-full ${dots[props.value] || "bg-[#a1a1aa]"}`} />
       {props.value}
     </span>
   );

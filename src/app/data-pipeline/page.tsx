@@ -42,12 +42,12 @@ interface FileSyncRow {
 }
 
 const fileSyncHistory: FileSyncRow[] = [
-  { id: 1, filename: "RentRoll03_12_2026.xlsx", source: "Yardi", type: "Rent Roll", records: 52, size: "13.3 KB", status: "Success", syncedAt: "2026-03-12 09:15" },
-  { id: 2, filename: "LeaseLedger03_12_2026.xlsx", source: "Yardi", type: "Lease Ledger", records: 48, size: "14.0 KB", status: "Success", syncedAt: "2026-03-12 09:15" },
-  { id: 3, filename: "IncomeStatement03_12_2026.xlsx", source: "Yardi", type: "Income Statement", records: 9, size: "12.1 KB", status: "Success", syncedAt: "2026-03-12 09:14" },
-  { id: 4, filename: "RentRoll03_01_2026.xlsx", source: "Yardi", type: "Rent Roll", records: 52, size: "13.1 KB", status: "Success", syncedAt: "2026-03-01 08:30" },
-  { id: 5, filename: "LeaseLedger03_01_2026.xlsx", source: "Yardi", type: "Lease Ledger", records: 45, size: "13.8 KB", status: "Success", syncedAt: "2026-03-01 08:29" },
-  { id: 6, filename: "IncomeStatement02_2026.xlsx", source: "Yardi", type: "Income Statement", records: 8, size: "11.9 KB", status: "Success", syncedAt: "2026-02-28 14:22" },
+  { id: 1, filename: "RentRoll03_12_2026.xlsx", source: "Yardi", type: "Rent Roll", records: 52, size: "13.3 KB", status: "Success", syncedAt: "2026-03-12 09:15", statusDetail: "All 52 units parsed. 44 occupied, 8 vacant. Rent totals match previous month. No schema errors." },
+  { id: 2, filename: "LeaseLedger03_12_2026.xlsx", source: "Yardi", type: "Lease Ledger", records: 48, size: "14.0 KB", status: "Success", syncedAt: "2026-03-12 09:15", statusDetail: "48 ledger entries processed for A-102. All charges and payments balanced. ACH payment confirmed for March." },
+  { id: 3, filename: "IncomeStatement03_12_2026.xlsx", source: "Yardi", type: "Income Statement", records: 9, size: "12.1 KB", status: "Success", syncedAt: "2026-03-12 09:14", statusDetail: "9 months of P&L data imported. Revenue categories: Base Rent, CAM, Electric Recovery, Late Fees. All GL codes matched." },
+  { id: 4, filename: "RentRoll03_01_2026.xlsx", source: "Yardi", type: "Rent Roll", records: 52, size: "13.1 KB", status: "Success", syncedAt: "2026-03-01 08:30", statusDetail: "52 units parsed. No changes from previous cycle. All tenant records matched." },
+  { id: 5, filename: "LeaseLedger03_01_2026.xlsx", source: "Yardi", type: "Lease Ledger", records: 45, size: "13.8 KB", status: "Success", syncedAt: "2026-03-01 08:29", statusDetail: "45 entries processed. All balances reconciled. 3 fewer entries than current month — Feb shorter cycle." },
+  { id: 6, filename: "IncomeStatement02_2026.xlsx", source: "Yardi", type: "Income Statement", records: 8, size: "11.9 KB", status: "Success", syncedAt: "2026-02-28 14:22", statusDetail: "8 months of P&L data. February revenue within expected range. No anomalies detected." },
   {
     id: 7,
     filename: "ElectricBilling_Feb2026.pdf",
@@ -80,9 +80,8 @@ const fileSyncHistory: FileSyncRow[] = [
 
 function StatusCell(props: { value: string }) {
   const v = props.value;
-  if (v === "Success") return <span className="text-[11px] font-medium text-[#16a34a]">Success</span>;
-  if (v === "Warning") return <span className="text-[11px] font-medium text-[#d97706] cursor-pointer underline decoration-dotted">Warning</span>;
-  return <span className="text-[11px] font-medium text-[#dc2626] cursor-pointer underline decoration-dotted">Failed</span>;
+  const colors: Record<string, string> = { Success: "text-[#16a34a]", Warning: "text-[#d97706]", Failed: "text-[#dc2626]" };
+  return <span className={`text-[11px] font-medium ${colors[v] || ""} cursor-pointer underline decoration-dotted`}>{v}</span>;
 }
 
 function DownloadCell(props: { data: FileSyncRow }) {
@@ -95,11 +94,15 @@ function DownloadCell(props: { data: FileSyncRow }) {
 }
 
 function DetailPanel({ file, onClose }: { file: FileSyncRow; onClose: () => void }) {
-  const isWarning = file.status === "Warning";
-  const isFailed = file.status === "Failed";
-  const borderColor = isWarning ? "border-[#d97706]" : "border-[#dc2626]";
-  const bgColor = isWarning ? "bg-amber-50" : "bg-red-50";
-  const textColor = isWarning ? "text-[#d97706]" : "text-[#dc2626]";
+  const styleMap: Record<string, { border: string; bg: string; text: string }> = {
+    Success: { border: "border-[#16a34a]", bg: "bg-emerald-50", text: "text-[#16a34a]" },
+    Warning: { border: "border-[#d97706]", bg: "bg-amber-50", text: "text-[#d97706]" },
+    Failed: { border: "border-[#dc2626]", bg: "bg-red-50", text: "text-[#dc2626]" },
+  };
+  const s = styleMap[file.status] || styleMap.Failed;
+  const borderColor = s.border;
+  const bgColor = s.bg;
+  const textColor = s.text;
 
   return (
     <div className={`mt-3 ${bgColor} border ${borderColor} rounded p-4`}>
@@ -401,7 +404,13 @@ export default function DataPipelinePage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const [selectedFile, setSelectedFile] = useState<FileSyncRow | null>(null);
-  const [activeSection, setActiveSection] = useState<"approval" | "workflow" | "protocol">("approval");
+  const [activeSection, setActiveSection] = useState<"approval" | "workflow" | "protocol" | "triggers">("approval");
+  const [syncing, setSyncing] = useState(false);
+
+  function handleManualSync() {
+    setSyncing(true);
+    setTimeout(() => setSyncing(false), 3000); // simulate
+  }
 
   const columnDefs = useMemo<ColDef[]>(() => {
     if (isMobile) {
@@ -441,18 +450,30 @@ export default function DataPipelinePage() {
 
   const onRowClicked = useCallback((event: RowClickedEvent) => {
     const row = event.data as FileSyncRow;
-    if (row.status !== "Success" && row.statusDetail) {
+    if (row.statusDetail) {
       setSelectedFile(prev => prev?.id === row.id ? null : row);
     }
   }, []);
 
   return (
     <div>
-      <PageHeader title="Data Pipeline" subtitle="File sync history — click Warning/Failed rows for details">
-        <button onClick={exportFullPackage}
-          className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] transition-colors cursor-pointer">
-          <Download size={13} /> Export All
-        </button>
+      <PageHeader title="Data Pipeline" subtitle="File sync history — click any row for details">
+        <div className="flex items-center gap-2">
+          <button onClick={handleManualSync} disabled={syncing}
+            className={`flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded cursor-pointer transition-colors ${
+              syncing ? "bg-[#d4d4d8] text-[#71717a]" : "border border-[#e4e4e7] text-[#71717a] hover:text-[#18181b] hover:border-[#71717a]"
+            }`}>
+            {syncing ? "Syncing..." : "Trigger Sync"}
+          </button>
+          <label className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 border border-[#e4e4e7] rounded text-[#71717a] hover:text-[#18181b] hover:border-[#71717a] cursor-pointer transition-colors">
+            Upload File
+            <input type="file" className="hidden" accept=".xlsx,.csv,.pdf" onChange={() => {}} />
+          </label>
+          <button onClick={exportFullPackage}
+            className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] transition-colors cursor-pointer">
+            <Download size={13} /> Export
+          </button>
+        </div>
       </PageHeader>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
