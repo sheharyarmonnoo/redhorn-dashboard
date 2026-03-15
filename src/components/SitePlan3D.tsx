@@ -1,94 +1,85 @@
 "use client";
 import { tenants, Tenant, TenantStatus } from "@/data/tenants";
 
-function getColor(status: TenantStatus) {
+function statusColor(status: TenantStatus) {
   switch (status) {
-    case "current": return { bg: "bg-emerald-500", border: "border-emerald-600", text: "text-white" };
-    case "past_due": return { bg: "bg-red-500", border: "border-red-600", text: "text-white" };
-    case "locked_out": return { bg: "bg-amber-500", border: "border-amber-600", text: "text-white" };
-    case "vacant": return { bg: "bg-gray-300", border: "border-gray-400", text: "text-gray-600" };
-    case "expiring_soon": return { bg: "bg-blue-500", border: "border-blue-600", text: "text-white" };
+    case "current": return { bg: "bg-[#16a34a]", text: "text-white" };
+    case "past_due": return { bg: "bg-[#dc2626]", text: "text-white" };
+    case "locked_out": return { bg: "bg-[#d97706]", text: "text-white" };
+    case "vacant": return { bg: "bg-[#e4e4e7]", text: "text-[#71717a]" };
+    case "expiring_soon": return { bg: "bg-[#2563eb]", text: "text-white" };
   }
 }
 
-function UnitBlock({ tenant, onSelect, isSelected, size = "md" }: {
+function UnitBlock({ tenant, onSelect, isSelected }: {
   tenant: Tenant;
   onSelect: (t: Tenant) => void;
   isSelected: boolean;
-  size?: "sm" | "md" | "lg" | "xl";
 }) {
-  const colors = getColor(tenant.status);
-  const sizeClasses = {
-    sm: "min-w-[60px] h-[52px]",
-    md: "min-w-[72px] h-[58px]",
-    lg: "min-w-[90px] h-[64px]",
-    xl: "min-w-[110px] h-[70px]",
-  };
-
+  const c = statusColor(tenant.status);
   return (
     <button
       onClick={() => onSelect(tenant)}
       className={`
-        ${sizeClasses[size]} ${colors.bg} ${colors.border} ${colors.text}
-        border-2 rounded-lg flex flex-col items-center justify-center
-        transition-all duration-150 cursor-pointer relative
-        ${isSelected ? "ring-2 ring-offset-2 ring-indigo-500 scale-105 shadow-lg z-10" : "hover:scale-105 hover:shadow-md"}
+        w-full ${c.bg} ${c.text} rounded flex flex-col items-center justify-center
+        transition-all duration-100 cursor-pointer relative
+        ${tenant.sqft > 5000 ? "h-[68px] sm:h-[76px]" : "h-[52px] sm:h-[60px]"}
+        ${isSelected ? "ring-2 ring-[#18181b] ring-offset-1 z-10" : "hover:opacity-90"}
       `}
     >
-      <span className="text-[11px] font-bold leading-tight">{tenant.unit}</span>
+      <span className="text-[11px] font-semibold leading-none">{tenant.unit}</span>
       {tenant.tenant && !tenant.tenant.includes("Owner") ? (
-        <span className="text-[8px] opacity-80 leading-tight px-1 text-center truncate max-w-full">
+        <span className="text-[7px] opacity-75 leading-tight px-1 text-center truncate max-w-full mt-0.5">
           {tenant.tenant.split(" ").slice(0, 2).join(" ")}
         </span>
       ) : tenant.status === "vacant" ? (
-        <span className="text-[8px] opacity-60 leading-tight">VACANT</span>
+        <span className="text-[7px] opacity-50 mt-0.5 uppercase tracking-wide">Vacant</span>
       ) : (
-        <span className="text-[8px] opacity-60 leading-tight">Owner</span>
+        <span className="text-[7px] opacity-50 mt-0.5">Owner</span>
+      )}
+      {tenant.sqft > 5000 && (
+        <span className="text-[7px] opacity-50 mt-0.5">{(tenant.sqft / 1000).toFixed(0)}K SF</span>
       )}
       {tenant.pastDueAmount > 0 && (
-        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-600 rounded-full border border-white animate-pulse" />
+        <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#dc2626] rounded-full border-2 border-white" />
       )}
       {!tenant.electricPosted && tenant.leaseType === "Office Net Lease" && tenant.tenant && !tenant.tenant.includes("Owner") && (
-        <span className="absolute -top-1 -left-1 w-3 h-3 bg-yellow-400 rounded-full border border-white" title="Electric not posted" />
+        <span className="absolute -top-1 -left-1 w-3 h-3 bg-[#d97706] rounded-full border-2 border-white" />
       )}
     </button>
   );
 }
 
-function BuildingSection({ title, subtitle, units, onSelect, selectedUnit, gridCols }: {
-  title: string;
-  subtitle: string;
+function BuildingGroup({ label, sub, accent, units, cols, onSelect, selectedUnit }: {
+  label: string;
+  sub: string;
+  accent: string;
   units: Tenant[];
+  cols: string;
   onSelect: (t: Tenant) => void;
   selectedUnit: string | null;
-  gridCols: string;
 }) {
+  const occ = units.filter(u => u.status !== "vacant").length;
+  const vac = units.filter(u => u.status === "vacant").length;
   return (
-    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+    <div className="bg-white border border-[#e4e4e7] rounded p-3 sm:p-4">
       <div className="flex items-center justify-between mb-3">
-        <div>
-          <h3 className="text-[13px] font-bold text-[#1e1e2d]">{title}</h3>
-          <p className="text-[10px] text-[#8b8fa3]">{subtitle}</p>
+        <div className="flex items-center gap-2">
+          <div className={`w-0.5 h-4 rounded-full ${accent}`} />
+          <div>
+            <h3 className="text-[12px] font-semibold text-[#18181b]">{label}</h3>
+            <p className="text-[10px] text-[#a1a1aa]">{sub}</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-[#8b8fa3]">
-          <span>{units.filter(u => u.status !== "vacant").length} occupied</span>
-          <span className="text-gray-300">|</span>
-          <span>{units.filter(u => u.status === "vacant").length} vacant</span>
+        <div className="flex items-center gap-1.5 text-[10px] text-[#71717a]">
+          <span>{occ} occ</span>
+          {vac > 0 && <><span className="text-[#d4d4d8]">/</span><span>{vac} vac</span></>}
         </div>
       </div>
-      <div className={`grid grid-cols-3 sm:grid-cols-4 md:${gridCols} gap-1.5 sm:gap-2`}>
-        {units.map(t => {
-          const size = t.sqft > 8000 ? "xl" : t.sqft > 5000 ? "lg" : t.sqft > 2500 ? "md" : "sm";
-          return (
-            <UnitBlock
-              key={t.unit}
-              tenant={t}
-              onSelect={onSelect}
-              isSelected={selectedUnit === t.unit}
-              size={size}
-            />
-          );
-        })}
+      <div className={`grid ${cols} gap-1.5`}>
+        {units.map(t => (
+          <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
+        ))}
       </div>
     </div>
   );
@@ -101,77 +92,62 @@ export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: T
   const buildingD = tenants.filter(t => t.building === "D");
 
   return (
-    <div className="w-full bg-white rounded-2xl border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-      {/* Property Header Bar */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white px-6 py-3 flex items-center justify-between">
+    <div className="w-full bg-white border border-[#e4e4e7] rounded overflow-hidden">
+      {/* Header */}
+      <div className="bg-[#18181b] text-white px-4 sm:px-5 py-3 flex items-center justify-between">
         <div>
-          <h2 className="text-[14px] font-bold">Hollister Business Park</h2>
-          <p className="text-[11px] text-slate-300">Houston, TX — ~325,000 SF Industrial/Office</p>
+          <h2 className="text-[13px] font-semibold tracking-tight">Hollister Business Park</h2>
+          <p className="text-[10px] text-[#a1a1aa] mt-0.5">Houston, TX — ~325,000 SF</p>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-[10px] text-slate-300">Live</span>
+        <div className="flex items-center gap-3 text-[9px] text-[#a1a1aa]">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#16a34a]" /> Current</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#dc2626]" /> Past Due</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#2563eb]" /> Expiring</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#e4e4e7]" /> Vacant</span>
         </div>
       </div>
 
-      {/* Site Plan Grid */}
-      <div className="p-5 space-y-4">
-        {/* Top Row: Building A + Building D */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <BuildingSection
-              title="Building A"
-              subtitle="Industrial / Warehouse"
-              units={buildingA}
-              onSelect={onSelect}
-              selectedUnit={selectedUnit}
-              gridCols="grid-cols-7"
-            />
+      <div className="p-3 sm:p-4 space-y-3 bg-[#fafafa]">
+        {/* Building A + Building D */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+          <div className="lg:col-span-8">
+            <BuildingGroup label="Building A" sub="Industrial / Warehouse" accent="bg-[#18181b]"
+              units={buildingA} cols="grid-cols-4 sm:grid-cols-5 md:grid-cols-7"
+              onSelect={onSelect} selectedUnit={selectedUnit} />
           </div>
-          <BuildingSection
-            title="Building D"
-            subtitle="Warehouse / Industrial"
-            units={buildingD}
-            onSelect={onSelect}
-            selectedUnit={selectedUnit}
-            gridCols="grid-cols-2"
-          />
-        </div>
-
-        {/* Parking / Road divider */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-6 bg-gray-700 rounded flex items-center justify-center">
-            <span className="text-[9px] text-gray-300 tracking-widest font-medium">HOLLISTER RD</span>
-          </div>
-          <div className="flex-1 h-6 bg-gray-200 rounded flex items-center justify-center">
-            <span className="text-[9px] text-gray-500 tracking-wider font-medium">PARKING</span>
+          <div className="lg:col-span-4">
+            <BuildingGroup label="Building D" sub="Warehouse / Industrial" accent="bg-[#71717a]"
+              units={buildingD} cols="grid-cols-2"
+              onSelect={onSelect} selectedUnit={selectedUnit} />
           </div>
         </div>
 
-        {/* Building C */}
-        <BuildingSection
-          title="Building C — Floors 1 & 2"
-          subtitle="Office Suites"
-          units={buildingC_lower}
-          onSelect={onSelect}
-          selectedUnit={selectedUnit}
-          gridCols="grid-cols-9"
-        />
+        {/* Road */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-5 bg-[#3f3f46] rounded flex items-center justify-center">
+            <span className="text-[8px] text-[#a1a1aa] tracking-[0.15em] font-medium">HOLLISTER RD</span>
+          </div>
+          <div className="flex-1 h-5 bg-[#e4e4e7] rounded flex items-center justify-center">
+            <span className="text-[8px] text-[#71717a] tracking-wider font-medium">PARKING</span>
+          </div>
+        </div>
 
-        <BuildingSection
-          title="Building C — Floor 3"
-          subtitle="Office Suites (Upper)"
-          units={buildingC_upper}
-          onSelect={onSelect}
-          selectedUnit={selectedUnit}
-          gridCols="grid-cols-8"
-        />
+        {/* Building C — Floors 1 & 2 */}
+        <BuildingGroup label="Building C — Floors 1 & 2" sub="Office Suites" accent="bg-[#2563eb]"
+          units={buildingC_lower} cols="grid-cols-4 sm:grid-cols-6 md:grid-cols-9"
+          onSelect={onSelect} selectedUnit={selectedUnit} />
+
+        {/* Building C — Floor 3 */}
+        <BuildingGroup label="Building C — Floor 3" sub="Office Suites (Upper)" accent="bg-[#7c3aed]"
+          units={buildingC_upper} cols="grid-cols-4 sm:grid-cols-5 md:grid-cols-8"
+          onSelect={onSelect} selectedUnit={selectedUnit} />
       </div>
 
-      {/* Indicators Legend */}
-      <div className="px-5 pb-4 flex items-center gap-4 text-[10px] text-[#8b8fa3]">
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse inline-block" /> Past due indicator</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" /> Electric not posted</span>
+      {/* Footer */}
+      <div className="px-4 py-2 border-t border-[#e4e4e7] flex items-center gap-4 text-[9px] text-[#a1a1aa]">
+        <span>Last updated: Mar 15, 2026 2:30 PM</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#dc2626]" /> Past due</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#d97706]" /> Electric missing</span>
       </div>
     </div>
   );

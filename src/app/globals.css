@@ -1,23 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f5f6fa;
-  --foreground: #1e1e2d;
+  --bg: #f7f7f8;
+  --fg: #18181b;
+  --muted: #71717a;
+  --border: #e4e4e7;
   --card: #ffffff;
-  --card-border: #e8eaef;
-  --sidebar-bg: #1e1e2d;
-  --accent: #4f6ef7;
-  --accent-hover: #3b5ce4;
-  --accent-light: #eef1fe;
-  --green: #10b981;
-  --green-light: #ecfdf5;
-  --red: #ef4444;
-  --red-light: #fef2f2;
-  --yellow: #f59e0b;
-  --yellow-light: #fffbeb;
-  --blue: #4f6ef7;
-  --blue-light: #eef1fe;
-  --purple: #7c5cfc;
+  --accent: #18181b;
+  --red: #dc2626;
+  --amber: #d97706;
+  --green: #16a34a;
+  --blue: #2563eb;
 }
 
 * {
@@ -26,95 +19,75 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  letter-spacing: -0.011em;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
 
-/* AG Grid theme overrides */
+/* AG Grid — flat enterprise theme */
 .ag-theme-alpine {
-  --ag-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  --ag-font-family: 'Inter', -apple-system, system-ui, sans-serif;
   --ag-font-size: 13px;
-  --ag-header-background-color: #f8f9fb;
-  --ag-header-foreground-color: #6b7280;
-  --ag-row-hover-color: #f0f4ff;
-  --ag-selected-row-background-color: #eef1fe;
-  --ag-border-color: #e8eaef;
-  --ag-row-border-color: #f0f0f5;
-  --ag-header-height: 44px;
-  --ag-row-height: 42px;
-  --ag-cell-horizontal-padding: 16px;
+  --ag-header-background-color: #fafafa;
+  --ag-header-foreground-color: #71717a;
+  --ag-row-hover-color: #fafafa;
+  --ag-selected-row-background-color: #f4f4f5;
+  --ag-border-color: #e4e4e7;
+  --ag-row-border-color: #f4f4f5;
+  --ag-header-height: 40px;
+  --ag-row-height: 40px;
+  --ag-cell-horizontal-padding: 14px;
+  --ag-borders: none;
+  --ag-border-radius: 0px;
 }
-
 .ag-theme-alpine .ag-header-cell-label {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
-
-.ag-theme-alpine .ag-row {
-  cursor: pointer;
-}
-
+.ag-theme-alpine .ag-row { cursor: pointer; }
 .ag-theme-alpine .ag-paging-panel {
-  border-top: 1px solid #e8eaef;
-  padding: 8px 16px;
+  border-top: 1px solid #e4e4e7;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+.ag-theme-alpine .ag-root-wrapper {
+  border: none !important;
+  border-radius: 0 !important;
 }
 
-/* ApexCharts overrides */
-.apexcharts-tooltip {
-  border-radius: 12px !important;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
-}
-
-/* Mobile responsive sidebar */
-@media (max-width: 1023px) {
-  .sidebar-desktop {
-    display: none;
-  }
-}
-
-@media (min-width: 1024px) {
-  .mobile-nav {
-    display: none;
-  }
-}
-
-/* AG Grid mobile — larger touch targets, readable text */
+/* AG Grid mobile */
 @media (max-width: 640px) {
   .ag-theme-alpine {
     --ag-font-size: 12px;
     --ag-row-height: 44px;
-    --ag-header-height: 40px;
+    --ag-header-height: 38px;
     --ag-cell-horizontal-padding: 10px;
   }
-  .ag-theme-alpine .ag-header-cell-label {
-    font-size: 10px;
-  }
-  .ag-theme-alpine .ag-paging-panel {
-    font-size: 11px;
-    padding: 6px 10px;
-  }
+  .ag-theme-alpine .ag-header-cell-label { font-size: 10px; }
+  .ag-theme-alpine .ag-paging-panel { font-size: 11px; padding: 6px 10px; }
 }
 
-/* AG Grid comfortable row height on all screens */
-.ag-theme-alpine .ag-row {
-  border-bottom: 1px solid #f0f0f5;
+/* ApexCharts flat */
+.apexcharts-tooltip {
+  border-radius: 4px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+  border: 1px solid #e4e4e7 !important;
+}
+
+/* Sidebar responsive */
+@media (max-width: 1023px) {
+  .sidebar-desktop { display: none; }
+}
+@media (min-width: 1024px) {
+  .mobile-nav { display: none; }
 }
