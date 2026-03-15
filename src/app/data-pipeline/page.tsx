@@ -138,130 +138,261 @@ function DetailPanel({ file, onClose }: { file: FileSyncRow; onClose: () => void
   );
 }
 
-// --- Training Protocol ---
-const RULES_KEY = "redhorn_processing_rules";
+// --- Training Protocol (free-text checklist + notes) ---
+const PROTOCOL_KEY = "redhorn_protocol";
 
-interface ProcessingRule {
+interface ProtocolItem {
   id: string;
-  condition: string;
-  action: string;
-  enabled: boolean;
+  text: string;
+  done: boolean;
 }
 
-const defaultRules: ProcessingRule[] = [
-  { id: "r1", condition: "Electric charge not posted by 10th of month for Net Lease tenants", action: "Flag as critical alert, create Kanban task, notify via email", enabled: true },
-  { id: "r2", condition: "Tenant past due > 5 days with no late fee assessed", action: "Flag as warning, add to PM call prep, create action item", enabled: true },
-  { id: "r3", condition: "Lease expiring within 120 days with no renewal activity in notes", action: "Flag as warning, create Kanban task for PM follow-up", enabled: true },
-  { id: "r4", condition: "Revenue for any category drops > 15% month-over-month", action: "Flag as anomaly on dashboard, send email alert to owner", enabled: true },
-  { id: "r5", condition: "New tenant appears in rent roll not previously tracked", action: "Auto-create unit record, flag for review, request lease docs", enabled: true },
-  { id: "r6", condition: "Tenant in lockout_pending stage for > 14 days", action: "Escalate to auction_pending stage, notify legal team", enabled: false },
-  { id: "r7", condition: "Utility bill PDF cannot be parsed or meter IDs unmatched", action: "Flag as warning, hold charges for manual review, do NOT auto-post", enabled: true },
-  { id: "r8", condition: "User note exists on unit — preserve during all data syncs", action: "Merge note into override layer, never overwrite with Yardi data", enabled: true },
+const defaultProtocol: ProtocolItem[] = [
+  { id: "p1", text: "Verify all Net Lease tenants have utility charges posted (electric, water, gas) before updating dashboard", done: false },
+  { id: "p2", text: "Check that late fees have been assessed for any tenant past due > 5 days", done: false },
+  { id: "p3", text: "Confirm lease expiration list matches PM's renewal pipeline — flag any missing", done: false },
+  { id: "p4", text: "Cross-check rent roll tenant count with previous month — flag any new or removed tenants for review", done: false },
+  { id: "p5", text: "Validate that CAM reconciliation amounts match the annual budget before posting", done: false },
+  { id: "p6", text: "Ensure any user notes or manual status overrides are preserved — never auto-clear", done: true },
+  { id: "p7", text: "Review delinquency workflow stages — confirm tenants advanced to correct stage before approving", done: false },
+  { id: "p8", text: "Check utility bill PDF meter IDs match Yardi tenant records — hold unmatched charges for manual review", done: false },
 ];
 
-function loadRules(): ProcessingRule[] {
-  if (typeof window === "undefined") return defaultRules;
-  try { const raw = localStorage.getItem(RULES_KEY); return raw ? JSON.parse(raw) : defaultRules; }
-  catch { return defaultRules; }
+const PROTOCOL_NOTES_KEY = "redhorn_protocol_notes";
+const defaultNotes = `Pre-Update Checklist Notes
+─────────────────────────
+These notes guide what to verify before any data sync is posted to the dashboard.
+
+• Always check electric, water, gas, and other utility postings — not just electric.
+• If a new tenant appears in the rent roll that we don't recognize, do NOT auto-add. Flag for manual review.
+• Delinquency stage changes require manual approval — the system suggests but owner confirms.
+• PM sometimes posts charges under wrong GL codes — spot-check the top 5 tenants by rent each cycle.
+• Any override (notes, status, delinquency stage) set by us takes priority over incoming Yardi data.`;
+
+function loadProtocol(): ProtocolItem[] {
+  if (typeof window === "undefined") return defaultProtocol;
+  try { const raw = localStorage.getItem(PROTOCOL_KEY); return raw ? JSON.parse(raw) : defaultProtocol; }
+  catch { return defaultProtocol; }
 }
-function saveRules(rules: ProcessingRule[]) {
+function saveProtocol(items: ProtocolItem[]) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(RULES_KEY, JSON.stringify(rules));
+  localStorage.setItem(PROTOCOL_KEY, JSON.stringify(items));
+}
+function loadProtocolNotes(): string {
+  if (typeof window === "undefined") return defaultNotes;
+  try { return localStorage.getItem(PROTOCOL_NOTES_KEY) || defaultNotes; }
+  catch { return defaultNotes; }
+}
+function saveProtocolNotes(notes: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PROTOCOL_NOTES_KEY, notes);
 }
 
 function TrainingProtocol() {
-  const [rules, setRules] = useState<ProcessingRule[]>(defaultRules);
-  const [newCondition, setNewCondition] = useState("");
-  const [newAction, setNewAction] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
+  const [items, setItems] = useState<ProtocolItem[]>(defaultProtocol);
+  const [notes, setNotes] = useState(defaultNotes);
+  const [newText, setNewText] = useState("");
+  const [notesSaved, setNotesSaved] = useState(true);
 
-  useEffect(() => { setRules(loadRules()); }, []);
+  useEffect(() => { setItems(loadProtocol()); setNotes(loadProtocolNotes()); }, []);
 
   function toggle(id: string) {
-    const updated = rules.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r);
-    setRules(updated); saveRules(updated);
+    const updated = items.map(i => i.id === id ? { ...i, done: !i.done } : i);
+    setItems(updated); saveProtocol(updated);
   }
   function remove(id: string) {
-    const updated = rules.filter(r => r.id !== id);
-    setRules(updated); saveRules(updated);
+    const updated = items.filter(i => i.id !== id);
+    setItems(updated); saveProtocol(updated);
   }
   function add() {
-    if (!newCondition.trim() || !newAction.trim()) return;
-    const rule: ProcessingRule = { id: Date.now().toString(), condition: newCondition.trim(), action: newAction.trim(), enabled: true };
-    const updated = [...rules, rule];
-    setRules(updated); saveRules(updated);
-    setNewCondition(""); setNewAction(""); setShowAdd(false);
+    if (!newText.trim()) return;
+    const item: ProtocolItem = { id: Date.now().toString(), text: newText.trim(), done: false };
+    const updated = [...items, item];
+    setItems(updated); saveProtocol(updated);
+    setNewText("");
+  }
+  function handleNotesChange(val: string) {
+    setNotes(val); setNotesSaved(false);
+  }
+  function saveNotes() {
+    saveProtocolNotes(notes); setNotesSaved(true);
   }
 
-  const enabledCount = rules.filter(r => r.enabled).length;
+  const doneCount = items.filter(i => i.done).length;
+
+  return (
+    <div className="mt-4 space-y-5">
+      <p className="text-[12px] text-[#71717a]">Checklist and notes to verify before posting any data update to the dashboard. Check items off as you review each sync cycle.</p>
+
+      {/* Checklist */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[12px] font-medium text-[#18181b]">Pre-Update Checklist</p>
+          <span className="text-[10px] text-[#a1a1aa]">{doneCount}/{items.length} verified</span>
+        </div>
+        <div className="space-y-0">
+          {items.map(item => (
+            <div key={item.id} className="group flex items-start gap-2.5 py-2 border-b border-[#f4f4f5] last:border-0">
+              <button onClick={() => toggle(item.id)}
+                className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors ${
+                  item.done ? "bg-[#16a34a] border-[#16a34a]" : "border-[#d4d4d8] hover:border-[#71717a]"
+                }`}>
+                {item.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>}
+              </button>
+              <p className={`flex-1 text-[12px] leading-relaxed ${item.done ? "text-[#a1a1aa] line-through" : "text-[#18181b]"}`}>{item.text}</p>
+              <button onClick={() => remove(item.id)}
+                className="opacity-0 group-hover:opacity-100 text-[#d4d4d8] hover:text-[#dc2626] cursor-pointer transition-all">
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 mt-2">
+          <input type="text" value={newText} onChange={e => setNewText(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && add()}
+            placeholder="Add a check item..."
+            className="flex-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+          <button onClick={add} disabled={!newText.trim()}
+            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] disabled:bg-[#e4e4e7] disabled:text-[#a1a1aa] cursor-pointer transition-colors">
+            Add
+          </button>
+        </div>
+      </div>
+
+      {/* Free-text notes */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[12px] font-medium text-[#18181b]">Protocol Notes</p>
+          <button onClick={saveNotes}
+            className={`text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
+              notesSaved ? "text-[#a1a1aa]" : "bg-[#18181b] text-white hover:bg-[#27272a]"
+            }`}>
+            {notesSaved ? "Saved" : "Save"}
+          </button>
+        </div>
+        <textarea value={notes} onChange={e => handleNotesChange(e.target.value)}
+          className="w-full text-[12px] text-[#18181b] bg-[#fafafa] border border-[#e4e4e7] rounded p-3 leading-relaxed focus:outline-none focus:border-[#71717a] min-h-[200px] resize-y font-mono" />
+      </div>
+    </div>
+  );
+}
+
+// --- Sync Approval Queue ---
+const PENDING_KEY = "redhorn_pending_syncs";
+
+interface PendingChange {
+  id: string;
+  unit: string;
+  field: string;
+  oldValue: string;
+  newValue: string;
+  source: string;
+  detectedAt: string;
+  status: "pending" | "approved" | "rejected";
+}
+
+const defaultPending: PendingChange[] = [
+  { id: "pc1", unit: "C-200", field: "Tenant", oldValue: "(Vacant)", newValue: "New Sign Pro LLC", source: "RentRoll03_12_2026.xlsx", detectedAt: "2026-03-12 09:15", status: "pending" },
+  { id: "pc2", unit: "C-200", field: "Monthly Rent", oldValue: "$0", newValue: "$2,960", source: "RentRoll03_12_2026.xlsx", detectedAt: "2026-03-12 09:15", status: "pending" },
+  { id: "pc3", unit: "C-200", field: "Lease Start", oldValue: "—", newValue: "2026-04-01", source: "RentRoll03_12_2026.xlsx", detectedAt: "2026-03-12 09:15", status: "pending" },
+  { id: "pc4", unit: "A-90", field: "Delinquency Stage", oldValue: "Default Notice", newValue: "Lockout Pending", source: "System Rule", detectedAt: "2026-03-14 08:00", status: "pending" },
+  { id: "pc5", unit: "C-305", field: "Electric Charge", oldValue: "NOT POSTED", newValue: "$290 posted", source: "LeaseLedger03_12_2026.xlsx", detectedAt: "2026-03-12 09:15", status: "pending" },
+];
+
+function loadPending(): PendingChange[] {
+  if (typeof window === "undefined") return defaultPending;
+  try { const raw = localStorage.getItem(PENDING_KEY); return raw ? JSON.parse(raw) : defaultPending; }
+  catch { return defaultPending; }
+}
+function savePending(items: PendingChange[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PENDING_KEY, JSON.stringify(items));
+}
+
+function SyncApprovalQueue() {
+  const [items, setItems] = useState<PendingChange[]>(defaultPending);
+  useEffect(() => { setItems(loadPending()); }, []);
+
+  function approve(id: string) {
+    const updated = items.map(i => i.id === id ? { ...i, status: "approved" as const } : i);
+    setItems(updated); savePending(updated);
+  }
+  function reject(id: string) {
+    const updated = items.map(i => i.id === id ? { ...i, status: "rejected" as const } : i);
+    setItems(updated); savePending(updated);
+  }
+  function approveAll() {
+    const updated = items.map(i => i.status === "pending" ? { ...i, status: "approved" as const } : i);
+    setItems(updated); savePending(updated);
+  }
+
+  const pending = items.filter(i => i.status === "pending");
+  const resolved = items.filter(i => i.status !== "pending");
 
   return (
     <div className="mt-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-[12px] text-[#71717a]">Define rules that the system evaluates on every data sync. These train how the pipeline processes, flags, and acts on incoming data.</p>
-          <p className="text-[11px] text-[#a1a1aa] mt-1">{enabledCount} of {rules.length} rules active</p>
-        </div>
-        <button onClick={() => setShowAdd(!showAdd)}
-          className="flex items-center gap-1 text-[11px] font-medium text-[#71717a] hover:text-[#18181b] cursor-pointer">
-          <Plus size={14} /> Add Rule
-        </button>
-      </div>
+      <p className="text-[12px] text-[#71717a]">New data from Yardi is held here until you approve. Nothing updates the dashboard automatically — you review and confirm each change.</p>
 
-      {showAdd && (
-        <div className="bg-white border border-[#e4e4e7] rounded p-3 space-y-2">
-          <div>
-            <label className="text-[10px] text-[#71717a] uppercase tracking-wide font-medium">If (condition)</label>
-            <input type="text" value={newCondition} onChange={e => setNewCondition(e.target.value)}
-              placeholder="e.g. Tenant past due > 30 days with no payment plan..."
-              className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
-          </div>
-          <div>
-            <label className="text-[10px] text-[#71717a] uppercase tracking-wide font-medium">Then (action)</label>
-            <input type="text" value={newAction} onChange={e => setNewAction(e.target.value)}
-              placeholder="e.g. Escalate to locked_out status, create action item, email PM..."
-              className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <button onClick={() => setShowAdd(false)} className="text-[11px] text-[#71717a] px-3 py-1 cursor-pointer">Cancel</button>
-            <button onClick={add} className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer">
-              <Save size={12} className="inline mr-1" />Save Rule
+      {pending.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[12px] font-medium text-[#18181b]">{pending.length} pending changes</p>
+            <button onClick={approveAll}
+              className="text-[11px] font-medium px-2.5 py-1 bg-[#16a34a] text-white rounded hover:bg-[#15803d] cursor-pointer transition-colors">
+              Approve All
             </button>
+          </div>
+          <div className="space-y-0 border border-[#e4e4e7] rounded overflow-hidden">
+            {pending.map(item => (
+              <div key={item.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-[#f4f4f5] last:border-0 bg-white hover:bg-[#fafafa]">
+                <span className="text-[12px] font-medium text-[#18181b] w-16 flex-shrink-0">{item.unit}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] text-[#18181b]">
+                    <span className="text-[#71717a]">{item.field}:</span>{" "}
+                    <span className="line-through text-[#a1a1aa]">{item.oldValue}</span>{" → "}
+                    <span className="font-medium">{item.newValue}</span>
+                  </p>
+                  <p className="text-[10px] text-[#a1a1aa]">{item.source} · {item.detectedAt}</p>
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  <button onClick={() => approve(item.id)}
+                    className="text-[10px] font-medium px-2 py-1 bg-[#16a34a] text-white rounded hover:bg-[#15803d] cursor-pointer transition-colors">
+                    Approve
+                  </button>
+                  <button onClick={() => reject(item.id)}
+                    className="text-[10px] font-medium px-2 py-1 border border-[#e4e4e7] text-[#71717a] rounded hover:text-[#dc2626] hover:border-[#dc2626] cursor-pointer transition-colors">
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Rules list */}
-      <div className="space-y-0">
-        {rules.map((rule, i) => (
-          <div key={rule.id} className={`flex gap-3 py-3 border-b border-[#f4f4f5] last:border-0 ${!rule.enabled ? "opacity-50" : ""}`}>
-            <button onClick={() => toggle(rule.id)}
-              className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors ${
-                rule.enabled ? "bg-[#18181b] border-[#18181b]" : "border-[#d4d4d8]"
-              }`}>
-              {rule.enabled && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>}
-            </button>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start gap-1">
-                <span className="text-[10px] text-[#a1a1aa] font-medium uppercase shrink-0 mt-0.5 w-4">If</span>
-                <p className="text-[12px] text-[#18181b] leading-relaxed">{rule.condition}</p>
-              </div>
-              <div className="flex items-start gap-1 mt-1">
-                <span className="text-[10px] text-[#a1a1aa] font-medium uppercase shrink-0 mt-0.5 w-4">→</span>
-                <p className="text-[12px] text-[#71717a] leading-relaxed">{rule.action}</p>
-              </div>
-            </div>
-            <button onClick={() => remove(rule.id)}
-              className="text-[#d4d4d8] hover:text-[#dc2626] cursor-pointer p-0.5 flex-shrink-0 mt-0.5 transition-colors">
-              <Trash2 size={13} />
-            </button>
-          </div>
-        ))}
-      </div>
+      {pending.length === 0 && (
+        <div className="bg-[#fafafa] border border-[#e4e4e7] rounded p-6 text-center">
+          <p className="text-[13px] font-medium text-[#18181b]">All clear</p>
+          <p className="text-[11px] text-[#a1a1aa] mt-1">No pending changes to review.</p>
+        </div>
+      )}
 
-      <div className="bg-[#fafafa] border border-[#e4e4e7] rounded p-3 text-[11px] text-[#71717a]">
-        These rules are evaluated in order during Step 5 of the processing workflow. Disabled rules are skipped. Rules can reference unit statuses, delinquency stages, financial thresholds, and date-based conditions.
-      </div>
+      {resolved.length > 0 && (
+        <div>
+          <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium mb-1">{resolved.length} resolved</p>
+          <div className="space-y-0">
+            {resolved.slice(0, 5).map(item => (
+              <div key={item.id} className="flex items-center gap-3 py-1.5 text-[11px]">
+                <span className={`font-medium ${item.status === "approved" ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
+                  {item.status === "approved" ? "✓" : "✗"}
+                </span>
+                <span className="text-[#71717a]">{item.unit}</span>
+                <span className="text-[#a1a1aa]">{item.field}: {item.oldValue} → {item.newValue}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -270,7 +401,7 @@ export default function DataPipelinePage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const [selectedFile, setSelectedFile] = useState<FileSyncRow | null>(null);
-  const [activeSection, setActiveSection] = useState<"workflow" | "protocol">("workflow");
+  const [activeSection, setActiveSection] = useState<"approval" | "workflow" | "protocol">("approval");
 
   const columnDefs = useMemo<ColDef[]>(() => {
     if (isMobile) {
@@ -353,17 +484,25 @@ export default function DataPipelinePage() {
         <DetailPanel file={selectedFile} onClose={() => setSelectedFile(null)} />
       )}
 
-      {/* Tabs: Workflow / Training Protocol */}
+      {/* Tabs */}
       <div className="mt-8 flex gap-1 border-b border-[#e4e4e7]">
-        {(["workflow", "protocol"] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveSection(tab)}
+        {([
+          { key: "approval" as const, label: "Approval Queue" },
+          { key: "workflow" as const, label: "Processing Workflow" },
+          { key: "protocol" as const, label: "Training Protocol" },
+        ]).map(tab => (
+          <button key={tab.key} onClick={() => setActiveSection(tab.key)}
             className={`text-[12px] font-medium px-3 py-2 border-b-2 transition-colors cursor-pointer ${
-              activeSection === tab ? "border-[#18181b] text-[#18181b]" : "border-transparent text-[#a1a1aa] hover:text-[#71717a]"
+              activeSection === tab.key ? "border-[#18181b] text-[#18181b]" : "border-transparent text-[#a1a1aa] hover:text-[#71717a]"
             }`}>
-            {tab === "workflow" ? "Processing Workflow" : "Training Protocol"}
+            {tab.label}
           </button>
         ))}
       </div>
+
+      {activeSection === "approval" && (
+        <SyncApprovalQueue />
+      )}
 
       {activeSection === "workflow" && (
         <div className="mt-4 space-y-4">

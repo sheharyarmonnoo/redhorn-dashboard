@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X } from "lucide-react";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, Plus } from "lucide-react";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
@@ -13,8 +13,16 @@ const nav = [
   { href: "/data-pipeline", label: "Data Pipeline", icon: Database, badge: null },
 ];
 
+const portfolioProperties = [
+  { id: "hollister", name: "Hollister Business Park", location: "Houston, TX", sqft: "~325K SF", active: true },
+  { id: "rv-ohio", name: "RV Park — Ohio", location: "Ohio", sqft: "~40 lots", active: false },
+];
+
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const [portfolioOpen, setPortfolioOpen] = useState(false);
+  const [activeProperty, setActiveProperty] = useState("hollister");
+  const current = portfolioProperties.find(p => p.id === activeProperty) || portfolioProperties[0];
 
   return (
     <>
@@ -23,10 +31,41 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <p className="text-[9px] text-[#52525b] font-medium tracking-[0.12em] uppercase mt-2">Deal Manager AI</p>
       </div>
 
-      <div className="mx-4 mt-4 mb-3">
+      {/* Portfolio Selector */}
+      <div className="mx-3 mt-3 mb-2">
         <p className="text-[9px] text-[#52525b] font-medium uppercase tracking-[0.12em] mb-1 px-2">Portfolio</p>
-        <div className="text-[12px] font-medium text-[#d4d4d8] px-2 py-1.5">Hollister Business Park</div>
-        <p className="text-[10px] text-[#52525b] px-2">Houston, TX · ~325K SF</p>
+        <button
+          onClick={() => setPortfolioOpen(!portfolioOpen)}
+          className="w-full flex items-center justify-between px-2.5 py-2 rounded bg-white/[0.04] hover:bg-white/[0.08] transition-colors cursor-pointer"
+        >
+          <div className="text-left">
+            <p className="text-[12px] font-medium text-[#d4d4d8]">{current.name}</p>
+            <p className="text-[10px] text-[#52525b]">{current.location} · {current.sqft}</p>
+          </div>
+          <ChevronDown size={14} className={`text-[#52525b] transition-transform ${portfolioOpen ? "rotate-180" : ""}`} />
+        </button>
+
+        {portfolioOpen && (
+          <div className="mt-1 bg-[#27272a] rounded border border-white/[0.06] overflow-hidden">
+            {portfolioProperties.map(prop => (
+              <button
+                key={prop.id}
+                onClick={() => { setActiveProperty(prop.id); setPortfolioOpen(false); }}
+                className={`w-full text-left px-3 py-2 text-[11px] transition-colors cursor-pointer ${
+                  prop.id === activeProperty
+                    ? "bg-white/[0.08] text-white"
+                    : "text-[#a1a1aa] hover:bg-white/[0.04] hover:text-[#d4d4d8]"
+                }`}
+              >
+                <p className="font-medium">{prop.name}</p>
+                <p className="text-[9px] text-[#52525b] mt-0.5">{prop.location} · {prop.sqft}</p>
+              </button>
+            ))}
+            <button className="w-full flex items-center gap-1.5 px-3 py-2 text-[10px] text-[#52525b] hover:text-[#a1a1aa] border-t border-white/[0.06] cursor-pointer transition-colors">
+              <Plus size={12} /> Add Property
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="px-4 mt-4 mb-2">

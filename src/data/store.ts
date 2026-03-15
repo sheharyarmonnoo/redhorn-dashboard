@@ -10,6 +10,8 @@ const TENANT_KEY = "redhorn_tenant_overrides";
 export interface TenantOverride {
   notes?: string;
   status?: Tenant["status"];
+  delinquencyStage?: string;
+  chargePostings?: Record<string, boolean>; // e.g. { electric: true, water: false, lateFee: true }
 }
 
 function loadOverrides(): Record<string, TenantOverride> {
@@ -52,6 +54,23 @@ export function updateTenantStatus(unit: string, status: Tenant["status"]) {
 
 export function getOverrideForUnit(unit: string): TenantOverride | undefined {
   return loadOverrides()[unit];
+}
+
+export function updateDelinquencyStage(unit: string, stage: string) {
+  const overrides = loadOverrides();
+  overrides[unit] = { ...overrides[unit], delinquencyStage: stage };
+  saveOverrides(overrides);
+}
+
+export function updateChargePosting(unit: string, chargeType: string, posted: boolean) {
+  const overrides = loadOverrides();
+  const existing = overrides[unit]?.chargePostings || {};
+  overrides[unit] = { ...overrides[unit], chargePostings: { ...existing, [chargeType]: posted } };
+  saveOverrides(overrides);
+}
+
+export function getChargePostings(unit: string): Record<string, boolean> {
+  return loadOverrides()[unit]?.chargePostings || {};
 }
 
 // --- Kanban Action Items ---

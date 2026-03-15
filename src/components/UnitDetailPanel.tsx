@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import { X, Building2, Calendar, DollarSign, Zap, FileText, CreditCard, Save, Edit3 } from "lucide-react";
-import { Tenant, ledgerA102, formatCurrency, getStatusLabel } from "@/data/tenants";
-import { updateTenantNote, getOverrideForUnit } from "@/data/store";
+import { X, Save, Edit3, ChevronRight } from "lucide-react";
+import { Tenant, DelinquencyStage, ledgerA102, formatCurrency, getStatusLabel } from "@/data/tenants";
+import { updateTenantNote, getOverrideForUnit, updateDelinquencyStage, updateChargePosting, getChargePostings } from "@/data/store";
 
 interface Props {
   tenant: Tenant | null;
@@ -10,10 +10,65 @@ interface Props {
   onUpdated?: () => void;
 }
 
+const POSTING_KEY = "redhorn_posting_overrides";
+const DELINQ_KEY = "redhorn_delinquency_overrides";
+const PENDING_KEY = "redhorn_pending_changes";
+
+// Pending changes that need manual approval
+interface PendingChange {
+  id: string;
+  unit: string;
+  field: string;
+  oldValue: string;
+  newValue: string;
+  source: string;
+  timestamp: string;
+}
+
+function loadPostings(): Record<string, Record<string, boolean>> {
+  if (typeof window === "undefined") return {};
+  try { return JSON.parse(localStorage.getItem(POSTING_KEY) || "{}"); } catch { return {}; }
+}
+function savePostings(data: Record<string, Record<string, boolean>>) {
+  if (typeof window !== "undefined") localStorage.setItem(POSTING_KEY, JSON.stringify(data));
+}
+function loadDelinqOverrides(): Record<string, { stage: DelinquencyStage; date: string }> {
+  if (typeof window === "undefined") return {};
+  try { return JSON.parse(localStorage.getItem(DELINQ_KEY) || "{}"); } catch { return {}; }
+}
+function saveDelinqOverrides(data: Record<string, { stage: DelinquencyStage; date: string }>) {
+  if (typeof window !== "undefined") localStorage.setItem(DELINQ_KEY, JSON.stringify(data));
+}
+function loadPending(): PendingChange[] {
+  if (typeof window === "undefined") return [];
+  try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "[]"); } catch { return []; }
+}
+function savePending(data: PendingChange[]) {
+  if (typeof window !== "undefined") localStorage.setItem(PENDING_KEY, JSON.stringify(data));
+}
+
+const stageLabels: Record<string, string> = {
+  none: "None", past_due: "Past Due", default_notice: "Default Notice",
+  lockout_pending: "Lockout Pending", locked_out: "Locked Out",
+  auction_pending: "Auction Pending", auction: "Auction",
+};
+const stageOrder: DelinquencyStage[] = ["none", "past_due", "default_notice", "lockout_pending", "locked_out", "auction_pending", "auction"];
+
+const postingTypes = [
+  { key: "electric", label: "Electric / Utility" },
+  { key: "cam", label: "CAM Charges" },
+  { key: "lateFees", label: "Late Fees" },
+  { key: "insurance", label: "Insurance" },
+  { key: "other", label: "Other Fees" },
+];
+
 export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [savedNote, setSavedNote] = useState<string | null>(null);
+  const [postings, setPostings] = useState<Record<string, boolean>>({});
+  const [delinqStage, setDelinqStage] = useState<DelinquencyStage>("none");
+  const [pending, setPending] = useState<PendingChange[]>([]);
 
   useEffect(() => {
     if (tenant) {
@@ -22,6 +77,21 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
       setNotesDraft(currentNote);
       setSavedNote(override?.notes !== undefined ? override.notes : null);
       setEditingNotes(false);
+
+      // Load posting overrides for this unit
+      const allPostings = loadPostings();
+      const unitPostings = allPostings[tenant.unit] || {
+        electric: tenant.electricPosted,
+        cam: true, lateFees: true, insurance: true, other: true,
+      };
+      setPostings(unitPostings);
+
+      // Load delinquency override
+      const delinqOverrides = loadDelinqOverrides();
+      setDelinqStage(delinqOverrides[tenant.unit]?.stage || tenant.delinquencyStage || "none");
+
+      // Load pending changes for this unit
+      setPending(loadPending().filter(p => p.unit === tenant.unit));
     }
   }, [tenant]);
 
@@ -30,14 +100,6 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
   const displayNotes = savedNote !== null ? savedNote : tenant.notes;
   const ledger = tenant.unit === "A-102" ? ledgerA102 : [];
 
-  const statusStyles: Record<string, string> = {
-    current: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    past_due: "bg-red-50 text-red-700 border-red-200",
-    locked_out: "bg-amber-50 text-amber-700 border-amber-200",
-    vacant: "bg-gray-50 text-gray-500 border-gray-200",
-    expiring_soon: "bg-blue-50 text-blue-700 border-blue-200",
-  };
-
   function handleSaveNotes() {
     updateTenantNote(tenant!.unit, notesDraft);
     setSavedNote(notesDraft);
@@ -45,184 +107,201 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
     onUpdated?.();
   }
 
+  function togglePosting(key: string) {
+    const updated = { ...postings, [key]: !postings[key] };
+    setPostings(updated);
+    const all = loadPostings();
+    all[tenant!.unit] = updated;
+    savePostings(all);
+  }
+
+  function setDelinquency(stage: DelinquencyStage) {
+    setDelinqStage(stage);
+    const overrides = loadDelinqOverrides();
+    overrides[tenant!.unit] = { stage, date: new Date().toISOString().slice(0, 10) };
+    saveDelinqOverrides(overrides);
+  }
+
+  function approvePending(id: string) {
+    const all = loadPending().filter(p => p.id !== id);
+    savePending(all);
+    setPending(all.filter(p => p.unit === tenant!.unit));
+  }
+
+  function rejectPending(id: string) {
+    const all = loadPending().filter(p => p.id !== id);
+    savePending(all);
+    setPending(all.filter(p => p.unit === tenant!.unit));
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-[#1e1e2d]/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full sm:w-[540px] bg-white h-full overflow-y-auto shadow-2xl animate-[slideIn_0.25s_ease-out]">
+      <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+      <div className="relative w-full sm:w-[520px] bg-white h-full overflow-y-auto border-l border-[#e4e4e7]">
         {/* Header */}
-        <div className="sticky top-0 bg-white/95 backdrop-blur-md border-b border-[#e8eaef] px-6 py-5 flex items-center justify-between z-10">
+        <div className="sticky top-0 bg-white border-b border-[#e4e4e7] px-5 py-4 flex items-center justify-between z-10">
           <div>
-            <div className="flex items-center gap-3">
-              <h2 className="text-[18px] font-bold text-[#1e1e2d]">Unit {tenant.unit}</h2>
-              <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border ${statusStyles[tenant.status]}`}>
-                {getStatusLabel(tenant.status)}
-              </span>
-            </div>
-            <p className="text-[12px] text-[#8b8fa3] mt-1">Building {tenant.building} · {tenant.sqft.toLocaleString()} sq ft</p>
+            <h2 className="text-[16px] font-semibold text-[#18181b]">Unit {tenant.unit}</h2>
+            <p className="text-[11px] text-[#a1a1aa] mt-0.5">Building {tenant.building} · {tenant.sqft.toLocaleString()} SF · {tenant.leaseType.replace("Office ", "")}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer">
-            <X size={18} className="text-[#8b8fa3]" />
+          <button onClick={onClose} className="p-1.5 hover:bg-[#f4f4f5] rounded cursor-pointer">
+            <X size={16} className="text-[#a1a1aa]" />
           </button>
         </div>
 
-        <div className="px-6 py-6 space-y-6">
+        <div className="px-5 py-5 space-y-5">
+
+          {/* Pending Data Changes (manual approval) */}
+          {pending.length > 0 && (
+            <div className="border border-[#d97706] bg-amber-50 rounded p-3">
+              <p className="text-[11px] font-semibold text-[#d97706] uppercase tracking-wide mb-2">Pending Data Changes — Requires Approval</p>
+              {pending.map(p => (
+                <div key={p.id} className="flex items-start justify-between gap-2 py-2 border-b border-amber-200 last:border-0">
+                  <div className="text-[11px]">
+                    <p className="text-[#18181b]"><strong>{p.field}</strong>: {p.oldValue} → {p.newValue}</p>
+                    <p className="text-[#a1a1aa]">Source: {p.source} · {p.timestamp}</p>
+                  </div>
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    <button onClick={() => approvePending(p.id)} className="text-[10px] font-medium px-2 py-0.5 bg-[#16a34a] text-white rounded cursor-pointer">Approve</button>
+                    <button onClick={() => rejectPending(p.id)} className="text-[10px] font-medium px-2 py-0.5 bg-[#dc2626] text-white rounded cursor-pointer">Reject</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {tenant.status === "vacant" ? (
-            <div className="py-6">
-              <p className="text-[#71717a] text-[14px] font-medium">Vacant Unit</p>
-              <p className="text-[#a1a1aa] text-[12px] mt-1">{tenant.sqft.toLocaleString()} sq ft available for lease</p>
+            <div>
+              <p className="text-[14px] font-medium text-[#71717a]">Vacant Unit</p>
+              <p className="text-[12px] text-[#a1a1aa] mt-1">{tenant.sqft.toLocaleString()} SF available</p>
               {(tenant.makeReady || tenant.splittable || tenant.amps) && (
-                <div className="mt-4 space-y-2">
-                  {tenant.makeReady && (
-                    <div className="text-[12px] text-[#d97706] bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      Make-ready required before leasing
-                    </div>
-                  )}
-                  {tenant.splittable && (
-                    <div className="text-[12px] text-[#2563eb] bg-blue-50 border border-blue-200 rounded px-3 py-2">
-                      Splittable: {tenant.splitDetail || "Can be divided into smaller units"}
-                    </div>
-                  )}
-                  {tenant.amps && (
-                    <div className="text-[12px] text-[#71717a]">Electrical: {tenant.amps} AMP</div>
-                  )}
+                <div className="mt-3 space-y-1.5">
+                  {tenant.makeReady && <p className="text-[11px] text-[#d97706]">Make-ready required</p>}
+                  {tenant.splittable && <p className="text-[11px] text-[#2563eb]">Splittable: {tenant.splitDetail}</p>}
+                  {tenant.amps && <p className="text-[11px] text-[#71717a]">{tenant.amps} AMP</p>}
                 </div>
               )}
             </div>
           ) : (
             <>
-              {/* Tenant Card */}
-              <div className="bg-[#f5f6fa] rounded-2xl p-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-white rounded-xl shadow-sm">
-                    <Building2 size={18} className="text-[#4f6ef7]" />
-                  </div>
-                  <div>
-                    <p className="text-[15px] font-bold text-[#1e1e2d]">{tenant.tenant}</p>
-                    <p className="text-[12px] text-[#8b8fa3]">{tenant.leaseType}</p>
-                  </div>
+              {/* Tenant Info */}
+              <div>
+                <p className="text-[15px] font-semibold text-[#18181b]">{tenant.tenant}</p>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div><p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Lease</p><p className="text-[12px] text-[#18181b] mt-0.5">{tenant.leaseFrom} → {tenant.leaseTo}</p></div>
+                  <div><p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Rent</p><p className="text-[12px] font-semibold text-[#18181b] mt-0.5">{formatCurrency(tenant.monthlyRent)}/mo</p></div>
+                  <div><p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Electric</p><p className="text-[12px] text-[#18181b] mt-0.5">{tenant.monthlyElectric > 0 ? formatCurrency(tenant.monthlyElectric) + "/mo" : "Included"}</p></div>
+                  <div><p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Deposit</p><p className="text-[12px] text-[#18181b] mt-0.5">{formatCurrency(tenant.securityDeposit)}</p></div>
+                  {tenant.amps && <div><p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Electrical</p><p className="text-[12px] text-[#18181b] mt-0.5">{tenant.amps} AMP</p></div>}
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <InfoItem icon={Calendar} label="Lease Start" value={tenant.leaseFrom} />
-                  <InfoItem icon={Calendar} label="Lease End" value={tenant.leaseTo} />
-                  <InfoItem icon={DollarSign} label="Monthly Rent" value={formatCurrency(tenant.monthlyRent)} bold />
-                  <InfoItem icon={Zap} label="Monthly Electric" value={tenant.monthlyElectric > 0 ? formatCurrency(tenant.monthlyElectric) : "Included"} />
-                  <InfoItem icon={CreditCard} label="Security Deposit" value={formatCurrency(tenant.securityDeposit)} />
-                  <InfoItem icon={Zap} label="Electric Posted" value={tenant.electricPosted ? "Yes" : "NOT POSTED"} valueColor={tenant.electricPosted ? "text-emerald-600" : "text-red-500"} />
-                  {tenant.amps && <InfoItem icon={Zap} label="Electrical" value={`${tenant.amps} AMP`} />}
-                </div>
-
-                {/* Delinquency Workflow */}
-                {tenant.delinquencyStage && tenant.delinquencyStage !== "none" && (
-                  <div className="mt-4 pt-4 border-t border-[#e4e4e7]">
-                    <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium mb-2">Delinquency Workflow</p>
-                    <div className="flex items-center gap-1">
-                      {(["past_due", "default_notice", "lockout_pending", "locked_out", "auction_pending", "auction"] as const).map((stage, i) => {
-                        const stageLabels: Record<string, string> = { past_due: "Past Due", default_notice: "Default Notice", lockout_pending: "Lockout Pending", locked_out: "Locked Out", auction_pending: "Auction Pending", auction: "Auction" };
-                        const stages = ["past_due", "default_notice", "lockout_pending", "locked_out", "auction_pending", "auction"];
-                        const currentIdx = stages.indexOf(tenant.delinquencyStage || "");
-                        const isActive = i <= currentIdx;
-                        const isCurrent = stages[i] === tenant.delinquencyStage;
-                        return (
-                          <div key={stage} className="flex items-center gap-1">
-                            {i > 0 && <div className={`w-3 h-px ${isActive ? "bg-[#dc2626]" : "bg-[#e4e4e7]"}`} />}
-                            <div className={`text-[8px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
-                              isCurrent ? "bg-[#dc2626] text-white" : isActive ? "bg-red-100 text-[#dc2626]" : "bg-[#f4f4f5] text-[#a1a1aa]"
-                            }`}>
-                              {stageLabels[stage]}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {tenant.delinquencyDate && <p className="text-[10px] text-[#a1a1aa] mt-1.5">Since {tenant.delinquencyDate}</p>}
-                  </div>
-                )}
               </div>
 
-              {/* Past Due Alert */}
+              {/* Past Due */}
               {tenant.pastDueAmount > 0 && (
-                <div className="bg-gradient-to-r from-red-50 to-red-50/50 border border-red-200 rounded-2xl p-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="p-1.5 bg-red-100 rounded-lg">
-                      <DollarSign size={14} className="text-red-500" />
-                    </div>
-                    <p className="text-[13px] font-bold text-red-600">Past Due Balance</p>
-                  </div>
-                  <p className="text-[28px] font-bold text-red-500 tracking-tight">{formatCurrency(tenant.pastDueAmount)}</p>
-                  <p className="text-[11px] text-red-400 mt-1">Last payment received: {tenant.lastPaymentDate}</p>
+                <div className="bg-red-50 border border-red-200 rounded p-3">
+                  <p className="text-[10px] text-[#dc2626] uppercase tracking-wide font-medium">Past Due</p>
+                  <p className="text-[22px] font-semibold text-[#dc2626] tracking-tight mt-0.5">{formatCurrency(tenant.pastDueAmount)}</p>
+                  <p className="text-[10px] text-[#a1a1aa] mt-1">Last paid: {tenant.lastPaymentDate}</p>
                 </div>
               )}
+
+              {/* Delinquency Workflow — clickable stages */}
+              <div>
+                <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium mb-2">Delinquency Stage</p>
+                <div className="flex flex-wrap gap-1">
+                  {stageOrder.map((stage, i) => {
+                    const isCurrent = stage === delinqStage;
+                    const isActive = stageOrder.indexOf(stage) <= stageOrder.indexOf(delinqStage);
+                    return (
+                      <button
+                        key={stage}
+                        onClick={() => setDelinquency(stage)}
+                        className={`flex items-center gap-0.5 text-[10px] px-2 py-1 rounded font-medium cursor-pointer transition-colors ${
+                          isCurrent ? "bg-[#dc2626] text-white" :
+                          isActive ? "bg-red-100 text-[#dc2626]" :
+                          "bg-[#f4f4f5] text-[#a1a1aa] hover:bg-[#e4e4e7] hover:text-[#71717a]"
+                        }`}
+                      >
+                        {stageLabels[stage]}
+                        {i < stageOrder.length - 1 && <ChevronRight size={10} className="ml-0.5 opacity-50" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-[#a1a1aa] mt-1">Click to manually adjust stage</p>
+              </div>
+
+              {/* Posting Status — editable toggles for all fee types */}
+              <div>
+                <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium mb-2">Posting Status (March 2026)</p>
+                <div className="space-y-1">
+                  {postingTypes.map(pt => (
+                    <div key={pt.key} className="flex items-center justify-between py-1.5 border-b border-[#f4f4f5] last:border-0">
+                      <p className="text-[12px] text-[#18181b]">{pt.label}</p>
+                      <button
+                        onClick={() => togglePosting(pt.key)}
+                        className={`text-[10px] font-medium px-2.5 py-0.5 rounded cursor-pointer transition-colors ${
+                          postings[pt.key] ? "bg-[#16a34a] text-white" : "bg-red-100 text-[#dc2626]"
+                        }`}
+                      >
+                        {postings[pt.key] ? "Posted" : "Not Posted"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </>
           )}
 
-          {/* Editable Notes */}
+          {/* Notes */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <FileText size={14} className="text-[#8b8fa3]" />
-                <p className="text-[12px] font-semibold text-[#1e1e2d]">Notes</p>
-              </div>
+              <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium">Notes</p>
               {!editingNotes ? (
-                <button
-                  onClick={() => { setNotesDraft(displayNotes); setEditingNotes(true); }}
-                  className="flex items-center gap-1 text-[11px] text-[#4f6ef7] font-medium hover:underline cursor-pointer"
-                >
-                  <Edit3 size={12} />
-                  {displayNotes ? "Edit" : "Add Note"}
+                <button onClick={() => { setNotesDraft(displayNotes); setEditingNotes(true); }}
+                  className="text-[11px] text-[#71717a] hover:text-[#18181b] cursor-pointer flex items-center gap-1">
+                  <Edit3 size={11} /> {displayNotes ? "Edit" : "Add"}
                 </button>
               ) : (
-                <button
-                  onClick={handleSaveNotes}
-                  className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold hover:underline cursor-pointer"
-                >
-                  <Save size={12} />
-                  Save
+                <button onClick={handleSaveNotes}
+                  className="text-[11px] text-[#16a34a] font-medium cursor-pointer flex items-center gap-1">
+                  <Save size={11} /> Save
                 </button>
               )}
             </div>
-
             {editingNotes ? (
-              <textarea
-                value={notesDraft}
-                onChange={(e) => setNotesDraft(e.target.value)}
-                placeholder="Add notes about this unit (PM issues, tenant requests, maintenance, etc.)"
-                className="w-full text-[12px] text-[#1e1e2d] bg-white border border-[#4f6ef7] rounded-xl p-4 leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#4f6ef7]/20 min-h-[100px] resize-y"
-                autoFocus
-              />
+              <textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)}
+                placeholder="PM issues, tenant requests, maintenance notes..."
+                className="w-full text-[12px] text-[#18181b] bg-white border border-[#e4e4e7] rounded p-3 leading-relaxed focus:outline-none focus:border-[#71717a] min-h-[80px] resize-y"
+                autoFocus />
             ) : displayNotes ? (
-              <p className="text-[12px] text-[#5a5e73] bg-[#f5f6fa] p-4 rounded-xl leading-relaxed whitespace-pre-wrap">{displayNotes}</p>
+              <p className="text-[12px] text-[#71717a] bg-[#fafafa] p-3 rounded leading-relaxed whitespace-pre-wrap">{displayNotes}</p>
             ) : (
-              <p className="text-[12px] text-[#b0b4c5] italic bg-[#f5f6fa] p-4 rounded-xl">No notes yet. Click &quot;Add Note&quot; to add one.</p>
+              <p className="text-[12px] text-[#d4d4d8] italic bg-[#fafafa] p-3 rounded">No notes</p>
             )}
           </div>
 
           {/* Ledger */}
           {ledger.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <CreditCard size={14} className="text-[#8b8fa3]" />
-                  <p className="text-[12px] font-semibold text-[#1e1e2d]">Payment History</p>
-                </div>
-                <span className="text-[10px] text-[#8b8fa3] font-medium">{ledger.length} transactions</span>
-              </div>
-              <div className="max-h-72 overflow-y-auto rounded-xl border border-[#e8eaef]">
+              <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium mb-2">Payment History ({ledger.length})</p>
+              <div className="max-h-56 overflow-y-auto rounded border border-[#e4e4e7]">
                 <table className="w-full text-[11px]">
-                  <thead className="sticky top-0 bg-[#f5f6fa]">
-                    <tr className="text-[#8b8fa3] font-semibold uppercase tracking-wider">
-                      <th className="text-left px-3 py-2.5">Date</th>
-                      <th className="text-left px-3 py-2.5">Description</th>
-                      <th className="text-right px-3 py-2.5">Charge</th>
-                      <th className="text-right px-3 py-2.5">Payment</th>
+                  <thead className="sticky top-0 bg-[#fafafa]">
+                    <tr className="text-[#a1a1aa] font-medium uppercase tracking-wider text-[9px]">
+                      <th className="text-left px-2.5 py-2">Date</th>
+                      <th className="text-left px-2.5 py-2">Description</th>
+                      <th className="text-right px-2.5 py-2">Charge</th>
+                      <th className="text-right px-2.5 py-2">Payment</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {ledger.slice(-12).map((entry, i) => (
-                      <tr key={i} className="border-t border-[#f0f0f5] hover:bg-[#f8f9fb]">
-                        <td className="px-3 py-2 text-[#8b8fa3]">{entry.date}</td>
-                        <td className="px-3 py-2 text-[#1e1e2d] truncate max-w-[180px]">{entry.description}</td>
-                        <td className="px-3 py-2 text-right text-red-500 font-medium">{entry.charge > 0 ? formatCurrency(entry.charge) : ""}</td>
-                        <td className="px-3 py-2 text-right text-emerald-600 font-medium">{entry.payment > 0 ? formatCurrency(entry.payment) : ""}</td>
+                    {ledger.slice(-10).map((entry, i) => (
+                      <tr key={i} className="border-t border-[#f4f4f5]">
+                        <td className="px-2.5 py-1.5 text-[#a1a1aa]">{entry.date}</td>
+                        <td className="px-2.5 py-1.5 text-[#18181b] truncate max-w-[160px]">{entry.description}</td>
+                        <td className="px-2.5 py-1.5 text-right text-[#dc2626] font-medium">{entry.charge > 0 ? formatCurrency(entry.charge) : ""}</td>
+                        <td className="px-2.5 py-1.5 text-right text-[#16a34a] font-medium">{entry.payment > 0 ? formatCurrency(entry.payment) : ""}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -231,20 +310,6 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
             </div>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function InfoItem({ icon: Icon, label, value, bold, valueColor }: {
-  icon: any; label: string; value: string; bold?: boolean; valueColor?: string;
-}) {
-  return (
-    <div className="flex items-start gap-2">
-      <Icon size={13} className="text-[#b0b4c5] mt-0.5 flex-shrink-0" />
-      <div>
-        <p className="text-[10px] text-[#8b8fa3] uppercase tracking-wider font-medium">{label}</p>
-        <p className={`text-[13px] mt-0.5 ${bold ? "font-bold text-[#1e1e2d]" : ""} ${valueColor || "text-[#1e1e2d]"}`}>{value}</p>
       </div>
     </div>
   );
