@@ -244,8 +244,8 @@ export default function DataChat() {
                 <div
                   className={`max-w-[85%] rounded-xl px-3 py-2 text-[12px] leading-relaxed ${
                     msg.role === "user"
-                      ? "bg-indigo-500 text-white"
-                      : "bg-gray-100 text-gray-800"
+                      ? "bg-[#18181b] text-white"
+                      : "bg-[#f4f4f5] text-[#18181b]"
                   }`}
                 >
                   {renderMarkdown(msg.content)}
@@ -272,7 +272,7 @@ export default function DataChat() {
               <button
                 key={q}
                 onClick={() => { setInput(q); }}
-                className="shrink-0 text-[10px] px-2.5 py-1 bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-full text-gray-600 transition-colors cursor-pointer whitespace-nowrap"
+                className="shrink-0 text-[10px] px-2.5 py-1 bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#71717a] hover:text-[#18181b] rounded text-[#71717a] transition-colors cursor-pointer whitespace-nowrap"
               >
                 {q}
               </button>
@@ -290,12 +290,12 @@ export default function DataChat() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask about tenants, revenue, alerts..."
-                className="flex-1 text-[12px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 focus:bg-white transition-colors"
+                className="flex-1 text-[12px] px-3 py-2 bg-[#fafafa] border border-[#e4e4e7] rounded focus:outline-none focus:border-[#71717a] focus:bg-white transition-colors"
               />
               <button
                 type="submit"
                 disabled={!input.trim()}
-                className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 text-white rounded-xl p-2 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                className="bg-[#18181b] hover:bg-[#27272a] disabled:bg-[#e4e4e7] text-white rounded p-2 transition-colors cursor-pointer disabled:cursor-not-allowed"
               >
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />

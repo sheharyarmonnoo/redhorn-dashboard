@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import DataChat from "@/components/DataChat";
+import CommandPalette from "@/components/CommandPalette";
 
 export const metadata: Metadata = {
   title: "Redhorn Capital — Deal Manager AI",
@@ -24,6 +25,7 @@ export default function RootLayout({
           </div>
         </main>
         <DataChat />
+        <CommandPalette />
       </body>
     </html>
   );

@@ -48,8 +48,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
 
-      <div className="px-5 py-3 border-t border-white/[0.06]">
-        <p className="text-[10px] text-[#52525b]">Last updated: Mar 15, 2026 2:30 PM</p>
+      <div className="px-5 py-3 border-t border-white/[0.06] space-y-2">
+        <button className="w-full flex items-center justify-between px-2 py-1.5 rounded bg-white/[0.04] hover:bg-white/[0.08] transition-colors cursor-pointer group">
+          <span className="text-[11px] text-[#71717a] group-hover:text-[#d4d4d8]">Search</span>
+          <kbd className="text-[10px] text-[#52525b] bg-white/[0.06] border border-white/[0.06] rounded px-1.5 py-0.5 font-mono">⌘K</kbd>
+        </button>
+        <p className="text-[10px] text-[#52525b]">Updated Mar 15, 2026 2:30 PM</p>
       </div>
     </>
   );
