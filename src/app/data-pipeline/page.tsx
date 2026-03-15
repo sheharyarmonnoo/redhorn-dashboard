@@ -564,29 +564,49 @@ function SmartUploadModal({ onClose }: { onClose: () => void }) {
           )}
 
           {/* Context questions */}
-          {step === "context" && category && (
-            <div className="space-y-3">
-              <p className="text-[12px] font-medium text-[#18181b]">{fileCategoryLabels[category]} — Additional Context</p>
-              {questions.map((q, i) => (
-                <div key={i}>
-                  <label className="text-[11px] text-[#71717a] font-medium">{q}</label>
-                  <input type="text" value={answers[i] || ""} onChange={e => setAnswers({ ...answers, [i]: e.target.value })}
-                    className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+          {step === "context" && category && (() => {
+            const allAnswered = questions.every((_, i) => (answers[i] || "").trim().length > 0);
+            const unansweredCount = questions.filter((_, i) => !(answers[i] || "").trim()).length;
+            return (
+              <div className="space-y-3">
+                <p className="text-[12px] font-medium text-[#18181b]">{fileCategoryLabels[category]} — Additional Context</p>
+                <p className="text-[10px] text-[#a1a1aa]">All fields are required before processing.</p>
+                {questions.map((q, i) => {
+                  const isEmpty = !(answers[i] || "").trim();
+                  return (
+                    <div key={i}>
+                      <label className={`text-[11px] font-medium ${isEmpty ? "text-[#18181b]" : "text-[#71717a]"}`}>
+                        {q} {isEmpty && <span className="text-[#dc2626]">*</span>}
+                      </label>
+                      <input type="text" value={answers[i] || ""} onChange={e => setAnswers({ ...answers, [i]: e.target.value })}
+                        className={`w-full mt-1 text-[12px] px-2.5 py-1.5 border rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] ${
+                          isEmpty ? "border-[#d4d4d8]" : "border-[#16a34a]/30"
+                        }`} />
+                    </div>
+                  );
+                })}
+                <div>
+                  <label className="text-[11px] text-[#71717a] font-medium">Additional notes (optional)</label>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                    placeholder="Any other context for processing this file..."
+                    rows={2}
+                    className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] resize-none" />
                 </div>
-              ))}
-              <div>
-                <label className="text-[11px] text-[#71717a] font-medium">Additional notes (optional)</label>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                  placeholder="Any other context for processing this file..."
-                  rows={2}
-                  className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] resize-none" />
+                <div className="flex items-center justify-between">
+                  {!allAnswered && (
+                    <p className="text-[10px] text-[#dc2626]">{unansweredCount} required field{unansweredCount > 1 ? "s" : ""} remaining</p>
+                  )}
+                  {allAnswered && <span />}
+                  <button onClick={handleSubmitContext} disabled={!allAnswered}
+                    className={`text-[11px] font-medium px-4 py-1.5 rounded cursor-pointer transition-colors ${
+                      allAnswered ? "bg-[#18181b] text-white hover:bg-[#27272a]" : "bg-[#e4e4e7] text-[#a1a1aa] cursor-not-allowed"
+                    }`}>
+                    Process File
+                  </button>
+                </div>
               </div>
-              <button onClick={handleSubmitContext}
-                className="text-[11px] font-medium px-4 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer transition-colors">
-                Process File
-              </button>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Processing */}
           {step === "processing" && (
