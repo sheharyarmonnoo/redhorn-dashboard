@@ -83,10 +83,32 @@ export default function DashboardPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mb-6">
         <div className="bg-white border border-[#e4e4e7] rounded p-4">
-          <p className="text-[13px] font-semibold text-[#18181b] mb-1">Revenue Breakdown</p>
-          <p className="text-[11px] text-[#a1a1aa] mb-3">Last 9 months by category</p>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[13px] font-semibold text-[#18181b]">Revenue Breakdown</p>
+            <button
+              onClick={() => setFilterOpen(true)}
+              className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
+                isFiltered ? "bg-[#18181b] text-white" : "text-[#71717a] hover:text-[#18181b] hover:bg-[#f4f4f5]"
+              }`}
+            >
+              <Filter size={12} />
+              {isFiltered ? `${filteredUnits.size} units` : "Filter"}
+            </button>
+          </div>
+          <p className="text-[11px] text-[#a1a1aa] mb-3">
+            {isFiltered
+              ? `Showing ${filteredUnits.size} of ${allOccupiedUnits.size} units — ${formatCurrency(tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyRent, 0))}/mo`
+              : "Last 9 months by category"}
+          </p>
           <Chart options={revenueChartOptions} series={revenueSeries} type="bar" height={260} />
         </div>
+
+      <RevenueFilter
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        selectedUnits={filteredUnits}
+        onApply={setFilteredUnits}
+      />
         <div className="bg-white border border-[#e4e4e7] rounded p-4">
           <div className="flex items-baseline justify-between mb-3">
             <div>
