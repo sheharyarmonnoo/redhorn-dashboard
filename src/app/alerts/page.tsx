@@ -62,10 +62,39 @@ function useIsMobile() {
   return isMobile;
 }
 
+const ARCHIVED_KEY = "redhorn_archived_alerts";
+
+function loadArchived(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try { return new Set(JSON.parse(localStorage.getItem(ARCHIVED_KEY) || "[]")); }
+  catch { return new Set(); }
+}
+function saveArchived(ids: Set<string>) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(ARCHIVED_KEY, JSON.stringify(Array.from(ids)));
+}
+
 export default function AlertsPage() {
   const gridRef = useRef<AgGridReact>(null);
   const historyGridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
+  const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => { setArchivedIds(loadArchived()); }, []);
+
+  function archiveAlert(id: string) {
+    const next = new Set(archivedIds);
+    next.add(id);
+    setArchivedIds(next);
+    saveArchived(next);
+  }
+
+  function restoreAlert(id: string) {
+    const next = new Set(archivedIds);
+    next.delete(id);
+    setArchivedIds(next);
+    saveArchived(next);
+  }
 
   const alertData = useMemo<AlertRow[]>(() => {
     const alerts: AlertRow[] = [];
@@ -117,13 +146,35 @@ export default function AlertsPage() {
     return alerts;
   }, []);
 
+  const activeAlerts = alertData.filter(a => !archivedIds.has(a.id));
+  const archivedAlerts = alertData.filter(a => archivedIds.has(a.id));
+
+  function ArchiveCell(props: { data: AlertRow }) {
+    return (
+      <button onClick={(e) => { e.stopPropagation(); archiveAlert(props.data.id); }}
+        className="text-[10px] font-medium text-[#71717a] hover:text-[#18181b] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] rounded hover:bg-[#f4f4f5] transition-colors">
+        Handled
+      </button>
+    );
+  }
+
+  function RestoreCell(props: { data: AlertRow }) {
+    return (
+      <button onClick={(e) => { e.stopPropagation(); restoreAlert(props.data.id); }}
+        className="text-[10px] font-medium text-[#71717a] hover:text-[#18181b] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] rounded hover:bg-[#f4f4f5] transition-colors">
+        Restore
+      </button>
+    );
+  }
+
   const columnDefs = useMemo<ColDef[]>(() => {
     if (isMobile) {
       return [
         { field: "severity", headerName: "Sev", width: 85, cellRenderer: SeverityCellRenderer },
         { field: "unit", headerName: "Unit", width: 90 },
         { field: "category", headerName: "Type", width: 140, cellRenderer: CategoryCellRenderer },
-        { field: "detail", headerName: "Details", minWidth: 180, flex: 1 },
+        { field: "detail", headerName: "Details", minWidth: 140, flex: 1 },
+        { headerName: "", width: 70, cellRenderer: ArchiveCell, sortable: false, filter: false },
       ];
     }
     return [
@@ -136,8 +187,9 @@ export default function AlertsPage() {
       { field: "amount", headerName: "Amount", width: 110, type: "numericColumn",
         valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
       { field: "date", headerName: "Date", width: 110 },
+      { headerName: "", width: 80, cellRenderer: ArchiveCell, sortable: false, filter: false },
     ];
-  }, [isMobile]);
+  }, [isMobile, archivedIds]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true, resizable: true, filter: true,
@@ -178,8 +230,8 @@ export default function AlertsPage() {
     ];
   }, [isMobile]);
 
-  const criticalCount = alertData.filter(a => a.severity === "Critical").length;
-  const warningCount = alertData.filter(a => a.severity === "Warning").length;
+  const criticalCount = activeAlerts.filter(a => a.severity === "Critical").length;
+  const warningCount = activeAlerts.filter(a => a.severity === "Warning").length;
 
   return (
     <div>
@@ -192,7 +244,7 @@ export default function AlertsPage() {
 
       {/* Active Alerts Grid */}
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[14px] font-bold text-[#1e1e2d]">Active Alerts ({alertData.length})</h3>
+        <h3 className="text-[13px] font-semibold text-[#18181b]">Active Alerts ({activeAlerts.length})</h3>
         <input
           type="text"
           placeholder="Search alerts..."
@@ -205,7 +257,7 @@ export default function AlertsPage() {
       <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8" style={{ height: 340 }}>
         <AgGridReact
           ref={gridRef}
-          rowData={alertData}
+          rowData={activeAlerts}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           onGridReady={onGridReady}
@@ -216,10 +268,30 @@ export default function AlertsPage() {
         />
       </div>
 
+      {/* Archived / Handled */}
+      {archivedAlerts.length > 0 && (
+        <div className="mb-8">
+          <p className="text-[13px] font-semibold text-[#18181b] mb-3">Handled ({archivedAlerts.length})</p>
+          <div className="space-y-0 border border-[#e4e4e7] rounded overflow-hidden">
+            {archivedAlerts.map(a => (
+              <div key={a.id} className="flex items-center gap-3 px-3 py-2 border-b border-[#f4f4f5] last:border-0 bg-[#fafafa]">
+                <span className="text-[11px] text-[#16a34a] font-medium">✓</span>
+                <span className="text-[12px] font-medium text-[#71717a] w-14 flex-shrink-0">{a.unit}</span>
+                <p className="flex-1 text-[12px] text-[#a1a1aa] line-through truncate">{a.detail}</p>
+                <button onClick={() => restoreAlert(a.id)}
+                  className="text-[10px] text-[#a1a1aa] hover:text-[#18181b] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] rounded hover:bg-white transition-colors flex-shrink-0">
+                  Restore
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Alert History */}
       <div className="flex items-center gap-2 mb-3">
-        <Clock size={16} className="text-gray-400" />
-        <h3 className="text-[14px] font-bold text-[#1e1e2d]">Alert History Log</h3>
+        <Clock size={16} className="text-[#a1a1aa]" />
+        <p className="text-[13px] font-semibold text-[#18181b]">Alert History Log</p>
       </div>
       <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: 340 }}>
         <AgGridReact
