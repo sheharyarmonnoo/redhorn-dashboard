@@ -47,12 +47,55 @@ body {
   background: #9ca3af;
 }
 
-/* Table row hover */
-.table-row-hover:hover {
-  background: #f8f9fb;
+/* AG Grid theme overrides */
+.ag-theme-alpine {
+  --ag-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  --ag-font-size: 13px;
+  --ag-header-background-color: #f8f9fb;
+  --ag-header-foreground-color: #6b7280;
+  --ag-row-hover-color: #f0f4ff;
+  --ag-selected-row-background-color: #eef1fe;
+  --ag-border-color: #e8eaef;
+  --ag-row-border-color: #f0f0f5;
+  --ag-header-height: 44px;
+  --ag-row-height: 42px;
+  --ag-cell-horizontal-padding: 16px;
 }
 
-/* Smooth transitions */
-.transition-smooth {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+.ag-theme-alpine .ag-header-cell-label {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ag-theme-alpine .ag-row {
+  cursor: pointer;
+}
+
+.ag-theme-alpine .ag-paging-panel {
+  border-top: 1px solid #e8eaef;
+  padding: 8px 16px;
+}
+
+/* ApexCharts overrides */
+.apexcharts-tooltip {
+  border-radius: 12px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+}
+
+/* Mobile responsive sidebar */
+@media (max-width: 1023px) {
+  .sidebar-desktop {
+    display: none;
+  }
+  .main-content {
+    margin-left: 0 !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .mobile-nav {
+    display: none;
+  }
 }

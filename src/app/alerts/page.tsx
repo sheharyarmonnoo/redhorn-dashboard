@@ -1,135 +1,204 @@
 "use client";
+import { useMemo, useRef, useCallback } from "react";
+import { AgGridReact } from "ag-grid-react";
+import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
 import { tenants, formatCurrency } from "@/data/tenants";
-import { AlertTriangle, Zap, CalendarClock, DollarSign, Clock } from "lucide-react";
+import PageHeader from "@/components/PageHeader";
+import { Zap, DollarSign, CalendarClock, AlertTriangle, Clock } from "lucide-react";
+
+ModuleRegistry.registerModules([AllCommunityModule]);
+
+interface AlertRow {
+  id: string;
+  unit: string;
+  tenant: string;
+  building: string;
+  category: string;
+  severity: "Critical" | "Warning" | "Info";
+  detail: string;
+  amount: number;
+  date: string;
+}
+
+function SeverityCellRenderer(props: { value: string }) {
+  const colors: Record<string, string> = {
+    Critical: "bg-red-100 text-red-700 border-red-200",
+    Warning: "bg-amber-50 text-amber-700 border-amber-200",
+    Info: "bg-blue-50 text-blue-700 border-blue-200",
+  };
+  return (
+    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold border ${colors[props.value] || ""}`}>
+      {props.value}
+    </span>
+  );
+}
+
+function CategoryCellRenderer(props: { value: string }) {
+  const icons: Record<string, { icon: typeof Zap; color: string }> = {
+    "Electric Not Posted": { icon: Zap, color: "text-amber-500" },
+    "Past Due": { icon: DollarSign, color: "text-red-500" },
+    "Lease Expiring": { icon: CalendarClock, color: "text-blue-500" },
+    "Holdover": { icon: AlertTriangle, color: "text-orange-500" },
+  };
+  const item = icons[props.value] || { icon: AlertTriangle, color: "text-gray-500" };
+  const Icon = item.icon;
+  return (
+    <span className={`inline-flex items-center gap-1.5 ${item.color} font-medium text-[12px]`}>
+      <Icon size={14} />
+      {props.value}
+    </span>
+  );
+}
 
 export default function AlertsPage() {
-  const electricAlerts = tenants.filter(t =>
-    t.leaseType === "Office Net Lease" && !t.electricPosted && t.tenant && !t.tenant.includes("Owner")
-  );
-  const pastDueTenants = tenants.filter(t => t.pastDueAmount > 0);
-  const expiringTenants = tenants.filter(t => t.status === "expiring_soon");
-  const holdoverTenants = tenants.filter(t => {
-    if (!t.leaseTo) return false;
-    return new Date(t.leaseTo) < new Date("2026-03-15") && t.status !== "vacant";
-  });
+  const gridRef = useRef<AgGridReact>(null);
+  const historyGridRef = useRef<AgGridReact>(null);
+
+  const alertData = useMemo<AlertRow[]>(() => {
+    const alerts: AlertRow[] = [];
+
+    // Electric not posted
+    tenants.filter(t => t.leaseType === "Office Net Lease" && !t.electricPosted && t.tenant && !t.tenant.includes("Owner"))
+      .forEach(t => {
+        alerts.push({
+          id: `elec-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,
+          category: "Electric Not Posted", severity: "Critical",
+          detail: `Expected ~${formatCurrency(t.monthlyElectric)}/mo — not posted for March 2026`,
+          amount: t.monthlyElectric, date: "2026-03-12",
+        });
+      });
+
+    // Past due
+    tenants.filter(t => t.pastDueAmount > 0)
+      .forEach(t => {
+        alerts.push({
+          id: `pd-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,
+          category: "Past Due", severity: "Critical",
+          detail: `${formatCurrency(t.pastDueAmount)} outstanding — last paid ${t.lastPaymentDate}`,
+          amount: t.pastDueAmount, date: "2026-03-12",
+        });
+      });
+
+    // Expiring leases
+    tenants.filter(t => t.status === "expiring_soon")
+      .forEach(t => {
+        alerts.push({
+          id: `exp-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,
+          category: "Lease Expiring", severity: "Warning",
+          detail: `Expires ${t.leaseTo} — no renewal on file. Rent: ${formatCurrency(t.monthlyRent)}/mo`,
+          amount: t.monthlyRent, date: t.leaseTo,
+        });
+      });
+
+    // Holdovers
+    tenants.filter(t => t.leaseTo && new Date(t.leaseTo) < new Date("2026-03-15") && t.status !== "vacant" && !t.tenant.includes("Owner"))
+      .forEach(t => {
+        alerts.push({
+          id: `hold-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,
+          category: "Holdover", severity: "Critical",
+          detail: `Lease ended ${t.leaseTo} — tenant still occupying`,
+          amount: t.monthlyRent, date: t.leaseTo,
+        });
+      });
+
+    return alerts;
+  }, []);
+
+  const columnDefs = useMemo<ColDef[]>(() => [
+    { field: "severity", headerName: "Severity", width: 110, cellRenderer: SeverityCellRenderer, filter: true },
+    { field: "category", headerName: "Category", width: 170, cellRenderer: CategoryCellRenderer, filter: true },
+    { field: "unit", headerName: "Unit", width: 80 },
+    { field: "tenant", headerName: "Tenant", minWidth: 160, flex: 1 },
+    { field: "building", headerName: "Bldg", width: 70 },
+    { field: "detail", headerName: "Details", minWidth: 280, flex: 2 },
+    { field: "amount", headerName: "Amount", width: 110, type: "numericColumn",
+      valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
+    { field: "date", headerName: "Date", width: 110 },
+  ], []);
+
+  const defaultColDef = useMemo<ColDef>(() => ({
+    sortable: true, resizable: true, filter: true,
+  }), []);
+
+  const onGridReady = useCallback((params: GridReadyEvent) => {
+    params.api.sizeColumnsToFit();
+  }, []);
 
   const alertHistory = [
-    { date: "2026-03-12", message: "Default letter sent to C-207 (Brazos Valley Imports)", type: "action" },
-    { date: "2026-03-10", message: "A-90 lease expired — holdover status triggered", type: "system" },
-    { date: "2026-03-05", message: "February late fees assessed: A-120 ($99), C-207 ($84)", type: "system" },
-    { date: "2026-03-01", message: "Monthly charges posted for March 2026", type: "system" },
-    { date: "2026-02-15", message: "Electric posting missed for C-212, C-305 — flagged for PM", type: "alert" },
-    { date: "2026-02-12", message: "A-120 (Clear Lake IT) — first late notice sent", type: "action" },
-    { date: "2026-02-01", message: "Monthly charges posted for February 2026", type: "system" },
-    { date: "2026-01-20", message: "Lease renewal discussion initiated for A-111/C-216 (SouthWest Coatings)", type: "action" },
+    { date: "2026-03-12", message: "Default letter sent to C-207 (Brazos Valley Imports)", type: "Action", category: "Past Due" },
+    { date: "2026-03-10", message: "A-90 lease expired — holdover status triggered", type: "System", category: "Holdover" },
+    { date: "2026-03-05", message: "February late fees assessed: A-120 ($99), C-207 ($84)", type: "System", category: "Past Due" },
+    { date: "2026-03-01", message: "Monthly charges posted for March 2026", type: "System", category: "Charges" },
+    { date: "2026-02-15", message: "Electric posting missed for C-212, C-305 — flagged for PM", type: "Alert", category: "Electric" },
+    { date: "2026-02-12", message: "A-120 (Clear Lake IT) — first late notice sent", type: "Action", category: "Past Due" },
+    { date: "2026-02-01", message: "Monthly charges posted for February 2026", type: "System", category: "Charges" },
+    { date: "2026-01-20", message: "Lease renewal discussion initiated for A-111/C-216", type: "Action", category: "Lease" },
   ];
+
+  const historyColDefs = useMemo<ColDef[]>(() => [
+    { field: "date", headerName: "Date", width: 110, sort: "desc" },
+    { field: "type", headerName: "Type", width: 90,
+      cellRenderer: (p: { value: string }) => {
+        const c: Record<string, string> = { Alert: "bg-amber-100 text-amber-700", Action: "bg-blue-100 text-blue-700", System: "bg-gray-100 text-gray-500" };
+        return <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${c[p.value] || ""}`}>{p.value}</span>;
+      }
+    },
+    { field: "category", headerName: "Category", width: 100 },
+    { field: "message", headerName: "Description", minWidth: 300, flex: 1 },
+  ], []);
+
+  const criticalCount = alertData.filter(a => a.severity === "Critical").length;
+  const warningCount = alertData.filter(a => a.severity === "Warning").length;
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Alerts & Oversight</h1>
-        <p className="text-gray-500 text-sm mt-1">Rule-based PM accountability tracking</p>
+      <PageHeader title="Alerts & Oversight" subtitle="Rule-based PM accountability tracking">
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] font-semibold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{criticalCount} Critical</span>
+          <span className="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{warningCount} Warnings</span>
+        </div>
+      </PageHeader>
+
+      {/* Active Alerts Grid */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[14px] font-bold text-[#1e1e2d]">Active Alerts ({alertData.length})</h3>
+        <input
+          type="text"
+          placeholder="Search alerts..."
+          className="px-3 py-1.5 bg-white border border-[#e8eaef] rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#4f6ef7] w-48 sm:w-64"
+          onChange={(e) => {
+            gridRef.current?.api?.setGridOption("quickFilterText", e.target.value);
+          }}
+        />
+      </div>
+      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8" style={{ height: 340 }}>
+        <AgGridReact
+          ref={gridRef}
+          rowData={alertData}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          onGridReady={onGridReady}
+          animateRows={true}
+          pagination={true}
+          paginationPageSize={500}
+          getRowId={(params) => params.data.id}
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-amber-600 mb-4 flex items-center gap-2">
-            <Zap size={16} /> Electric Not Posted by 10th
-          </h3>
-          <p className="text-xs text-gray-500 mb-3">Rule: All Net Lease tenants must have electric charges posted by the 10th of each month.</p>
-          {electricAlerts.length > 0 ? (
-            <div className="space-y-2">
-              {electricAlerts.map(t => (
-                <div key={t.unit} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <div>
-                    <p className="text-sm text-gray-900 font-medium">{t.unit} — {t.tenant}</p>
-                    <p className="text-xs text-gray-500">Expected charge: ~{formatCurrency(t.monthlyElectric)}/mo</p>
-                  </div>
-                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium">NOT POSTED</span>
-                </div>
-              ))}
-            </div>
-          ) : <p className="text-emerald-600 text-sm">All electric charges posted.</p>}
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-red-600 mb-4 flex items-center gap-2">
-            <DollarSign size={16} /> Past Due — Late Fees Check
-          </h3>
-          <p className="text-xs text-gray-500 mb-3">Rule: Any tenant 5+ days past due should have late fee assessed.</p>
-          {pastDueTenants.length > 0 ? (
-            <div className="space-y-2">
-              {pastDueTenants.map(t => (
-                <div key={t.unit} className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg p-3">
-                  <div>
-                    <p className="text-sm text-gray-900 font-medium">{t.unit} — {t.tenant}</p>
-                    <p className="text-xs text-gray-500">Amount due: {formatCurrency(t.pastDueAmount)} · Last paid: {t.lastPaymentDate}</p>
-                  </div>
-                  <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded font-medium">{formatCurrency(t.pastDueAmount)}</span>
-                </div>
-              ))}
-            </div>
-          ) : <p className="text-emerald-600 text-sm">No past-due tenants.</p>}
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-[#4f6ef7] mb-4 flex items-center gap-2">
-            <CalendarClock size={16} /> Leases Expiring &lt;90 Days — No Renewal
-          </h3>
-          <p className="text-xs text-gray-500 mb-3">Rule: PM should initiate renewal discussions 120+ days before expiry.</p>
-          {expiringTenants.length > 0 ? (
-            <div className="space-y-2">
-              {expiringTenants.map(t => (
-                <div key={t.unit} className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div>
-                    <p className="text-sm text-gray-900 font-medium">{t.unit} — {t.tenant}</p>
-                    <p className="text-xs text-gray-500">Expires: {t.leaseTo} · Rent: {formatCurrency(t.monthlyRent)}/mo</p>
-                  </div>
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-medium">NO RENEWAL</span>
-                </div>
-              ))}
-            </div>
-          ) : <p className="text-emerald-600 text-sm">All upcoming expirations have renewal activity.</p>}
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-orange-600 mb-4 flex items-center gap-2">
-            <AlertTriangle size={16} /> Holdover Tenants (Expired Leases)
-          </h3>
-          <p className="text-xs text-gray-500 mb-3">Tenants whose lease has expired but are still occupying space.</p>
-          {holdoverTenants.length > 0 ? (
-            <div className="space-y-2">
-              {holdoverTenants.map(t => (
-                <div key={t.unit} className="flex items-center justify-between bg-orange-50 border border-orange-200 rounded-lg p-3">
-                  <div>
-                    <p className="text-sm text-gray-900 font-medium">{t.unit} — {t.tenant}</p>
-                    <p className="text-xs text-gray-500">Lease ended: {t.leaseTo}</p>
-                  </div>
-                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded font-medium">HOLDOVER</span>
-                </div>
-              ))}
-            </div>
-          ) : <p className="text-emerald-600 text-sm">No holdover tenants.</p>}
-        </div>
+      {/* Alert History */}
+      <div className="flex items-center gap-2 mb-3">
+        <Clock size={16} className="text-gray-400" />
+        <h3 className="text-[14px] font-bold text-[#1e1e2d]">Alert History Log</h3>
       </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-          <Clock size={16} /> Alert History Log
-        </h3>
-        <div className="space-y-3">
-          {alertHistory.map((entry, i) => (
-            <div key={i} className="flex items-start gap-3 text-sm">
-              <span className="text-xs text-gray-400 min-w-[80px] mt-0.5">{entry.date}</span>
-              <span className={`inline-block w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                entry.type === "alert" ? "bg-amber-400" :
-                entry.type === "action" ? "bg-[#4f6ef7]" :
-                "bg-gray-300"
-              }`} />
-              <p className="text-gray-700">{entry.message}</p>
-            </div>
-          ))}
-        </div>
+      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: 340 }}>
+        <AgGridReact
+          ref={historyGridRef}
+          rowData={alertHistory}
+          columnDefs={historyColDefs}
+          defaultColDef={defaultColDef}
+          onGridReady={(params) => params.api.sizeColumnsToFit()}
+          animateRows={true}
+        />
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, ChevronRight, Menu, X } from "lucide-react";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
@@ -12,16 +13,16 @@ const nav = [
   { href: "/data-pipeline", label: "Data Pipeline", icon: Database, badge: null },
 ];
 
-export default function Sidebar() {
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[260px] bg-[#1e1e2d] flex flex-col z-50 shadow-xl">
+    <>
       {/* Logo */}
       <div className="px-6 pt-6 pb-5">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#4f6ef7] to-[#7c5cfc] flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#4f6ef7]/25">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="white" opacity="0.95"/>
               <path d="M2 17L12 22L22 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
               <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>
@@ -58,6 +59,7 @@ export default function Sidebar() {
             <Link
               key={href}
               href={href}
+              onClick={onNavigate}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all duration-150 group ${
                 active
                   ? "bg-[#4f6ef7] text-white shadow-lg shadow-[#4f6ef7]/25 font-medium"
@@ -85,6 +87,49 @@ export default function Sidebar() {
         <p className="text-[10px] text-[#5a5e73]">Hollister Business Park · Houston, TX</p>
         <p className="text-[10px] text-[#5a5e73] mt-0.5">Powered by Deal Manager AI</p>
       </div>
-    </aside>
+    </>
+  );
+}
+
+export default function Sidebar() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <aside className="sidebar-desktop fixed left-0 top-0 h-screen w-[260px] bg-[#1e1e2d] flex flex-col z-50 shadow-xl">
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile Header */}
+      <div className="mobile-nav fixed top-0 left-0 right-0 h-14 bg-[#1e1e2d] flex items-center justify-between px-4 z-50 shadow-lg">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#4f6ef7] to-[#7c5cfc] flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="white" opacity="0.95"/>
+              <path d="M2 17L12 22L22 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
+              <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>
+            </svg>
+          </div>
+          <span className="text-white text-sm font-semibold">Redhorn Capital</span>
+        </div>
+        <button onClick={() => setMobileOpen(!mobileOpen)} className="text-white p-1">
+          {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      </div>
+
+      {/* Mobile Sidebar Overlay */}
+      {mobileOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
+          <aside className="fixed left-0 top-0 h-screen w-[280px] bg-[#1e1e2d] flex flex-col z-50 shadow-xl lg:hidden">
+            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+          </aside>
+        </>
+      )}
+
+      {/* Mobile spacer */}
+      <div className="h-14 lg:hidden" />
+    </>
   );
 }

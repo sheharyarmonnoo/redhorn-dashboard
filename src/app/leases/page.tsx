@@ -1,132 +1,163 @@
 "use client";
+import { useMemo, useRef, useCallback } from "react";
+import { AgGridReact } from "ag-grid-react";
+import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
 import { tenants, formatCurrency } from "@/data/tenants";
-import { CalendarClock, AlertTriangle, CheckCircle2 } from "lucide-react";
+import PageHeader from "@/components/PageHeader";
+import dynamic from "next/dynamic";
+
+const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
+
+ModuleRegistry.registerModules([AllCommunityModule]);
+
+const now = new Date("2026-03-15");
+
+function getUrgency(leaseTo: string) {
+  const end = new Date(leaseTo);
+  if (end <= now) return "Expired";
+  const days = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (days <= 90) return "Critical (<90d)";
+  if (days <= 180) return "Warning (90-180d)";
+  return "OK (180d+)";
+}
+
+function daysUntil(date: string) {
+  return Math.ceil((new Date(date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function UrgencyCellRenderer(props: { value: string }) {
+  const colors: Record<string, string> = {
+    "Expired": "bg-red-100 text-red-700 border-red-200",
+    "Critical (<90d)": "bg-red-50 text-red-600 border-red-200",
+    "Warning (90-180d)": "bg-amber-50 text-amber-700 border-amber-200",
+    "OK (180d+)": "bg-emerald-50 text-emerald-700 border-emerald-200",
+  };
+  return (
+    <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border ${colors[props.value] || ""}`}>
+      {props.value}
+    </span>
+  );
+}
 
 export default function LeasesPage() {
-  const leasedTenants = tenants.filter(t => t.leaseTo && t.tenant && !t.tenant.includes("Owner"));
-  const sorted = [...leasedTenants].sort((a, b) => a.leaseTo.localeCompare(b.leaseTo));
+  const gridRef = useRef<AgGridReact>(null);
 
-  const now = new Date("2026-03-15");
-  const in90 = new Date("2026-06-13");
-  const in180 = new Date("2026-09-11");
+  const leaseData = useMemo(() => {
+    return tenants
+      .filter(t => t.leaseTo && t.tenant && !t.tenant.includes("Owner"))
+      .map(t => ({
+        ...t,
+        urgency: getUrgency(t.leaseTo),
+        daysLeft: daysUntil(t.leaseTo),
+      }))
+      .sort((a, b) => a.daysLeft - b.daysLeft);
+  }, []);
 
-  function getUrgency(leaseTo: string) {
-    const end = new Date(leaseTo);
-    if (end <= now) return "expired";
-    if (end <= in90) return "critical";
-    if (end <= in180) return "warning";
-    return "ok";
-  }
+  const expired = leaseData.filter(t => t.urgency === "Expired").length;
+  const critical = leaseData.filter(t => t.urgency === "Critical (<90d)").length;
+  const warning = leaseData.filter(t => t.urgency === "Warning (90-180d)").length;
+  const ok = leaseData.filter(t => t.urgency === "OK (180d+)").length;
 
-  const expired = sorted.filter(t => getUrgency(t.leaseTo) === "expired");
-  const critical = sorted.filter(t => getUrgency(t.leaseTo) === "critical");
-  const warning = sorted.filter(t => getUrgency(t.leaseTo) === "warning");
-  const ok = sorted.filter(t => getUrgency(t.leaseTo) === "ok");
+  const columnDefs = useMemo<ColDef[]>(() => [
+    { field: "unit", headerName: "Unit", width: 90, sort: "asc" },
+    { field: "tenant", headerName: "Tenant", minWidth: 180, flex: 1 },
+    { field: "building", headerName: "Bldg", width: 70 },
+    { field: "sqft", headerName: "Sq Ft", width: 90, type: "numericColumn",
+      valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
+    { field: "leaseFrom", headerName: "Start", width: 110 },
+    { field: "leaseTo", headerName: "End", width: 110 },
+    { field: "daysLeft", headerName: "Days Left", width: 100, type: "numericColumn",
+      cellRenderer: (p: { value: number }) => (
+        <span className={`font-semibold ${p.value <= 0 ? "text-red-600" : p.value <= 90 ? "text-red-500" : p.value <= 180 ? "text-amber-500" : "text-emerald-600"}`}>
+          {p.value <= 0 ? "EXPIRED" : `${p.value}d`}
+        </span>
+      )},
+    { field: "monthlyRent", headerName: "Rent/Mo", width: 110, type: "numericColumn",
+      valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
+    { field: "urgency", headerName: "Urgency", width: 150, cellRenderer: UrgencyCellRenderer, filter: true },
+  ], []);
 
-  function daysUntil(date: string) {
-    return Math.ceil((new Date(date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  }
+  const defaultColDef = useMemo<ColDef>(() => ({
+    sortable: true, resizable: true, filter: true,
+  }), []);
 
-  function LeaseRow({ t, urgency }: { t: typeof sorted[0]; urgency: string }) {
-    const days = daysUntil(t.leaseTo);
-    const colors: Record<string, string> = {
-      expired: "border-red-200 bg-red-50",
-      critical: "border-red-200 bg-red-50/50",
-      warning: "border-amber-200 bg-amber-50/50",
-      ok: "border-gray-200 bg-white",
-    };
-    return (
-      <div className={`border rounded-lg p-4 shadow-sm ${colors[urgency]}`}>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-gray-900">{t.unit}</span>
-            <span className="text-xs text-gray-400">Bldg {t.building}</span>
-          </div>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-            urgency === "expired" ? "bg-red-100 text-red-600" :
-            urgency === "critical" ? "bg-red-100 text-red-600" :
-            urgency === "warning" ? "bg-amber-100 text-amber-600" :
-            "bg-emerald-100 text-emerald-600"
-          }`}>
-            {urgency === "expired" ? "EXPIRED" : `${days} days`}
-          </span>
-        </div>
-        <p className="text-sm text-gray-700">{t.tenant}</p>
-        <div className="flex items-center justify-between mt-2 text-xs text-gray-400">
-          <span>{t.leaseFrom} → {t.leaseTo}</span>
-          <span>{formatCurrency(t.monthlyRent)}/mo</span>
-        </div>
-      </div>
-    );
-  }
+  const onGridReady = useCallback((params: GridReadyEvent) => {
+    params.api.sizeColumnsToFit();
+  }, []);
+
+  // Timeline chart
+  const timelineOptions: ApexCharts.ApexOptions = {
+    chart: { type: "bar", toolbar: { show: false }, fontFamily: "inherit" },
+    plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: "60%" } },
+    colors: ["#ef4444", "#ef4444", "#f59e0b", "#10b981"],
+    xaxis: { categories: ["Expired", "Critical (<90d)", "Warning (90-180d)", "OK (180d+)"],
+      labels: { style: { colors: "#8b8fa3", fontSize: "11px" } } },
+    yaxis: { labels: { style: { colors: "#8b8fa3", fontSize: "11px" } } },
+    grid: { borderColor: "#f0f0f5" },
+    dataLabels: { enabled: true, style: { fontSize: "12px", fontWeight: "bold" } },
+    legend: { show: false },
+    tooltip: { enabled: false },
+  };
+
+  const timelineSeries = [{
+    name: "Leases",
+    data: [
+      { x: "Expired", y: expired, fillColor: "#ef4444" },
+      { x: "Critical (<90d)", y: critical, fillColor: "#f87171" },
+      { x: "Warning (90-180d)", y: warning, fillColor: "#f59e0b" },
+      { x: "OK (180d+)", y: ok, fillColor: "#10b981" },
+    ],
+  }];
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Lease Expiration Timeline</h1>
-        <p className="text-gray-500 text-sm mt-1">Renewal pipeline — as of March 15, 2026</p>
+      <PageHeader title="Lease Expiration Timeline" subtitle="Renewal pipeline — as of March 15, 2026" />
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        {[
+          { label: "Expired", value: expired, bg: "bg-red-50", border: "border-red-200", text: "text-red-500", sub: "text-red-400" },
+          { label: "Critical (<90d)", value: critical, bg: "bg-red-50/50", border: "border-red-200", text: "text-red-400", sub: "text-red-300" },
+          { label: "Warning (90-180d)", value: warning, bg: "bg-amber-50/50", border: "border-amber-200", text: "text-amber-500", sub: "text-amber-400" },
+          { label: "OK (180d+)", value: ok, bg: "bg-emerald-50/50", border: "border-emerald-200", text: "text-emerald-600", sub: "text-emerald-400" },
+        ].map(c => (
+          <div key={c.label} className={`${c.bg} border ${c.border} rounded-xl p-3 sm:p-4 text-center shadow-sm`}>
+            <p className={`text-2xl sm:text-3xl font-bold ${c.text}`}>{c.value}</p>
+            <p className={`text-[11px] ${c.sub}`}>{c.label}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center shadow-sm">
-          <p className="text-3xl font-bold text-red-500">{expired.length}</p>
-          <p className="text-xs text-red-400">Expired / Holdover</p>
-        </div>
-        <div className="bg-red-50/50 border border-red-200 rounded-xl p-4 text-center shadow-sm">
-          <p className="text-3xl font-bold text-red-400">{critical.length}</p>
-          <p className="text-xs text-red-300">Within 90 Days</p>
-        </div>
-        <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-4 text-center shadow-sm">
-          <p className="text-3xl font-bold text-amber-500">{warning.length}</p>
-          <p className="text-xs text-amber-400">90–180 Days</p>
-        </div>
-        <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-4 text-center shadow-sm">
-          <p className="text-3xl font-bold text-emerald-600">{ok.length}</p>
-          <p className="text-xs text-emerald-400">180+ Days</p>
-        </div>
+      {/* Chart */}
+      <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] border border-[#e8eaef] mb-6">
+        <h3 className="text-[14px] font-bold text-[#1e1e2d] mb-2">Expiration Distribution</h3>
+        <Chart options={timelineOptions} series={timelineSeries} type="bar" height={180} />
       </div>
 
-      <div className="space-y-6">
-        {expired.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-red-600 mb-3 flex items-center gap-2">
-              <AlertTriangle size={16} /> Expired / Holdover
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {expired.map(t => <LeaseRow key={t.unit} t={t} urgency="expired" />)}
-            </div>
-          </div>
-        )}
-        {critical.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-red-500 mb-3 flex items-center gap-2">
-              <CalendarClock size={16} /> Expiring Within 90 Days
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {critical.map(t => <LeaseRow key={t.unit} t={t} urgency="critical" />)}
-            </div>
-          </div>
-        )}
-        {warning.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-amber-600 mb-3 flex items-center gap-2">
-              <CalendarClock size={16} /> Expiring in 90–180 Days
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {warning.map(t => <LeaseRow key={t.unit} t={t} urgency="warning" />)}
-            </div>
-          </div>
-        )}
-        {ok.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-emerald-600 mb-3 flex items-center gap-2">
-              <CheckCircle2 size={16} /> 180+ Days Remaining
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {ok.map(t => <LeaseRow key={t.unit} t={t} urgency="ok" />)}
-            </div>
-          </div>
-        )}
+      {/* AG Grid */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[14px] font-bold text-[#1e1e2d]">All Leases</h3>
+        <input
+          type="text"
+          placeholder="Search leases..."
+          className="px-3 py-1.5 bg-white border border-[#e8eaef] rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#4f6ef7] w-48 sm:w-64"
+          onChange={(e) => {
+            gridRef.current?.api?.setGridOption("quickFilterText", e.target.value);
+          }}
+        />
+      </div>
+      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: 420 }}>
+        <AgGridReact
+          ref={gridRef}
+          rowData={leaseData}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          onGridReady={onGridReady}
+          animateRows={true}
+          pagination={true}
+          paginationPageSize={500}
+          getRowId={(params) => params.data.unit}
+        />
       </div>
     </div>
   );
