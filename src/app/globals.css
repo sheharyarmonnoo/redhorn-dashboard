@@ -1,24 +1,58 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8f9fb;
-  --foreground: #1a1a2e;
+  --background: #f5f6fa;
+  --foreground: #1e1e2d;
   --card: #ffffff;
-  --card-border: #e2e5ea;
-  --sidebar-bg: #1a1a2e;
-  --sidebar-text: #a0a3b1;
-  --sidebar-active: #4f6ef7;
+  --card-border: #e8eaef;
+  --sidebar-bg: #1e1e2d;
   --accent: #4f6ef7;
+  --accent-hover: #3b5ce4;
   --accent-light: #eef1fe;
   --green: #10b981;
+  --green-light: #ecfdf5;
   --red: #ef4444;
+  --red-light: #fef2f2;
   --yellow: #f59e0b;
-  --gray: #6b7280;
+  --yellow-light: #fffbeb;
   --blue: #4f6ef7;
+  --blue-light: #eef1fe;
+  --purple: #7c5cfc;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Table row hover */
+.table-row-hover:hover {
+  background: #f8f9fb;
+}
+
+/* Smooth transitions */
+.transition-smooth {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
