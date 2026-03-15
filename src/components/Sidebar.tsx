@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { properties, getActiveProperty, setActiveProperty } from "@/data/portfolio";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
@@ -13,16 +14,19 @@ const nav = [
   { href: "/data-pipeline", label: "Data Pipeline", icon: Database, badge: null },
 ];
 
-const portfolioProperties = [
-  { id: "hollister", name: "Hollister Business Park", location: "Houston, TX", sqft: "~325K SF", active: true },
-  { id: "rv-ohio", name: "RV Park — Ohio", location: "Ohio", sqft: "~40 lots", active: false },
-];
-
 function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const pathname = usePathname();
   const [portfolioOpen, setPortfolioOpen] = useState(false);
-  const [activeProperty, setActiveProperty] = useState("hollister");
-  const current = portfolioProperties.find(p => p.id === activeProperty) || portfolioProperties[0];
+  const [activeProp, setActiveProp] = useState("hollister");
+  const current = properties.find(p => p.id === activeProp) || properties[0];
+
+  useEffect(() => { setActiveProp(getActiveProperty()); }, []);
+
+  function switchProperty(id: string) {
+    setActiveProp(id);
+    setActiveProperty(id);
+    setPortfolioOpen(false);
+  }
 
   if (collapsed) {
     return (
@@ -71,23 +75,23 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
 
         {portfolioOpen && (
           <div className="mt-1 bg-[#27272a] rounded border border-white/[0.06] overflow-hidden">
-            {portfolioProperties.map(prop => (
+            {properties.map(prop => (
               <button
                 key={prop.id}
-                onClick={() => { setActiveProperty(prop.id); setPortfolioOpen(false); }}
+                onClick={() => switchProperty(prop.id)}
                 className={`w-full text-left px-3 py-2 text-[11px] transition-colors cursor-pointer ${
-                  prop.id === activeProperty
+                  prop.id === activeProp
                     ? "bg-white/[0.08] text-white"
                     : "text-[#a1a1aa] hover:bg-white/[0.04] hover:text-[#d4d4d8]"
                 }`}
               >
-                <p className="font-medium">{prop.name}</p>
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">{prop.name}</p>
+                  {!prop.hasData && <span className="text-[8px] text-[#52525b] uppercase">No data</span>}
+                </div>
                 <p className="text-[9px] text-[#52525b] mt-0.5">{prop.location} · {prop.sqft}</p>
               </button>
             ))}
-            <button className="w-full flex items-center gap-1.5 px-3 py-2 text-[10px] text-[#52525b] hover:text-[#a1a1aa] border-t border-white/[0.06] cursor-pointer transition-colors">
-              <Plus size={12} /> Add Property
-            </button>
           </div>
         )}
       </div>

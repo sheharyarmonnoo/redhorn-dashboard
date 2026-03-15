@@ -1,15 +1,14 @@
 "use client";
 import { useState, useEffect } from "react";
+import PropertyGuard from "@/components/PropertyGuard";
 
 export default function MainContent({ children }: { children: React.ReactNode }) {
   const [marginLeft, setMarginLeft] = useState(240);
 
   useEffect(() => {
-    // Check saved state
     const saved = localStorage.getItem("redhorn_sidebar_collapsed");
     if (saved === "true") setMarginLeft(52);
 
-    // Check if mobile
     function updateMargin(collapsed: boolean) {
       if (window.innerWidth < 1024) {
         setMarginLeft(0);
@@ -44,7 +43,7 @@ export default function MainContent({ children }: { children: React.ReactNode })
       style={{ marginLeft }}
     >
       <div className="max-w-[1400px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
-        {children}
+        <PropertyGuard>{children}</PropertyGuard>
       </div>
     </main>
   );
