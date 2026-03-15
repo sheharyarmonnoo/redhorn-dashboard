@@ -221,7 +221,7 @@ export default function DataChat() {
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-0 left-0 right-0 sm:bottom-4 sm:right-4 sm:left-auto lg:left-[256px] lg:right-auto z-50 w-full sm:w-[360px] h-[85vh] sm:h-[500px] bg-white sm:rounded border border-[#e4e4e7] flex flex-col overflow-hidden">
+        <div className="fixed bottom-0 left-0 right-0 sm:bottom-0 sm:right-0 sm:left-auto lg:left-[240px] lg:right-auto z-50 w-full sm:w-[400px] lg:w-[440px] h-[85vh] sm:h-[50vh] lg:h-screen bg-white border-l border-t sm:border-t-0 border-[#e4e4e7] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="bg-[#18181b] text-white px-4 py-2.5 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
