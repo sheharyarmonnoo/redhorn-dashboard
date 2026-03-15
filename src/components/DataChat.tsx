@@ -242,7 +242,7 @@ export default function DataChat() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-4 right-4 lg:left-[256px] lg:right-auto z-50 bg-[#18181b] text-white rounded w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center hover:bg-[#27272a] transition-colors cursor-pointer"
+          className="fixed bottom-4 right-4 z-50 bg-[#18181b] text-white rounded w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center hover:bg-[#27272a] transition-colors cursor-pointer"
         >
           <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -257,7 +257,7 @@ export default function DataChat() {
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-0 left-0 right-0 sm:bottom-0 sm:right-0 sm:left-auto lg:left-[240px] lg:right-auto z-50 w-full sm:w-[400px] lg:w-[440px] h-[85vh] sm:h-[50vh] lg:h-screen bg-white border-l border-t sm:border-t-0 border-[#e4e4e7] flex flex-col overflow-hidden">
+        <div className="fixed bottom-0 right-0 sm:bottom-0 z-50 w-full sm:w-[400px] lg:w-[420px] h-[85vh] sm:h-[50vh] lg:h-screen bg-white border-l border-t sm:border-t-0 border-[#e4e4e7] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="bg-[#18181b] text-white px-4 py-2.5 flex items-center justify-between shrink-0">
             <div>
