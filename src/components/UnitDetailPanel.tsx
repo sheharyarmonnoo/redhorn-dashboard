@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { X, Save, Edit3, ChevronRight } from "lucide-react";
 import { Tenant, DelinquencyStage, ledgerA102, formatCurrency, getStatusLabel } from "@/data/tenants";
-import { updateTenantNote, getOverrideForUnit, updateDelinquencyStage, updateChargePosting, getChargePostings } from "@/data/store";
+import { updateTenantNote, getOverrideForUnit, updateDelinquencyStage, updateChargePosting, getChargePostings, getUnitNotes, addUnitNote, editUnitNote, deleteUnitNote, NoteEntry } from "@/data/store";
 
 interface Props {
   tenant: Tenant | null;
@@ -63,20 +63,19 @@ const postingTypes = [
 ];
 
 export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
-  const [editingNotes, setEditingNotes] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
-  const [savedNote, setSavedNote] = useState<string | null>(null);
+  const [notesLog, setNotesLog] = useState<NoteEntry[]>([]);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
   const [postings, setPostings] = useState<Record<string, boolean>>({});
   const [delinqStage, setDelinqStage] = useState<DelinquencyStage>("none");
   const [pending, setPending] = useState<PendingChange[]>([]);
 
   useEffect(() => {
     if (tenant) {
-      const override = getOverrideForUnit(tenant.unit);
-      const currentNote = override?.notes !== undefined ? override.notes : tenant.notes;
-      setNotesDraft(currentNote);
-      setSavedNote(override?.notes !== undefined ? override.notes : null);
-      setEditingNotes(false);
+      setNotesDraft("");
+      setEditingNoteId(null);
+      setNotesLog(getUnitNotes(tenant.unit));
 
       // Load posting overrides for this unit
       const allPostings = loadPostings();
@@ -97,14 +96,36 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
 
   if (!tenant) return null;
 
-  const displayNotes = savedNote !== null ? savedNote : tenant.notes;
   const ledger = tenant.unit === "A-102" ? ledgerA102 : [];
 
-  function handleSaveNotes() {
-    updateTenantNote(tenant!.unit, notesDraft);
-    setSavedNote(notesDraft);
-    setEditingNotes(false);
+  // Seed note from tenant data if no log entries exist
+  const seedNote = tenant.notes && notesLog.length === 0 ? tenant.notes : null;
+
+  function handleAddNote() {
+    if (!notesDraft.trim()) return;
+    addUnitNote(tenant!.unit, notesDraft.trim());
+    setNotesLog(getUnitNotes(tenant!.unit));
+    setNotesDraft("");
     onUpdated?.();
+  }
+
+  function handleEditNote(id: string) {
+    if (!editDraft.trim()) return;
+    editUnitNote(tenant!.unit, id, editDraft.trim());
+    setNotesLog(getUnitNotes(tenant!.unit));
+    setEditingNoteId(null);
+    setEditDraft("");
+  }
+
+  function handleDeleteNote(id: string) {
+    deleteUnitNote(tenant!.unit, id);
+    setNotesLog(getUnitNotes(tenant!.unit));
+  }
+
+  function formatTimestamp(iso: string) {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+      " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   }
 
   function togglePosting(key: string) {
@@ -253,31 +274,80 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
             </>
           )}
 
-          {/* Notes */}
+          {/* Notes — timestamped, stackable (newest first) */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium">Notes</p>
-              {!editingNotes ? (
-                <button onClick={() => { setNotesDraft(displayNotes); setEditingNotes(true); }}
-                  className="text-[11px] text-[#71717a] hover:text-[#18181b] cursor-pointer flex items-center gap-1">
-                  <Edit3 size={11} /> {displayNotes ? "Edit" : "Add"}
-                </button>
-              ) : (
-                <button onClick={handleSaveNotes}
-                  className="text-[11px] text-[#16a34a] font-medium cursor-pointer flex items-center gap-1">
-                  <Save size={11} /> Save
-                </button>
-              )}
+            <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium mb-2">
+              Notes {notesLog.length > 0 && `(${notesLog.length})`}
+            </p>
+
+            {/* Add new note */}
+            <div className="flex gap-2 mb-3">
+              <textarea
+                value={notesDraft}
+                onChange={e => setNotesDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAddNote(); } }}
+                placeholder="Add a note..."
+                rows={2}
+                className="flex-1 text-[12px] text-[#18181b] bg-[#fafafa] border border-[#e4e4e7] rounded p-2.5 leading-relaxed focus:outline-none focus:border-[#71717a] resize-none"
+              />
+              <button
+                onClick={handleAddNote}
+                disabled={!notesDraft.trim()}
+                className="self-end text-[10px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] disabled:bg-[#e4e4e7] disabled:text-[#a1a1aa] cursor-pointer transition-colors"
+              >
+                Add
+              </button>
             </div>
-            {editingNotes ? (
-              <textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)}
-                placeholder="PM issues, tenant requests, maintenance notes..."
-                className="w-full text-[12px] text-[#18181b] bg-white border border-[#e4e4e7] rounded p-3 leading-relaxed focus:outline-none focus:border-[#71717a] min-h-[80px] resize-y"
-                autoFocus />
-            ) : displayNotes ? (
-              <p className="text-[12px] text-[#71717a] bg-[#fafafa] p-3 rounded leading-relaxed whitespace-pre-wrap">{displayNotes}</p>
-            ) : (
-              <p className="text-[12px] text-[#d4d4d8] italic bg-[#fafafa] p-3 rounded">No notes</p>
+
+            {/* Seed note (from original data, before any user notes) */}
+            {seedNote && (
+              <div className="bg-[#fafafa] rounded p-2.5 mb-2 border border-[#f4f4f5]">
+                <p className="text-[12px] text-[#71717a] leading-relaxed whitespace-pre-wrap">{seedNote}</p>
+                <p className="text-[9px] text-[#d4d4d8] mt-1.5">From Yardi import</p>
+              </div>
+            )}
+
+            {/* Notes log — newest first */}
+            {notesLog.length > 0 ? (
+              <div className="space-y-2 max-h-[240px] overflow-y-auto">
+                {notesLog.map(entry => (
+                  <div key={entry.id} className="group bg-white border border-[#e4e4e7] rounded p-2.5">
+                    {editingNoteId === entry.id ? (
+                      <div className="space-y-1.5">
+                        <textarea value={editDraft} onChange={e => setEditDraft(e.target.value)}
+                          className="w-full text-[12px] text-[#18181b] bg-[#fafafa] border border-[#e4e4e7] rounded p-2 leading-relaxed focus:outline-none focus:border-[#71717a] resize-none min-h-[40px]"
+                          autoFocus />
+                        <div className="flex gap-1.5">
+                          <button onClick={() => handleEditNote(entry.id)}
+                            className="text-[10px] font-medium px-2 py-0.5 bg-[#18181b] text-white rounded cursor-pointer">Save</button>
+                          <button onClick={() => setEditingNoteId(null)}
+                            className="text-[10px] text-[#a1a1aa] cursor-pointer">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-[12px] text-[#18181b] leading-relaxed whitespace-pre-wrap">{entry.text}</p>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <div className="text-[9px] text-[#a1a1aa]">
+                            <span>{formatTimestamp(entry.createdAt)}</span>
+                            {entry.updatedAt && (
+                              <span className="ml-1.5 text-[#d4d4d8]">· edited {formatTimestamp(entry.updatedAt)}</span>
+                            )}
+                          </div>
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => { setEditingNoteId(entry.id); setEditDraft(entry.text); }}
+                              className="text-[9px] text-[#71717a] hover:text-[#18181b] cursor-pointer">Edit</button>
+                            <button onClick={() => handleDeleteNote(entry.id)}
+                              className="text-[9px] text-[#a1a1aa] hover:text-[#dc2626] cursor-pointer">Delete</button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : !seedNote && (
+              <p className="text-[12px] text-[#d4d4d8] italic bg-[#fafafa] p-3 rounded">No notes yet</p>
             )}
           </div>
 

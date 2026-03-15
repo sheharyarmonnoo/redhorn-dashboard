@@ -56,6 +56,60 @@ export function getOverrideForUnit(unit: string): TenantOverride | undefined {
   return loadOverrides()[unit];
 }
 
+// --- Unit Notes Log (timestamped, stackable) ---
+
+const NOTES_LOG_KEY = "redhorn_unit_notes_log";
+
+export interface NoteEntry {
+  id: string;
+  text: string;
+  createdAt: string; // ISO timestamp
+  updatedAt?: string; // ISO timestamp if edited
+}
+
+function loadNotesLog(): Record<string, NoteEntry[]> {
+  if (typeof window === "undefined") return {};
+  try { return JSON.parse(localStorage.getItem(NOTES_LOG_KEY) || "{}"); }
+  catch { return {}; }
+}
+
+function saveNotesLog(log: Record<string, NoteEntry[]>) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(NOTES_LOG_KEY, JSON.stringify(log));
+}
+
+export function getUnitNotes(unit: string): NoteEntry[] {
+  return loadNotesLog()[unit] || [];
+}
+
+export function addUnitNote(unit: string, text: string): NoteEntry {
+  const log = loadNotesLog();
+  const entry: NoteEntry = {
+    id: Date.now().toString(),
+    text,
+    createdAt: new Date().toISOString(),
+  };
+  log[unit] = [entry, ...(log[unit] || [])]; // newest first
+  saveNotesLog(log);
+  // Also update the legacy notes field with latest
+  updateTenantNote(unit, text);
+  return entry;
+}
+
+export function editUnitNote(unit: string, noteId: string, newText: string) {
+  const log = loadNotesLog();
+  const entries = log[unit] || [];
+  log[unit] = entries.map(e => e.id === noteId ? { ...e, text: newText, updatedAt: new Date().toISOString() } : e);
+  saveNotesLog(log);
+}
+
+export function deleteUnitNote(unit: string, noteId: string) {
+  const log = loadNotesLog();
+  const entries = log[unit] || [];
+  log[unit] = entries.filter(e => e.id !== noteId);
+  saveNotesLog(log);
+}
+
 export function updateDelinquencyStage(unit: string, stage: string) {
   const overrides = loadOverrides();
   overrides[unit] = { ...overrides[unit], delinquencyStage: stage };

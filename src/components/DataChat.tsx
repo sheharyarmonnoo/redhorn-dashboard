@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { tenants, monthlyRevenue, formatCurrency, getAlerts, Tenant } from "@/data/tenants";
-import { addKanbanItem, loadKanban, updateTenantNote } from "@/data/store";
+import { addKanbanItem, loadKanban, addUnitNote } from "@/data/store";
 
 interface Message {
   role: "user" | "assistant";
@@ -148,7 +148,7 @@ function answerQuestion(q: string): string {
     const noteText = noteMatch[2].trim();
     const tenant = tenants.find(t => t.unit === unitId);
     if (!tenant) return `Unit **${unitId}** not found.`;
-    updateTenantNote(unitId, noteText);
+    addUnitNote(unitId, noteText);
     return `Updated note for **${unitId}**${tenant.tenant ? ` (${tenant.tenant})` : ""}:\n"${noteText}"\n\nView it on the Site Plan by clicking the unit.`;
   }
 
