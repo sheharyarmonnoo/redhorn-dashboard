@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { properties, getActiveProperty } from "@/data/portfolio";
+import { getProperties, getActiveProperty } from "@/data/portfolio";
 
 export function useActiveProperty() {
   const [propId, setPropId] = useState("hollister");
@@ -15,7 +15,8 @@ export function useActiveProperty() {
     return () => window.removeEventListener("portfolio-changed", handle);
   }, []);
 
-  const property = properties.find(p => p.id === propId) || properties[0];
+  const props = getProperties();
+  const property = props.find(p => p.id === propId) || props[0];
   return property;
 }
 

@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { properties, getActiveProperty, setActiveProperty } from "@/data/portfolio";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Trash2 } from "lucide-react";
+import { getProperties, getActiveProperty, setActiveProperty, addProperty, deleteProperty, Property } from "@/data/portfolio";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
@@ -18,14 +18,42 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
   const pathname = usePathname();
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   const [activeProp, setActiveProp] = useState("hollister");
-  const current = properties.find(p => p.id === activeProp) || properties[0];
+  const [propList, setPropList] = useState<Property[]>(getProperties());
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addLocation, setAddLocation] = useState("");
+  const [addSqft, setAddSqft] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const current = propList.find(p => p.id === activeProp) || propList[0];
 
-  useEffect(() => { setActiveProp(getActiveProperty()); }, []);
+  useEffect(() => {
+    setActiveProp(getActiveProperty());
+    setPropList(getProperties());
+    function handleListChange() { setPropList(getProperties()); }
+    window.addEventListener("portfolio-list-changed", handleListChange);
+    return () => window.removeEventListener("portfolio-list-changed", handleListChange);
+  }, []);
 
   function switchProperty(id: string) {
     setActiveProp(id);
     setActiveProperty(id);
     setPortfolioOpen(false);
+  }
+
+  function handleAddProperty() {
+    if (!addName.trim()) return;
+    const prop = addProperty(addName.trim(), addLocation.trim(), addSqft.trim());
+    setPropList(getProperties());
+    setAddName(""); setAddLocation(""); setAddSqft("");
+    setShowAddForm(false);
+    switchProperty(prop.id);
+  }
+
+  function handleDeleteProperty(id: string) {
+    deleteProperty(id);
+    setPropList(getProperties());
+    setConfirmDelete(null);
+    setActiveProp(getActiveProperty());
   }
 
   if (collapsed) {
@@ -75,23 +103,87 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
 
         {portfolioOpen && (
           <div className="mt-1 bg-[#27272a] rounded border border-white/[0.06] overflow-hidden">
-            {properties.map(prop => (
-              <button
-                key={prop.id}
-                onClick={() => switchProperty(prop.id)}
-                className={`w-full text-left px-3 py-2 text-[11px] transition-colors cursor-pointer ${
-                  prop.id === activeProp
-                    ? "bg-white/[0.08] text-white"
-                    : "text-[#a1a1aa] hover:bg-white/[0.04] hover:text-[#d4d4d8]"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <p className="font-medium">{prop.name}</p>
-                  {!prop.hasData && <span className="text-[8px] text-[#52525b] uppercase">No data</span>}
-                </div>
-                <p className="text-[9px] text-[#52525b] mt-0.5">{prop.location} · {prop.sqft}</p>
-              </button>
+            {propList.map(prop => (
+              <div key={prop.id} className="group relative">
+                <button
+                  onClick={() => switchProperty(prop.id)}
+                  className={`w-full text-left px-3 py-2 text-[11px] transition-colors cursor-pointer ${
+                    prop.id === activeProp
+                      ? "bg-white/[0.08] text-white"
+                      : "text-[#a1a1aa] hover:bg-white/[0.04] hover:text-[#d4d4d8]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium">{prop.name}</p>
+                    {!prop.hasData && <span className="text-[8px] text-[#52525b] uppercase">No data</span>}
+                  </div>
+                  <p className="text-[9px] text-[#52525b] mt-0.5">{prop.location}{prop.sqft ? ` · ${prop.sqft}` : ""}</p>
+                </button>
+                {propList.length > 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmDelete(prop.id); }}
+                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 text-[#52525b] hover:text-[#dc2626] cursor-pointer transition-all p-0.5"
+                    title="Delete property"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                )}
+              </div>
             ))}
+
+            {/* Add Property */}
+            {showAddForm ? (
+              <div className="p-2.5 border-t border-white/[0.06] space-y-1.5">
+                <input type="text" value={addName} onChange={e => setAddName(e.target.value)}
+                  placeholder="Property name"
+                  className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]"
+                  autoFocus />
+                <input type="text" value={addLocation} onChange={e => setAddLocation(e.target.value)}
+                  placeholder="Location (e.g. Houston, TX)"
+                  className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]" />
+                <input type="text" value={addSqft} onChange={e => setAddSqft(e.target.value)}
+                  placeholder="Size (e.g. ~50K SF)"
+                  className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]" />
+                <div className="flex gap-1.5 pt-0.5">
+                  <button onClick={handleAddProperty} disabled={!addName.trim()}
+                    className="text-[10px] font-medium px-2.5 py-1 bg-white text-[#18181b] rounded hover:bg-[#f4f4f5] disabled:opacity-40 cursor-pointer transition-colors">
+                    Add
+                  </button>
+                  <button onClick={() => { setShowAddForm(false); setAddName(""); setAddLocation(""); setAddSqft(""); }}
+                    className="text-[10px] text-[#71717a] cursor-pointer px-2 py-1">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setShowAddForm(true)}
+                className="w-full flex items-center gap-1.5 px-3 py-2 text-[10px] text-[#52525b] hover:text-[#a1a1aa] border-t border-white/[0.06] cursor-pointer transition-colors">
+                <Plus size={11} /> Add Property
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {confirmDelete && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setConfirmDelete(null)} />
+            <div className="relative bg-white rounded p-5 w-[340px] mx-4">
+              <p className="text-[14px] font-semibold text-[#18181b]">Delete Property</p>
+              <p className="text-[12px] text-[#71717a] mt-2 leading-relaxed">
+                Are you sure you want to delete <strong className="text-[#18181b]">{propList.find(p => p.id === confirmDelete)?.name}</strong>? This will remove it from your portfolio list. This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setConfirmDelete(null)}
+                  className="text-[12px] font-medium px-3 py-1.5 text-[#71717a] hover:text-[#18181b] cursor-pointer">
+                  Cancel
+                </button>
+                <button onClick={() => handleDeleteProperty(confirmDelete)}
+                  className="text-[12px] font-medium px-3 py-1.5 bg-[#dc2626] text-white rounded hover:bg-[#b91c1c] cursor-pointer transition-colors">
+                  Delete
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
