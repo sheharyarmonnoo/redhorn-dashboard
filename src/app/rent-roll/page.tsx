@@ -58,7 +58,7 @@ export default function RentRollPage() {
     if (isMobile) {
       // Mobile: show only essential columns
       return [
-        { field: "unit", headerName: "Unit", width: 75, pinned: "left", sort: "asc" },
+        { field: "unit", headerName: "Unit", width: 90, pinned: "left", sort: "asc" },
         { field: "tenant", headerName: "Tenant", minWidth: 130, flex: 1,
           valueFormatter: (p: { value: string }) => p.value || "Vacant" },
         { field: "monthlyRent", headerName: "Rent", width: 90, type: "numericColumn",
@@ -68,7 +68,7 @@ export default function RentRollPage() {
     }
     // Desktop: full columns
     return [
-      { field: "unit", headerName: "Unit", width: 100, pinned: "left", sort: "asc" },
+      { field: "unit", headerName: "Unit", width: 120, pinned: "left", sort: "asc" },
       { field: "tenant", headerName: "Tenant", minWidth: 200, flex: 1,
         valueFormatter: (p: { value: string }) => p.value || "— Vacant —" },
       { field: "leaseType", headerName: "Lease Type", width: 140,

@@ -120,7 +120,7 @@ export default function AlertsPage() {
     if (isMobile) {
       return [
         { field: "severity", headerName: "Sev", width: 85, cellRenderer: SeverityCellRenderer },
-        { field: "unit", headerName: "Unit", width: 70 },
+        { field: "unit", headerName: "Unit", width: 90 },
         { field: "category", headerName: "Type", width: 140, cellRenderer: CategoryCellRenderer },
         { field: "detail", headerName: "Details", minWidth: 180, flex: 1 },
       ];
@@ -128,7 +128,7 @@ export default function AlertsPage() {
     return [
       { field: "severity", headerName: "Severity", width: 110, cellRenderer: SeverityCellRenderer, filter: true },
       { field: "category", headerName: "Category", width: 170, cellRenderer: CategoryCellRenderer, filter: true },
-      { field: "unit", headerName: "Unit", width: 80 },
+      { field: "unit", headerName: "Unit", width: 100 },
       { field: "tenant", headerName: "Tenant", minWidth: 160, flex: 1 },
       { field: "building", headerName: "Bldg", width: 70 },
       { field: "detail", headerName: "Details", minWidth: 280, flex: 2 },

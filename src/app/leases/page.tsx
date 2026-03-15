@@ -73,7 +73,7 @@ export default function LeasesPage() {
   const columnDefs = useMemo<ColDef[]>(() => {
     if (isMobile) {
       return [
-        { field: "unit", headerName: "Unit", width: 75, sort: "asc" },
+        { field: "unit", headerName: "Unit", width: 90, sort: "asc" },
         { field: "tenant", headerName: "Tenant", minWidth: 120, flex: 1 },
         { field: "daysLeft", headerName: "Days", width: 70, type: "numericColumn",
           cellRenderer: (p: { value: number }) => (
@@ -85,7 +85,7 @@ export default function LeasesPage() {
       ];
     }
     return [
-      { field: "unit", headerName: "Unit", width: 90, sort: "asc" },
+      { field: "unit", headerName: "Unit", width: 110, sort: "asc" },
       { field: "tenant", headerName: "Tenant", minWidth: 180, flex: 1 },
       { field: "building", headerName: "Bldg", width: 70 },
       { field: "sqft", headerName: "Sq Ft", width: 90, type: "numericColumn",

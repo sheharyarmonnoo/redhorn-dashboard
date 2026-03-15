@@ -68,20 +68,8 @@ export default function DashboardPage() {
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" />
       </div>
 
-      {/* Action Items */}
-      {alerts.filter(a => a.type === "critical").length > 0 && (
-        <div className="bg-white border border-[#e4e4e7] rounded p-4 mb-6">
-          <p className="text-[12px] font-semibold text-[#dc2626] mb-3">Action Required — {alerts.filter(a => a.type === "critical").length} items</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {alerts.filter(a => a.type === "critical").map((alert, i) => (
-              <div key={i} className="flex items-center gap-2 text-[12px] text-[#18181b]">
-                <span className="w-1 h-1 rounded-full bg-[#dc2626] flex-shrink-0" />
-                <span><span className="font-medium">{alert.unit}</span> — {alert.message}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Notion-style Action Items */}
+      <ActionItems />
 
       {/* Charts */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mb-6">

@@ -169,7 +169,7 @@ export default function DataChat() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-5 right-5 lg:left-[275px] lg:right-auto z-50 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-full w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center shadow-lg hover:shadow-xl transition-all hover:scale-105 cursor-pointer"
+          className="fixed bottom-4 right-4 lg:left-[256px] lg:right-auto z-50 bg-[#18181b] text-white rounded w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center hover:bg-[#27272a] transition-colors cursor-pointer"
         >
           <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -184,15 +184,10 @@ export default function DataChat() {
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-0 left-0 right-0 sm:bottom-5 sm:right-5 sm:left-auto lg:left-[275px] lg:right-auto z-50 w-full sm:w-[380px] h-[85vh] sm:h-[520px] bg-white sm:rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
+        <div className="fixed bottom-0 left-0 right-0 sm:bottom-4 sm:right-4 sm:left-auto lg:left-[256px] lg:right-auto z-50 w-full sm:w-[360px] h-[85vh] sm:h-[500px] bg-white sm:rounded border border-[#e4e4e7] flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white px-4 py-3 flex items-center justify-between shrink-0">
+          <div className="bg-[#18181b] text-white px-4 py-2.5 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
-                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              </div>
               <div>
                 <p className="text-[13px] font-bold">Portfolio Chat</p>
                 <p className="text-[10px] text-slate-300">Ask about your data</p>

@@ -50,36 +50,16 @@ function UnitBlock({ tenant, onSelect, isSelected }: {
   );
 }
 
-function BuildingGroup({ label, sub, accent, units, cols, onSelect, selectedUnit }: {
-  label: string;
-  sub: string;
-  accent: string;
-  units: Tenant[];
-  cols: string;
-  onSelect: (t: Tenant) => void;
-  selectedUnit: string | null;
-}) {
-  const occ = units.filter(u => u.status !== "vacant").length;
-  const vac = units.filter(u => u.status === "vacant").length;
+function BuildingHeader({ label, sub, occ, vac }: { label: string; sub: string; occ: number; vac: number }) {
   return (
-    <div className="bg-white border border-[#e4e4e7] rounded p-3 sm:p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className={`w-0.5 h-4 rounded-full ${accent}`} />
-          <div>
-            <h3 className="text-[12px] font-semibold text-[#18181b]">{label}</h3>
-            <p className="text-[10px] text-[#a1a1aa]">{sub}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-[#71717a]">
-          <span>{occ} occ</span>
-          {vac > 0 && <><span className="text-[#d4d4d8]">/</span><span>{vac} vac</span></>}
-        </div>
+    <div className="flex items-center justify-between mb-3">
+      <div>
+        <h3 className="text-[12px] font-semibold text-[#18181b]">{label}</h3>
+        <p className="text-[10px] text-[#a1a1aa]">{sub}</p>
       </div>
-      <div className={`grid ${cols} gap-1.5`}>
-        {units.map(t => (
-          <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
-        ))}
+      <div className="flex items-center gap-1.5 text-[10px] text-[#71717a]">
+        <span>{occ} occ</span>
+        {vac > 0 && <><span className="text-[#d4d4d8]">/</span><span>{vac} vac</span></>}
       </div>
     </div>
   );
@@ -110,15 +90,25 @@ export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: T
       <div className="p-3 sm:p-4 space-y-3 bg-[#fafafa]">
         {/* Building A + Building D */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-          <div className="lg:col-span-8">
-            <BuildingGroup label="Building A" sub="Industrial / Warehouse" accent="bg-[#18181b]"
-              units={buildingA} cols="grid-cols-4 sm:grid-cols-5 md:grid-cols-7"
-              onSelect={onSelect} selectedUnit={selectedUnit} />
+          <div className="lg:col-span-8 bg-white border border-[#e4e4e7] rounded p-3 sm:p-4">
+            <BuildingHeader label="Building A" sub="Industrial / Warehouse"
+              occ={buildingA.filter(u => u.status !== "vacant").length}
+              vac={buildingA.filter(u => u.status === "vacant").length} />
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-1.5">
+              {buildingA.map(t => (
+                <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
+              ))}
+            </div>
           </div>
-          <div className="lg:col-span-4">
-            <BuildingGroup label="Building D" sub="Warehouse / Industrial" accent="bg-[#71717a]"
-              units={buildingD} cols="grid-cols-2"
-              onSelect={onSelect} selectedUnit={selectedUnit} />
+          <div className="lg:col-span-4 bg-white border border-[#e4e4e7] rounded p-3 sm:p-4">
+            <BuildingHeader label="Building D" sub="Warehouse / Industrial"
+              occ={buildingD.filter(u => u.status !== "vacant").length}
+              vac={buildingD.filter(u => u.status === "vacant").length} />
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              {buildingD.map(t => (
+                <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
+              ))}
+            </div>
           </div>
         </div>
 
@@ -133,14 +123,28 @@ export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: T
         </div>
 
         {/* Building C — Floors 1 & 2 */}
-        <BuildingGroup label="Building C — Floors 1 & 2" sub="Office Suites" accent="bg-[#2563eb]"
-          units={buildingC_lower} cols="grid-cols-4 sm:grid-cols-6 md:grid-cols-9"
-          onSelect={onSelect} selectedUnit={selectedUnit} />
+        <div className="bg-white border border-[#e4e4e7] rounded p-3 sm:p-4">
+          <BuildingHeader label="Building C — Floors 1 & 2" sub="Office Suites"
+            occ={buildingC_lower.filter(u => u.status !== "vacant").length}
+            vac={buildingC_lower.filter(u => u.status === "vacant").length} />
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-9 gap-1.5">
+            {buildingC_lower.map(t => (
+              <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
+            ))}
+          </div>
+        </div>
 
         {/* Building C — Floor 3 */}
-        <BuildingGroup label="Building C — Floor 3" sub="Office Suites (Upper)" accent="bg-[#7c3aed]"
-          units={buildingC_upper} cols="grid-cols-4 sm:grid-cols-5 md:grid-cols-8"
-          onSelect={onSelect} selectedUnit={selectedUnit} />
+        <div className="bg-white border border-[#e4e4e7] rounded p-3 sm:p-4">
+          <BuildingHeader label="Building C — Floor 3" sub="Office Suites (Upper)"
+            occ={buildingC_upper.filter(u => u.status !== "vacant").length}
+            vac={buildingC_upper.filter(u => u.status === "vacant").length} />
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-8 gap-1.5">
+            {buildingC_upper.map(t => (
+              <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Footer */}
