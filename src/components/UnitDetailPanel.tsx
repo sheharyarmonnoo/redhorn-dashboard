@@ -1,15 +1,33 @@
 "use client";
-import { X, Building2, Calendar, DollarSign, Zap, FileText, CreditCard } from "lucide-react";
-import { Tenant, ledgerA102, formatCurrency, getStatusColor, getStatusLabel } from "@/data/tenants";
+import { useState, useEffect } from "react";
+import { X, Building2, Calendar, DollarSign, Zap, FileText, CreditCard, Save, Edit3 } from "lucide-react";
+import { Tenant, ledgerA102, formatCurrency, getStatusLabel } from "@/data/tenants";
+import { updateTenantNote, getOverrideForUnit } from "@/data/store";
 
 interface Props {
   tenant: Tenant | null;
   onClose: () => void;
+  onUpdated?: () => void;
 }
 
-export default function UnitDetailPanel({ tenant, onClose }: Props) {
+export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [savedNote, setSavedNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tenant) {
+      const override = getOverrideForUnit(tenant.unit);
+      const currentNote = override?.notes !== undefined ? override.notes : tenant.notes;
+      setNotesDraft(currentNote);
+      setSavedNote(override?.notes !== undefined ? override.notes : null);
+      setEditingNotes(false);
+    }
+  }, [tenant]);
+
   if (!tenant) return null;
 
+  const displayNotes = savedNote !== null ? savedNote : tenant.notes;
   const ledger = tenant.unit === "A-102" ? ledgerA102 : [];
 
   const statusStyles: Record<string, string> = {
@@ -19,6 +37,13 @@ export default function UnitDetailPanel({ tenant, onClose }: Props) {
     vacant: "bg-gray-50 text-gray-500 border-gray-200",
     expiring_soon: "bg-blue-50 text-blue-700 border-blue-200",
   };
+
+  function handleSaveNotes() {
+    updateTenantNote(tenant!.unit, notesDraft);
+    setSavedNote(notesDraft);
+    setEditingNotes(false);
+    onUpdated?.();
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -35,20 +60,19 @@ export default function UnitDetailPanel({ tenant, onClose }: Props) {
             </div>
             <p className="text-[12px] text-[#8b8fa3] mt-1">Building {tenant.building} · {tenant.sqft.toLocaleString()} sq ft</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer">
             <X size={18} className="text-[#8b8fa3]" />
           </button>
         </div>
 
         <div className="px-6 py-6 space-y-6">
           {tenant.status === "vacant" ? (
-            <div className="text-center py-16">
+            <div className="text-center py-10">
               <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
                 <Building2 size={28} className="text-gray-400" />
               </div>
               <p className="text-[#8b8fa3] text-[16px] font-medium">Vacant Unit</p>
               <p className="text-[#b0b4c5] text-[13px] mt-1">{tenant.sqft.toLocaleString()} sq ft available for lease</p>
-              {tenant.notes && <p className="text-[#b0b4c5] text-[12px] mt-3 bg-gray-50 rounded-xl px-4 py-3">{tenant.notes}</p>}
             </div>
           ) : (
             <>
@@ -86,53 +110,83 @@ export default function UnitDetailPanel({ tenant, onClose }: Props) {
                   <p className="text-[11px] text-red-400 mt-1">Last payment received: {tenant.lastPaymentDate}</p>
                 </div>
               )}
-
-              {/* Notes */}
-              {tenant.notes && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <FileText size={14} className="text-[#8b8fa3]" />
-                    <p className="text-[12px] font-semibold text-[#1e1e2d]">Notes</p>
-                  </div>
-                  <p className="text-[12px] text-[#5a5e73] bg-[#f5f6fa] p-4 rounded-xl leading-relaxed">{tenant.notes}</p>
-                </div>
-              )}
-
-              {/* Ledger */}
-              {ledger.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <CreditCard size={14} className="text-[#8b8fa3]" />
-                      <p className="text-[12px] font-semibold text-[#1e1e2d]">Payment History</p>
-                    </div>
-                    <span className="text-[10px] text-[#8b8fa3] font-medium">{ledger.length} transactions</span>
-                  </div>
-                  <div className="max-h-72 overflow-y-auto rounded-xl border border-[#e8eaef]">
-                    <table className="w-full text-[11px]">
-                      <thead className="sticky top-0 bg-[#f5f6fa]">
-                        <tr className="text-[#8b8fa3] font-semibold uppercase tracking-wider">
-                          <th className="text-left px-3 py-2.5">Date</th>
-                          <th className="text-left px-3 py-2.5">Description</th>
-                          <th className="text-right px-3 py-2.5">Charge</th>
-                          <th className="text-right px-3 py-2.5">Payment</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ledger.slice(-12).map((entry, i) => (
-                          <tr key={i} className="border-t border-[#f0f0f5] hover:bg-[#f8f9fb]">
-                            <td className="px-3 py-2 text-[#8b8fa3]">{entry.date}</td>
-                            <td className="px-3 py-2 text-[#1e1e2d] truncate max-w-[180px]">{entry.description}</td>
-                            <td className="px-3 py-2 text-right text-red-500 font-medium">{entry.charge > 0 ? formatCurrency(entry.charge) : ""}</td>
-                            <td className="px-3 py-2 text-right text-emerald-600 font-medium">{entry.payment > 0 ? formatCurrency(entry.payment) : ""}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
             </>
+          )}
+
+          {/* Editable Notes */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <FileText size={14} className="text-[#8b8fa3]" />
+                <p className="text-[12px] font-semibold text-[#1e1e2d]">Notes</p>
+              </div>
+              {!editingNotes ? (
+                <button
+                  onClick={() => { setNotesDraft(displayNotes); setEditingNotes(true); }}
+                  className="flex items-center gap-1 text-[11px] text-[#4f6ef7] font-medium hover:underline cursor-pointer"
+                >
+                  <Edit3 size={12} />
+                  {displayNotes ? "Edit" : "Add Note"}
+                </button>
+              ) : (
+                <button
+                  onClick={handleSaveNotes}
+                  className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold hover:underline cursor-pointer"
+                >
+                  <Save size={12} />
+                  Save
+                </button>
+              )}
+            </div>
+
+            {editingNotes ? (
+              <textarea
+                value={notesDraft}
+                onChange={(e) => setNotesDraft(e.target.value)}
+                placeholder="Add notes about this unit (PM issues, tenant requests, maintenance, etc.)"
+                className="w-full text-[12px] text-[#1e1e2d] bg-white border border-[#4f6ef7] rounded-xl p-4 leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#4f6ef7]/20 min-h-[100px] resize-y"
+                autoFocus
+              />
+            ) : displayNotes ? (
+              <p className="text-[12px] text-[#5a5e73] bg-[#f5f6fa] p-4 rounded-xl leading-relaxed whitespace-pre-wrap">{displayNotes}</p>
+            ) : (
+              <p className="text-[12px] text-[#b0b4c5] italic bg-[#f5f6fa] p-4 rounded-xl">No notes yet. Click &quot;Add Note&quot; to add one.</p>
+            )}
+          </div>
+
+          {/* Ledger */}
+          {ledger.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <CreditCard size={14} className="text-[#8b8fa3]" />
+                  <p className="text-[12px] font-semibold text-[#1e1e2d]">Payment History</p>
+                </div>
+                <span className="text-[10px] text-[#8b8fa3] font-medium">{ledger.length} transactions</span>
+              </div>
+              <div className="max-h-72 overflow-y-auto rounded-xl border border-[#e8eaef]">
+                <table className="w-full text-[11px]">
+                  <thead className="sticky top-0 bg-[#f5f6fa]">
+                    <tr className="text-[#8b8fa3] font-semibold uppercase tracking-wider">
+                      <th className="text-left px-3 py-2.5">Date</th>
+                      <th className="text-left px-3 py-2.5">Description</th>
+                      <th className="text-right px-3 py-2.5">Charge</th>
+                      <th className="text-right px-3 py-2.5">Payment</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ledger.slice(-12).map((entry, i) => (
+                      <tr key={i} className="border-t border-[#f0f0f5] hover:bg-[#f8f9fb]">
+                        <td className="px-3 py-2 text-[#8b8fa3]">{entry.date}</td>
+                        <td className="px-3 py-2 text-[#1e1e2d] truncate max-w-[180px]">{entry.description}</td>
+                        <td className="px-3 py-2 text-right text-red-500 font-medium">{entry.charge > 0 ? formatCurrency(entry.charge) : ""}</td>
+                        <td className="px-3 py-2 text-right text-emerald-600 font-medium">{entry.payment > 0 ? formatCurrency(entry.payment) : ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </div>
       </div>

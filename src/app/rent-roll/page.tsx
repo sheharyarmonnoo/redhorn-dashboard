@@ -3,8 +3,10 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
 import { tenants, formatCurrency, getStatusLabel, Tenant } from "@/data/tenants";
+import { exportRentRoll } from "@/data/export";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
+import { Download } from "lucide-react";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -108,7 +110,11 @@ export default function RentRollPage() {
 
   return (
     <div>
-      <PageHeader title="Rent Roll" subtitle="All units as of March 2026 — Tap any row for details" />
+      <PageHeader title="Rent Roll" subtitle="All units as of March 2026 — Tap any row for details">
+        <button onClick={exportRentRoll} className="flex items-center gap-1.5 bg-white border border-[#e8eaef] hover:border-[#4f6ef7] text-[#5a5e73] hover:text-[#4f6ef7] text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+          <Download size={13} /> Export .xlsx
+        </button>
+      </PageHeader>
 
       {/* Summary bar */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">
