@@ -5,8 +5,11 @@ import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import SitePlan3D from "@/components/SitePlan3D";
 
+type ViewMode = "layout" | "map";
+
 export default function SitePlanPage() {
   const [selected, setSelected] = useState<Tenant | null>(null);
+  const [view, setView] = useState<ViewMode>("layout");
 
   const occupied = tenants.filter(t => t.status !== "vacant");
   const pastDue = tenants.filter(t => t.status === "past_due");
@@ -14,9 +17,55 @@ export default function SitePlanPage() {
 
   return (
     <div>
-      <PageHeader title="Site Plan" subtitle="Click any unit for details" />
+      <PageHeader title="Site Plan" subtitle="Click any unit for details">
+        <div className="flex items-center border border-[#e4e4e7] rounded overflow-hidden">
+          <button
+            onClick={() => setView("layout")}
+            className={`text-[11px] font-medium px-3 py-1.5 transition-colors cursor-pointer ${
+              view === "layout" ? "bg-[#18181b] text-white" : "bg-white text-[#71717a] hover:text-[#18181b]"
+            }`}
+          >
+            Layout
+          </button>
+          <button
+            onClick={() => setView("map")}
+            className={`text-[11px] font-medium px-3 py-1.5 transition-colors cursor-pointer ${
+              view === "map" ? "bg-[#18181b] text-white" : "bg-white text-[#71717a] hover:text-[#18181b]"
+            }`}
+          >
+            Map
+          </button>
+        </div>
+      </PageHeader>
 
-      <SitePlan3D onSelect={setSelected} selectedUnit={selected?.unit || null} />
+      {view === "layout" ? (
+        <SitePlan3D onSelect={setSelected} selectedUnit={selected?.unit || null} />
+      ) : (
+        <div className="w-full bg-white border border-[#e4e4e7] rounded overflow-hidden">
+          <div className="bg-[#18181b] text-white px-4 sm:px-5 py-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-[13px] font-semibold tracking-tight">Hollister Business Park</h2>
+              <p className="text-[10px] text-[#a1a1aa] mt-0.5">16261 Hollister St, Houston, TX 77066</p>
+            </div>
+            <a
+              href="https://www.google.com/maps/place/16261+Hollister+St,+Houston,+TX+77066"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-[#71717a] hover:text-white transition-colors cursor-pointer"
+            >
+              Open in Google Maps →
+            </a>
+          </div>
+          <iframe
+            src="https://www.openstreetmap.org/export/embed.html?bbox=-95.5050%2C29.9490%2C-95.4910%2C29.9570&layer=mapnik&marker=29.9530%2C-95.4980"
+            width="100%"
+            height="500"
+            style={{ border: 0 }}
+            loading="lazy"
+            title="Hollister Business Park — Houston, TX"
+          />
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-4">
