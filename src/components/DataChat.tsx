@@ -195,6 +195,8 @@ export default function DataChat() {
   const [messages, setMessages] = useState<Message[]>([defaultMessage]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load persisted messages on mount
@@ -232,6 +234,31 @@ export default function DataChat() {
     const fresh = [defaultMessage];
     setMessages(fresh);
     saveMessages(fresh);
+  }
+
+  function startEditMessage(idx: number) {
+    setEditingIdx(idx);
+    setEditText(messages[idx].content);
+  }
+
+  function saveEditMessage() {
+    if (editingIdx === null) return;
+    const trimmed = editText.trim();
+    if (!trimmed) return;
+    // Replace the user message and re-generate the response after it
+    const updated = messages.slice(0, editingIdx);
+    updated.push({ role: "user", content: trimmed });
+    setMessages(updated);
+    setEditingIdx(null);
+    setEditText("");
+    setIsTyping(true);
+    setTimeout(() => {
+      const response = answerQuestion(trimmed);
+      const withResponse = [...updated, { role: "assistant" as const, content: response }];
+      setMessages(withResponse);
+      saveMessages(withResponse);
+      setIsTyping(false);
+    }, 400);
   }
 
   const alertCount = getAlerts().length;
@@ -279,16 +306,46 @@ export default function DataChat() {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[85%] rounded-xl px-3 py-2 text-[12px] leading-relaxed ${
-                    msg.role === "user"
-                      ? "bg-[#18181b] text-white"
-                      : "bg-[#f4f4f5] text-[#18181b]"
-                  }`}
-                >
-                  {renderMarkdown(msg.content)}
-                </div>
+              <div key={i} className={`group flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                {msg.role === "user" && editingIdx === i ? (
+                  <div className="max-w-[85%] space-y-1">
+                    <textarea
+                      value={editText}
+                      onChange={e => setEditText(e.target.value)}
+                      className="w-full text-[12px] px-3 py-2 bg-[#fafafa] border border-[#e4e4e7] rounded focus:outline-none focus:border-[#71717a] resize-none"
+                      rows={2}
+                      autoFocus
+                    />
+                    <div className="flex gap-1 justify-end">
+                      <button onClick={saveEditMessage} disabled={!editText.trim()}
+                        className="text-[10px] font-medium px-2 py-0.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] disabled:opacity-40 cursor-pointer transition-colors">
+                        Save
+                      </button>
+                      <button onClick={() => setEditingIdx(null)}
+                        className="text-[10px] text-[#71717a] cursor-pointer px-2 py-0.5">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div
+                      className={`max-w-[85%] rounded-xl px-3 py-2 text-[12px] leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-[#18181b] text-white"
+                          : "bg-[#f4f4f5] text-[#18181b]"
+                      }`}
+                    >
+                      {renderMarkdown(msg.content)}
+                    </div>
+                    {msg.role === "user" && (
+                      <button onClick={() => startEditMessage(i)}
+                        className="absolute -left-12 top-1 opacity-0 group-hover:opacity-100 text-[10px] text-[#a1a1aa] hover:text-[#18181b] cursor-pointer transition-all px-1 py-0.5">
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             {isTyping && (

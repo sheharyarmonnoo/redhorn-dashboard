@@ -109,15 +109,25 @@ export default function DashboardPage() {
         <div className="bg-white border border-[#e4e4e7] rounded p-4">
           <div className="flex items-center justify-between mb-1">
             <p className="text-[13px] font-semibold text-[#18181b]">Revenue Breakdown</p>
-            <button
-              onClick={() => setFilterOpen(true)}
-              className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
-                isFiltered ? "bg-[#18181b] text-white" : "text-[#71717a] hover:text-[#18181b] hover:bg-[#f4f4f5]"
-              }`}
-            >
-              <Filter size={12} />
-              {isFiltered ? `${filteredUnits.size} units` : "Filter"}
-            </button>
+            <div className="flex items-center gap-1.5">
+              {isFiltered && (
+                <button
+                  onClick={() => { setFilteredUnits(allOccupiedUnits); localStorage.removeItem("redhorn_revenue_filter"); }}
+                  className="text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors text-[#71717a] hover:text-[#18181b] border border-[#e4e4e7] hover:bg-[#f4f4f5]"
+                >
+                  Clear Filter
+                </button>
+              )}
+              <button
+                onClick={() => setFilterOpen(true)}
+                className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
+                  isFiltered ? "bg-[#18181b] text-white" : "text-[#71717a] hover:text-[#18181b] hover:bg-[#f4f4f5]"
+                }`}
+              >
+                <Filter size={12} />
+                {isFiltered ? `${filteredUnits.size} units` : "Filter"}
+              </button>
+            </div>
           </div>
           <p className="text-[11px] text-[#a1a1aa] mb-3">
             {isFiltered

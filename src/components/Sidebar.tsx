@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Trash2 } from "lucide-react";
-import { getProperties, getActiveProperty, setActiveProperty, addProperty, deleteProperty, Property } from "@/data/portfolio";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Trash2, Pencil } from "lucide-react";
+import { getProperties, getActiveProperty, setActiveProperty, addProperty, deleteProperty, editProperty, Property } from "@/data/portfolio";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
@@ -24,6 +24,10 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
   const [addLocation, setAddLocation] = useState("");
   const [addSqft, setAddSqft] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [editingProp, setEditingProp] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editSqft, setEditSqft] = useState("");
   const current = propList.find(p => p.id === activeProp) || propList[0];
 
   useEffect(() => {
@@ -54,6 +58,20 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
     setPropList(getProperties());
     setConfirmDelete(null);
     setActiveProp(getActiveProperty());
+  }
+
+  function startEditProperty(prop: Property) {
+    setEditingProp(prop.id);
+    setEditName(prop.name);
+    setEditLocation(prop.location);
+    setEditSqft(prop.sqft);
+  }
+
+  function handleEditProperty() {
+    if (!editingProp || !editName.trim()) return;
+    editProperty(editingProp, { name: editName.trim(), location: editLocation.trim(), sqft: editSqft.trim() });
+    setPropList(getProperties());
+    setEditingProp(null);
   }
 
   if (collapsed) {
@@ -105,28 +123,64 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
           <div className="mt-1 bg-[#27272a] rounded border border-white/[0.06] overflow-hidden">
             {propList.map(prop => (
               <div key={prop.id} className="group relative">
-                <button
-                  onClick={() => switchProperty(prop.id)}
-                  className={`w-full text-left px-3 py-2 text-[11px] transition-colors cursor-pointer ${
-                    prop.id === activeProp
-                      ? "bg-white/[0.08] text-white"
-                      : "text-[#a1a1aa] hover:bg-white/[0.04] hover:text-[#d4d4d8]"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{prop.name}</p>
-                    {!prop.hasData && <span className="text-[8px] text-[#52525b] uppercase">No data</span>}
+                {editingProp === prop.id ? (
+                  <div className="p-2.5 space-y-1.5 border-b border-white/[0.06]">
+                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                      placeholder="Property name"
+                      className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]"
+                      autoFocus />
+                    <input type="text" value={editLocation} onChange={e => setEditLocation(e.target.value)}
+                      placeholder="Location"
+                      className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]" />
+                    <input type="text" value={editSqft} onChange={e => setEditSqft(e.target.value)}
+                      placeholder="Size"
+                      className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]" />
+                    <div className="flex gap-1.5 pt-0.5">
+                      <button onClick={handleEditProperty} disabled={!editName.trim()}
+                        className="text-[10px] font-medium px-2.5 py-1 bg-white text-[#18181b] rounded hover:bg-[#f4f4f5] disabled:opacity-40 cursor-pointer transition-colors">
+                        Save
+                      </button>
+                      <button onClick={() => setEditingProp(null)}
+                        className="text-[10px] text-[#71717a] cursor-pointer px-2 py-1">
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-[9px] text-[#52525b] mt-0.5">{prop.location}{prop.sqft ? ` · ${prop.sqft}` : ""}</p>
-                </button>
-                {propList.length > 1 && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setConfirmDelete(prop.id); }}
-                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 text-[#52525b] hover:text-[#dc2626] cursor-pointer transition-all p-0.5"
-                    title="Delete property"
-                  >
-                    <Trash2 size={11} />
-                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => switchProperty(prop.id)}
+                      className={`w-full text-left px-3 py-2 text-[11px] transition-colors cursor-pointer ${
+                        prop.id === activeProp
+                          ? "bg-white/[0.08] text-white"
+                          : "text-[#a1a1aa] hover:bg-white/[0.04] hover:text-[#d4d4d8]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium">{prop.name}</p>
+                        {!prop.hasData && <span className="text-[8px] text-[#52525b] uppercase">No data</span>}
+                      </div>
+                      <p className="text-[9px] text-[#52525b] mt-0.5">{prop.location}{prop.sqft ? ` · ${prop.sqft}` : ""}</p>
+                    </button>
+                    <div className="absolute right-2 top-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startEditProperty(prop); }}
+                        className="text-[#52525b] hover:text-[#d4d4d8] cursor-pointer p-0.5"
+                        title="Edit property"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                      {propList.length > 1 && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(prop.id); }}
+                          className="text-[#52525b] hover:text-[#dc2626] cursor-pointer p-0.5"
+                          title="Delete property"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
             ))}

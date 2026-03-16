@@ -39,6 +39,11 @@ export function addProperty(name: string, location: string, sqft: string): Prope
   return prop;
 }
 
+export function editProperty(id: string, updates: Partial<Pick<Property, "name" | "location" | "sqft">>) {
+  const props = getProperties().map(p => p.id === id ? { ...p, ...updates } : p);
+  saveProperties(props);
+}
+
 export function deleteProperty(id: string) {
   const props = getProperties().filter(p => p.id !== id);
   saveProperties(props);

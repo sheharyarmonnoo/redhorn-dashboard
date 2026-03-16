@@ -94,6 +94,7 @@ export default function AlertsPage() {
   const [customAlerts, setCustomAlerts] = useState<AlertRow[]>([]);
   const [showAddAlert, setShowAddAlert] = useState(false);
   const [newAlert, setNewAlert] = useState({ unit: "", category: "General", severity: "Warning" as AlertRow["severity"], detail: "" });
+  const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
 
   useEffect(() => { setArchivedIds(loadArchived()); setCustomAlerts(loadCustomAlerts()); }, []);
 
@@ -121,6 +122,30 @@ export default function AlertsPage() {
     const updated = customAlerts.filter(a => a.id !== id);
     setCustomAlerts(updated);
     saveCustomAlerts(updated);
+  }
+
+  function startEditAlert(alert: AlertRow) {
+    setEditingAlertId(alert.id);
+    setNewAlert({ unit: alert.unit === "—" ? "" : alert.unit, category: alert.category, severity: alert.severity, detail: alert.detail });
+    setShowAddAlert(true);
+  }
+
+  function saveEditAlert() {
+    if (!editingAlertId || !newAlert.detail.trim()) return;
+    const updated = customAlerts.map(a => a.id === editingAlertId ? {
+      ...a,
+      unit: newAlert.unit.trim() || "—",
+      tenant: tenants.find(t => t.unit === newAlert.unit.trim())?.tenant || "",
+      building: tenants.find(t => t.unit === newAlert.unit.trim())?.building || "",
+      category: newAlert.category,
+      severity: newAlert.severity,
+      detail: newAlert.detail.trim(),
+    } : a);
+    setCustomAlerts(updated);
+    saveCustomAlerts(updated);
+    setNewAlert({ unit: "", category: "General", severity: "Warning", detail: "" });
+    setShowAddAlert(false);
+    setEditingAlertId(null);
   }
 
   function archiveAlert(id: string) {
@@ -192,11 +217,20 @@ export default function AlertsPage() {
   const archivedAlerts = allAlerts.filter(a => archivedIds.has(a.id));
 
   function ArchiveCell(props: { data: AlertRow }) {
+    const isCustom = props.data.id.startsWith("custom-");
     return (
-      <button onClick={(e) => { e.stopPropagation(); archiveAlert(props.data.id); }}
-        className="text-[10px] font-medium text-[#71717a] hover:text-[#18181b] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] rounded hover:bg-[#f4f4f5] transition-colors">
-        Handled
-      </button>
+      <div className="flex items-center gap-1">
+        {isCustom && (
+          <button onClick={(e) => { e.stopPropagation(); startEditAlert(props.data); }}
+            className="text-[10px] font-medium text-[#71717a] hover:text-[#18181b] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] rounded hover:bg-[#f4f4f5] transition-colors">
+            Edit
+          </button>
+        )}
+        <button onClick={(e) => { e.stopPropagation(); archiveAlert(props.data.id); }}
+          className="text-[10px] font-medium text-[#71717a] hover:text-[#18181b] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] rounded hover:bg-[#f4f4f5] transition-colors">
+          Handled
+        </button>
+      </div>
     );
   }
 
@@ -216,7 +250,7 @@ export default function AlertsPage() {
         { field: "unit", headerName: "Unit", width: 90 },
         { field: "category", headerName: "Type", width: 140, cellRenderer: CategoryCellRenderer },
         { field: "detail", headerName: "Details", minWidth: 140, flex: 1 },
-        { headerName: "", width: 70, cellRenderer: ArchiveCell, sortable: false, filter: false },
+        { headerName: "", width: 130, cellRenderer: ArchiveCell, sortable: false, filter: false },
       ];
     }
     return [
@@ -229,9 +263,9 @@ export default function AlertsPage() {
       { field: "amount", headerName: "Amount", width: 110, type: "numericColumn",
         valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
       { field: "date", headerName: "Date", width: 110 },
-      { headerName: "", width: 80, cellRenderer: ArchiveCell, sortable: false, filter: false },
+      { headerName: "", width: 130, cellRenderer: ArchiveCell, sortable: false, filter: false },
     ];
-  }, [isMobile, archivedIds]);
+  }, [isMobile, archivedIds, customAlerts]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true, resizable: true, filter: true,
@@ -281,7 +315,7 @@ export default function AlertsPage() {
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-medium text-[#dc2626]">{criticalCount} critical</span>
           <span className="text-[11px] font-medium text-[#d97706]">{warningCount} warnings</span>
-          <button onClick={() => setShowAddAlert(!showAddAlert)}
+          <button onClick={() => { setEditingAlertId(null); setNewAlert({ unit: "", category: "General", severity: "Warning", detail: "" }); setShowAddAlert(!showAddAlert); }}
             className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer transition-colors">
             Add Alert
           </button>
@@ -312,11 +346,11 @@ export default function AlertsPage() {
               <option value="Info">Info</option>
             </select>
             <div className="flex gap-2">
-              <button onClick={addAlert} disabled={!newAlert.detail.trim()}
+              <button onClick={editingAlertId ? saveEditAlert : addAlert} disabled={!newAlert.detail.trim()}
                 className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] disabled:bg-[#e4e4e7] disabled:text-[#a1a1aa] cursor-pointer transition-colors">
-                Add
+                {editingAlertId ? "Save" : "Add"}
               </button>
-              <button onClick={() => setShowAddAlert(false)}
+              <button onClick={() => { setShowAddAlert(false); setEditingAlertId(null); setNewAlert({ unit: "", category: "General", severity: "Warning", detail: "" }); }}
                 className="text-[11px] text-[#71717a] cursor-pointer px-2 py-1">Cancel</button>
             </div>
           </div>

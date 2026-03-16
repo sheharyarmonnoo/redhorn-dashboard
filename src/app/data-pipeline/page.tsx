@@ -266,12 +266,18 @@ function TrainingProtocol() {
       <div>
         <div className="flex items-center justify-between mb-2">
           <p className="text-[12px] font-medium text-[#18181b]">Protocol Notes</p>
-          <button onClick={saveNotes}
-            className={`text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
-              notesSaved ? "text-[#a1a1aa]" : "bg-[#18181b] text-white hover:bg-[#27272a]"
-            }`}>
-            {notesSaved ? "Saved" : "Save"}
-          </button>
+          <div className="flex gap-1.5">
+            <button onClick={() => { setNotes(defaultNotes); saveProtocolNotes(defaultNotes); setNotesSaved(true); }}
+              className="text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors text-[#71717a] hover:text-[#dc2626] border border-[#e4e4e7] hover:border-[#dc2626]">
+              Clear Notes
+            </button>
+            <button onClick={saveNotes}
+              className={`text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
+                notesSaved ? "text-[#a1a1aa]" : "bg-[#18181b] text-white hover:bg-[#27272a]"
+              }`}>
+              {notesSaved ? "Saved" : "Save"}
+            </button>
+          </div>
         </div>
         <textarea value={notes} onChange={e => handleNotesChange(e.target.value)}
           className="w-full text-[12px] text-[#18181b] bg-[#fafafa] border border-[#e4e4e7] rounded p-3 leading-relaxed focus:outline-none focus:border-[#71717a] min-h-[200px] resize-y font-mono" />
