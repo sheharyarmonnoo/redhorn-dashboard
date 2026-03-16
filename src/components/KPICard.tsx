@@ -5,7 +5,8 @@ interface KPICardProps {
   trend?: string;
   trendUp?: boolean;
   color?: string;
-  sparkline?: number[]; // optional mini trend data
+  sparkline?: number[];
+  onClick?: () => void;
   icon?: any;
   iconBg?: string;
   iconColor?: string;
@@ -35,9 +36,13 @@ export default function KPICard({
   trendUp,
   color = "text-[#18181b]",
   sparkline,
+  onClick,
 }: KPICardProps) {
   return (
-    <div className="bg-white border border-[#e4e4e7] rounded p-3 sm:p-4">
+    <div
+      onClick={onClick}
+      className={`bg-white border border-[#e4e4e7] rounded p-3 sm:p-4 ${onClick ? "cursor-pointer hover:border-[#a1a1aa] transition-colors" : ""}`}
+    >
       <div className="flex items-start justify-between">
         <p className="text-[11px] text-[#71717a] font-medium uppercase tracking-wide">{title}</p>
         {sparkline && <Sparkline data={sparkline} up={trendUp} />}

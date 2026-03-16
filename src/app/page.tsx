@@ -1,6 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import KPICard from "@/components/KPICard";
+import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
 import ActionItems from "@/components/ActionItems";
 import RevenueFilter from "@/components/RevenueFilter";
@@ -14,6 +15,7 @@ export default function DashboardPage() {
   const allOccupiedUnits = useMemo(() =>
     new Set(tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")).map(t => t.unit)),
   []);
+  const [kpiDrawer, setKpiDrawer] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filteredUnits, setFilteredUnits] = useState<Set<string>>(allOccupiedUnits);
   const isFiltered = filteredUnits.size !== allOccupiedUnits.size;
@@ -93,12 +95,12 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3 mb-6">
-        <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} sparkline={monthlyRevenue.map(m => m.total)} />
-        <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${tenants.length} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} />
-        <KPICard title="Past Due" value={formatCurrency(totalPastDue)} color="text-[#dc2626]" />
-        <KPICard title="Vacant" value={String(vacant.length)} subtitle={`${vacant.reduce((s, t) => s + t.sqft, 0).toLocaleString()} SF`} />
-        <KPICard title="Electric Posting" value={electricMissing.length > 0 ? `${electricMissing.length} Missing` : "All Posted"} color={electricMissing.length > 0 ? "text-[#d97706]" : "text-[#16a34a]"} />
-        <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" />
+        <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} sparkline={monthlyRevenue.map(m => m.total)} onClick={() => setKpiDrawer("revenue")} />
+        <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${tenants.length} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
+        <KPICard title="Past Due" value={formatCurrency(totalPastDue)} color="text-[#dc2626]" onClick={() => setKpiDrawer("pastdue")} />
+        <KPICard title="Vacant" value={String(vacant.length)} subtitle={`${vacant.reduce((s, t) => s + t.sqft, 0).toLocaleString()} SF`} onClick={() => setKpiDrawer("vacant")} />
+        <KPICard title="Electric Posting" value={electricMissing.length > 0 ? `${electricMissing.length} Missing` : "All Posted"} color={electricMissing.length > 0 ? "text-[#d97706]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("electric")} />
+        <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
       </div>
 
       {/* Notion-style Action Items */}
@@ -194,6 +196,8 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <KPIDrawer open={!!kpiDrawer} kpiKey={kpiDrawer} onClose={() => setKpiDrawer(null)} />
     </div>
   );
 }
