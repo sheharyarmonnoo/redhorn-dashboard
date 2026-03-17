@@ -1,233 +1,330 @@
 "use client";
-
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Trash2, Pencil } from "lucide-react";
+import { getProperties, getActiveProperty, setActiveProperty, addProperty, deleteProperty, editProperty, Property } from "@/data/portfolio";
 
-const navItems = [
-  {
-    label: "Action Board",
-    href: "/",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="2" width="5" height="7" rx="1" />
-        <rect x="11" y="2" width="5" height="4" rx="1" />
-        <rect x="2" y="12" width="5" height="4" rx="1" />
-        <rect x="11" y="9" width="5" height="7" rx="1" />
-      </svg>
-    ),
-  },
-  {
-    label: "Collections",
-    href: "/collections",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 2L2 6l7 4 7-4-7-4z" />
-        <path d="M2 12l7 4 7-4" />
-        <path d="M2 9l7 4 7-4" />
-      </svg>
-    ),
-  },
-  {
-    label: "Posting Tracker",
-    href: "/posting",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 9l3 3 7-7" />
-        <rect x="2" y="2" width="14" height="14" rx="2" />
-      </svg>
-    ),
-  },
-  {
-    label: "Rent Roll",
-    href: "/rent-roll",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 5h12M3 9h12M3 13h8" />
-      </svg>
-    ),
-  },
-  {
-    label: "Leases",
-    href: "/leases",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M5 2v14l4-3 4 3V2H5z" />
-      </svg>
-    ),
-  },
-  {
-    label: "Site Plan",
-    href: "/site-plan",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="2" width="14" height="14" rx="2" />
-        <path d="M2 9h14M9 2v14" />
-      </svg>
-    ),
-  },
-  {
-    label: "Data Pipeline",
-    href: "/pipeline",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="4" cy="9" r="2" />
-        <circle cx="14" cy="5" r="2" />
-        <circle cx="14" cy="13" r="2" />
-        <path d="M6 9h4l2-4M10 9l2 4" />
-      </svg>
-    ),
-  },
-  {
-    label: "Call Prep",
-    href: "/call-prep",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 3h4l2 4-2.5 1.5A11 11 0 009.5 11.5L11 9l4 2v4a1 1 0 01-1 1A14 14 0 012 2a1 1 0 011-1z" />
-      </svg>
-    ),
-  },
+const nav = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
+  { href: "/site-plan", label: "Site Plan", icon: Map, badge: null },
+  { href: "/rent-roll", label: "Rent Roll", icon: Table, badge: "52" },
+  { href: "/leases", label: "Lease Expirations", icon: CalendarClock, badge: "7" },
+  { href: "/alerts", label: "Alerts", icon: AlertTriangle, badge: "6" },
+  { href: "/data-pipeline", label: "Data Pipeline", icon: Database, badge: null },
 ];
 
-export default function Sidebar() {
+function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [portfolioOpen, setPortfolioOpen] = useState(false);
+  const [activeProp, setActiveProp] = useState("hollister");
+  const [propList, setPropList] = useState<Property[]>(getProperties());
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addLocation, setAddLocation] = useState("");
+  const [addSqft, setAddSqft] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [editingProp, setEditingProp] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editSqft, setEditSqft] = useState("");
+  const current = propList.find(p => p.id === activeProp) || propList[0];
 
   useEffect(() => {
-    const saved = localStorage.getItem("sidebar-collapsed");
-    if (saved === "true") setCollapsed(true);
+    setActiveProp(getActiveProperty());
+    setPropList(getProperties());
+    function handleListChange() { setPropList(getProperties()); }
+    window.addEventListener("portfolio-list-changed", handleListChange);
+    return () => window.removeEventListener("portfolio-list-changed", handleListChange);
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("sidebar-collapsed", String(collapsed));
-  }, [collapsed]);
+  function switchProperty(id: string) {
+    setActiveProp(id);
+    setActiveProperty(id);
+    setPortfolioOpen(false);
+  }
 
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+  function handleAddProperty() {
+    if (!addName.trim()) return;
+    const prop = addProperty(addName.trim(), addLocation.trim(), addSqft.trim());
+    setPropList(getProperties());
+    setAddName(""); setAddLocation(""); setAddSqft("");
+    setShowAddForm(false);
+    switchProperty(prop.id);
+  }
 
-  const sidebarContent = (
-    <div className="flex flex-col h-full">
-      {/* Portfolio selector */}
-      <div className={`px-4 pt-5 pb-4 border-b border-zinc-800 ${collapsed ? "px-2 text-center" : ""}`}>
-        {!collapsed && (
-          <>
-            <div className="text-xs font-medium uppercase tracking-widest text-zinc-500 mb-1">Portfolio</div>
-            <div className="text-sm font-semibold text-white">Hollister Business Park</div>
-            <div className="text-xs text-zinc-500 mt-0.5">Houston, TX &middot; ~325K SF</div>
-          </>
+  function handleDeleteProperty(id: string) {
+    deleteProperty(id);
+    setPropList(getProperties());
+    setConfirmDelete(null);
+    setActiveProp(getActiveProperty());
+  }
+
+  function startEditProperty(prop: Property) {
+    setEditingProp(prop.id);
+    setEditName(prop.name);
+    setEditLocation(prop.location);
+    setEditSqft(prop.sqft);
+  }
+
+  function handleEditProperty() {
+    if (!editingProp || !editName.trim()) return;
+    editProperty(editingProp, { name: editName.trim(), location: editLocation.trim(), sqft: editSqft.trim() });
+    setPropList(getProperties());
+    setEditingProp(null);
+  }
+
+  if (collapsed) {
+    return (
+      <>
+        <div className="px-2 pt-4 pb-3 flex justify-center">
+          <span className="text-[14px] font-bold text-white">R</span>
+        </div>
+        <nav className="flex-1 px-2 py-2 space-y-1">
+          {nav.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href;
+            return (
+              <Link key={href} href={href}
+                title={label}
+                className={`flex items-center justify-center w-9 h-9 rounded transition-colors ${
+                  active ? "bg-white/[0.08] text-white" : "text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]"
+                }`}>
+                <Icon size={16} strokeWidth={1.5} />
+              </Link>
+            );
+          })}
+        </nav>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="px-5 pt-5 pb-3 border-b border-white/[0.06]">
+        <img src="/redhorn-logo.png" alt="Redhorn Capital Partners" className="h-9 w-auto brightness-0 invert opacity-90" />
+        <p className="text-[9px] text-[#52525b] font-medium tracking-[0.12em] uppercase mt-2">Deal Manager AI</p>
+      </div>
+
+      {/* Portfolio Selector */}
+      <div className="mx-3 mt-3 mb-2">
+        <p className="text-[9px] text-[#52525b] font-medium uppercase tracking-[0.12em] mb-1 px-2">Portfolio</p>
+        <button
+          onClick={() => setPortfolioOpen(!portfolioOpen)}
+          className="w-full flex items-center justify-between px-2.5 py-2 rounded bg-white/[0.04] hover:bg-white/[0.08] transition-colors cursor-pointer"
+        >
+          <div className="text-left">
+            <p className="text-[12px] font-medium text-[#d4d4d8]">{current.name}</p>
+            <p className="text-[10px] text-[#52525b]">{current.location} · {current.sqft}</p>
+          </div>
+          <ChevronDown size={14} className={`text-[#52525b] transition-transform ${portfolioOpen ? "rotate-180" : ""}`} />
+        </button>
+
+        {portfolioOpen && (
+          <div className="mt-1 bg-[#27272a] rounded border border-white/[0.06] overflow-hidden">
+            {propList.map(prop => (
+              <div key={prop.id} className="group relative">
+                {editingProp === prop.id ? (
+                  <div className="p-2.5 space-y-1.5 border-b border-white/[0.06]">
+                    <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                      placeholder="Property name"
+                      className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]"
+                      autoFocus />
+                    <input type="text" value={editLocation} onChange={e => setEditLocation(e.target.value)}
+                      placeholder="Location"
+                      className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]" />
+                    <input type="text" value={editSqft} onChange={e => setEditSqft(e.target.value)}
+                      placeholder="Size"
+                      className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]" />
+                    <div className="flex gap-1.5 pt-0.5">
+                      <button onClick={handleEditProperty} disabled={!editName.trim()}
+                        className="text-[10px] font-medium px-2.5 py-1 bg-white text-[#18181b] rounded hover:bg-[#f4f4f5] disabled:opacity-40 cursor-pointer transition-colors">
+                        Save
+                      </button>
+                      <button onClick={() => setEditingProp(null)}
+                        className="text-[10px] text-[#71717a] cursor-pointer px-2 py-1">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => switchProperty(prop.id)}
+                      className={`w-full text-left px-3 py-2 text-[11px] transition-colors cursor-pointer ${
+                        prop.id === activeProp
+                          ? "bg-white/[0.08] text-white"
+                          : "text-[#a1a1aa] hover:bg-white/[0.04] hover:text-[#d4d4d8]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium">{prop.name}</p>
+                        {!prop.hasData && <span className="text-[8px] text-[#52525b] uppercase">No data</span>}
+                      </div>
+                      <p className="text-[9px] text-[#52525b] mt-0.5">{prop.location}{prop.sqft ? ` · ${prop.sqft}` : ""}</p>
+                    </button>
+                    <div className="absolute right-2 top-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startEditProperty(prop); }}
+                        className="text-[#52525b] hover:text-[#d4d4d8] cursor-pointer p-0.5"
+                        title="Edit property"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                      {propList.length > 1 && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(prop.id); }}
+                          className="text-[#52525b] hover:text-[#dc2626] cursor-pointer p-0.5"
+                          title="Delete property"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+
+            {/* Add Property */}
+            {showAddForm ? (
+              <div className="p-2.5 border-t border-white/[0.06] space-y-1.5">
+                <input type="text" value={addName} onChange={e => setAddName(e.target.value)}
+                  placeholder="Property name"
+                  className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]"
+                  autoFocus />
+                <input type="text" value={addLocation} onChange={e => setAddLocation(e.target.value)}
+                  placeholder="Location (e.g. Houston, TX)"
+                  className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]" />
+                <input type="text" value={addSqft} onChange={e => setAddSqft(e.target.value)}
+                  placeholder="Size (e.g. ~50K SF)"
+                  className="w-full text-[11px] px-2 py-1.5 bg-[#3f3f46] text-white border border-white/[0.1] rounded focus:outline-none focus:border-white/[0.2] placeholder-[#71717a]" />
+                <div className="flex gap-1.5 pt-0.5">
+                  <button onClick={handleAddProperty} disabled={!addName.trim()}
+                    className="text-[10px] font-medium px-2.5 py-1 bg-white text-[#18181b] rounded hover:bg-[#f4f4f5] disabled:opacity-40 cursor-pointer transition-colors">
+                    Add
+                  </button>
+                  <button onClick={() => { setShowAddForm(false); setAddName(""); setAddLocation(""); setAddSqft(""); }}
+                    className="text-[10px] text-[#71717a] cursor-pointer px-2 py-1">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setShowAddForm(true)}
+                className="w-full flex items-center gap-1.5 px-3 py-2 text-[10px] text-[#52525b] hover:text-[#a1a1aa] border-t border-white/[0.06] cursor-pointer transition-colors">
+                <Plus size={11} /> Add Property
+              </button>
+            )}
+          </div>
         )}
-        {collapsed && (
-          <div className="text-xs font-bold text-zinc-400">HBP</div>
+
+        {/* Delete Confirmation Modal */}
+        {confirmDelete && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setConfirmDelete(null)} />
+            <div className="relative bg-white rounded p-5 w-[340px] mx-4">
+              <p className="text-[14px] font-semibold text-[#18181b]">Delete Property</p>
+              <p className="text-[12px] text-[#71717a] mt-2 leading-relaxed">
+                Are you sure you want to delete <strong className="text-[#18181b]">{propList.find(p => p.id === confirmDelete)?.name}</strong>? This will remove it from your portfolio list. This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setConfirmDelete(null)}
+                  className="text-[12px] font-medium px-3 py-1.5 text-[#71717a] hover:text-[#18181b] cursor-pointer">
+                  Cancel
+                </button>
+                <button onClick={() => handleDeleteProperty(confirmDelete)}
+                  className="text-[12px] font-medium px-3 py-1.5 bg-[#dc2626] text-white rounded hover:bg-[#b91c1c] cursor-pointer transition-colors">
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => {
-          const active = pathname === item.href;
+      <div className="px-4 mt-4 mb-2">
+        <p className="text-[9px] text-[#52525b] font-medium uppercase tracking-[0.12em] px-2">Navigation</p>
+      </div>
+      <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
+        {nav.map(({ href, label, icon: Icon, badge }) => {
+          const active = pathname === href;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded text-sm transition-colors ${
-                active
-                  ? "bg-zinc-800 text-white"
-                  : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
-              } ${collapsed ? "justify-center px-2" : ""}`}
-              title={collapsed ? item.label : undefined}
-            >
-              <span className="flex-shrink-0">{item.icon}</span>
-              {!collapsed && <span>{item.label}</span>}
+            <Link key={href} href={href} onClick={onNavigate}
+              className={`flex items-center gap-2.5 px-2.5 py-2 rounded text-[12px] transition-colors ${
+                active ? "bg-white/[0.08] text-white font-medium" : "text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]"
+              }`}>
+              <Icon size={15} strokeWidth={1.5} />
+              <span className="flex-1">{label}</span>
+              {badge && <span className="text-[10px] text-[#52525b] font-medium">{badge}</span>}
             </Link>
           );
         })}
       </nav>
 
-      {/* Footer */}
-      <div className={`px-4 py-4 border-t border-zinc-800 ${collapsed ? "px-2 text-center" : ""}`}>
-        {!collapsed && (
-          <>
-            <div className="text-xs font-semibold text-zinc-300 tracking-wide">REDHORN CAPITAL</div>
-            <div className="text-[10px] text-zinc-600 mt-1">Updated Mar 15, 2026</div>
-          </>
-        )}
-        {collapsed && (
-          <div className="text-[10px] text-zinc-600">RC</div>
-        )}
+      <div className="px-5 py-3 border-t border-white/[0.06]">
+        <p className="text-[10px] text-[#52525b]">Updated Mar 15, 2026 2:30 PM</p>
       </div>
-    </div>
+    </>
   );
+}
+
+const COLLAPSED_KEY = "redhorn_sidebar_collapsed";
+
+export default function Sidebar() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(COLLAPSED_KEY);
+    if (saved === "true") setCollapsed(true);
+  }, []);
+
+  function toggle() {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem(COLLAPSED_KEY, String(next));
+    window.dispatchEvent(new CustomEvent("sidebar-toggle", { detail: { collapsed: next } }));
+  }
+
+  // Emit initial state
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("sidebar-toggle", { detail: { collapsed } }));
+  }, [collapsed]);
+
+  const width = collapsed ? "w-[52px]" : "w-[240px]";
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside
-        className={`sidebar-desktop fixed left-0 top-0 h-screen bg-[#18181b] flex flex-col z-40 transition-all duration-200 ${
-          collapsed ? "w-16" : "w-56"
-        }`}
-      >
-        {/* Collapse toggle */}
+      {/* Desktop */}
+      <aside className={`sidebar-desktop fixed left-0 top-0 h-screen ${width} bg-[#18181b] flex flex-col z-50 transition-all duration-200`}>
+        <SidebarContent collapsed={collapsed} />
         <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="absolute -right-3 top-7 w-6 h-6 bg-[#18181b] border border-zinc-700 rounded-full flex items-center justify-center text-zinc-400 hover:text-white z-50"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={toggle}
+          className="absolute top-3 -right-3 w-6 h-6 bg-[#18181b] border border-[#3f3f46] rounded-full flex items-center justify-center text-[#71717a] hover:text-white cursor-pointer transition-colors z-50"
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            {collapsed ? (
-              <path d="M4 2l4 4-4 4" />
-            ) : (
-              <path d="M8 2L4 6l4 4" />
-            )}
-          </svg>
+          {collapsed ? <PanelLeftOpen size={12} /> : <PanelLeftClose size={12} />}
         </button>
-        {sidebarContent}
       </aside>
 
-      {/* Mobile top bar */}
-      <div className="mobile-nav fixed top-0 left-0 right-0 h-14 bg-[#18181b] flex items-center px-4 z-50">
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="text-zinc-400 hover:text-white mr-3"
-          aria-label="Toggle navigation"
-        >
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            {mobileOpen ? (
-              <>
-                <path d="M6 6l10 10" />
-                <path d="M16 6L6 16" />
-              </>
-            ) : (
-              <>
-                <path d="M4 6h14" />
-                <path d="M4 11h14" />
-                <path d="M4 16h14" />
-              </>
-            )}
-          </svg>
+      {/* Mobile Header */}
+      <div className="mobile-nav fixed top-0 left-0 right-0 h-12 bg-[#18181b] flex items-center justify-between px-4 z-50">
+        <img src="/redhorn-logo.png" alt="Redhorn Capital" className="h-6 w-auto brightness-0 invert opacity-90" />
+        <button onClick={() => setMobileOpen(!mobileOpen)} className="text-[#a1a1aa] p-1">
+          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
-        <span className="text-sm font-semibold text-white">Redhorn Capital</span>
-        <span className="text-xs text-zinc-500 ml-2">Hollister Business Park</span>
       </div>
 
-      {/* Mobile menu overlay */}
+      {/* Mobile Overlay */}
       {mobileOpen && (
-        <div className="mobile-nav fixed inset-0 z-40 flex" onClick={() => setMobileOpen(false)}>
-          <div
-            className="w-64 bg-[#18181b] h-full pt-14 overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {sidebarContent}
-          </div>
-          <div className="flex-1 bg-black/40" />
-        </div>
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
+          <aside className="fixed left-0 top-0 h-screen w-[260px] bg-[#18181b] flex flex-col z-50 lg:hidden">
+            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+          </aside>
+        </>
       )}
-
-      {/* Spacer for desktop layout */}
-      <div className={`sidebar-desktop flex-shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-56"}`} />
-      {/* Spacer for mobile layout */}
-      <div className="mobile-nav h-14" />
+      <div className="h-12 lg:hidden" />
     </>
   );
 }

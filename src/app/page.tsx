@@ -1,335 +1,203 @@
 "use client";
-
-import { useState, useMemo, useCallback } from "react";
-import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef } from "ag-grid-community";
-import { tenants, Tenant, formatCurrency } from "@/data/tenants";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import KPICard from "@/components/KPICard";
+import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
-import Drawer from "@/components/Drawer";
+import ActionItems from "@/components/ActionItems";
+import RevenueFilter from "@/components/RevenueFilter";
+import { tenants, monthlyRevenue, formatCurrency, getAlerts } from "@/data/tenants";
+import { Filter } from "lucide-react";
+import dynamic from "next/dynamic";
 
-ModuleRegistry.registerModules([AllCommunityModule]);
+const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
-type Severity = "Critical" | "Warning" | "Info";
+export default function DashboardPage() {
+  const allOccupiedUnits = useMemo(() =>
+    new Set(tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")).map(t => t.unit)),
+  []);
+  const [kpiDrawer, setKpiDrawer] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filteredUnits, setFilteredUnits] = useState<Set<string>>(allOccupiedUnits);
+  const isFiltered = filteredUnits.size !== allOccupiedUnits.size;
 
-interface ActionItem {
-  id: string;
-  unit: string;
-  tenant: string;
-  building: string;
-  issue: string;
-  category: string;
-  amountAtRisk: number;
-  severity: Severity;
-  action: string;
-  tenantData: Tenant;
-}
-
-function generateActions(): ActionItem[] {
-  const items: ActionItem[] = [];
-  const today = new Date("2026-03-17");
-
-  for (const t of tenants) {
-    if (t.status === "vacant" && t.makeReady) {
-      items.push({
-        id: `makeready-${t.unit}`,
-        unit: t.unit,
-        tenant: "VACANT",
-        building: t.building,
-        issue: `Vacant — needs make-ready${t.splittable ? ` (splittable: ${t.splitDetail})` : ""}`,
-        category: "Vacant",
-        amountAtRisk: 0,
-        severity: "Info",
-        action: "Schedule Make-Ready",
-        tenantData: t,
-      });
-      continue;
-    }
-
-    if (t.status === "vacant") continue;
-    if (t.tenant.includes("Owner")) continue;
-
-    // Past due
-    if (t.pastDueAmount > 0) {
-      const stage = t.delinquencyStage || "past_due";
-      const stageLabel = stage.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-      items.push({
-        id: `pastdue-${t.unit}`,
-        unit: t.unit,
-        tenant: t.tenant,
-        building: t.building,
-        issue: `Past due ${formatCurrency(t.pastDueAmount)} — ${stageLabel}`,
-        category: "Past Due",
-        amountAtRisk: t.pastDueAmount,
-        severity: "Critical",
-        action: "Collect",
-        tenantData: t,
-      });
-    }
-
-    // Electric not posted (net lease only)
-    if (t.leaseType === "Office Net Lease" && !t.electricPosted && t.monthlyElectric > 0) {
-      items.push({
-        id: `electric-${t.unit}`,
-        unit: t.unit,
-        tenant: t.tenant,
-        building: t.building,
-        issue: `Electric charge ${formatCurrency(t.monthlyElectric)} not posted`,
-        category: "Unposted",
-        amountAtRisk: t.monthlyElectric,
-        severity: "Critical",
-        action: "Post Charge",
-        tenantData: t,
-      });
-    }
-
-    // Lease expired — holdover
-    if (t.leaseTo) {
-      const end = new Date(t.leaseTo);
-      if (end < today) {
-        items.push({
-          id: `holdover-${t.unit}`,
-          unit: t.unit,
-          tenant: t.tenant,
-          building: t.building,
-          issue: `Holdover — lease expired ${t.leaseTo}`,
-          category: "Holdover",
-          amountAtRisk: t.monthlyRent,
-          severity: "Critical",
-          action: "Send Renewal",
-          tenantData: t,
-        });
+  // Persist filter to localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("redhorn_revenue_filter");
+      if (saved) {
+        const arr = JSON.parse(saved) as string[];
+        if (arr.length > 0) setFilteredUnits(new Set(arr));
       }
-
-      // Lease expiring within 90 days
-      const daysRemaining = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysRemaining > 0 && daysRemaining <= 90) {
-        items.push({
-          id: `expiring-${t.unit}`,
-          unit: t.unit,
-          tenant: t.tenant,
-          building: t.building,
-          issue: `Lease expires in ${daysRemaining} days (${t.leaseTo})`,
-          category: "Expiring",
-          amountAtRisk: t.monthlyRent,
-          severity: "Warning",
-          action: "Start Renewal",
-          tenantData: t,
-        });
-      }
-    }
-  }
-
-  // Sort: Critical first, then Warning, then Info; within same severity, by amount desc
-  const sevOrder: Record<Severity, number> = { Critical: 0, Warning: 1, Info: 2 };
-  items.sort((a, b) => {
-    const sd = sevOrder[a.severity] - sevOrder[b.severity];
-    if (sd !== 0) return sd;
-    return b.amountAtRisk - a.amountAtRisk;
-  });
-
-  return items;
-}
-
-function SeverityBadge({ severity }: { severity: Severity }) {
-  const colors: Record<Severity, string> = {
-    Critical: "bg-red-100 text-red-700",
-    Warning: "bg-amber-100 text-amber-700",
-    Info: "bg-zinc-100 text-zinc-600",
-  };
-  return (
-    <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded ${colors[severity]}`}>
-      {severity}
-    </span>
-  );
-}
-
-export default function ActionBoard() {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selected, setSelected] = useState<ActionItem | null>(null);
-
-  const actions = useMemo(() => generateActions(), []);
-
-  const totalPastDue = useMemo(
-    () => tenants.reduce((sum, t) => sum + t.pastDueAmount, 0),
-    []
-  );
-  const unpostedCount = useMemo(
-    () =>
-      tenants.filter(
-        (t) =>
-          t.leaseType === "Office Net Lease" &&
-          !t.electricPosted &&
-          t.monthlyElectric > 0 &&
-          !t.tenant.includes("Owner")
-      ).length,
-    []
-  );
-  const expiringCount = useMemo(
-    () => actions.filter((a) => a.category === "Expiring").length,
-    [actions]
-  );
-
-  const columnDefs = useMemo<ColDef<ActionItem>[]>(
-    () => [
-      {
-        headerName: "Severity",
-        field: "severity",
-        width: 100,
-        cellRenderer: (params: { value: Severity }) => {
-          const colors: Record<Severity, string> = {
-            Critical: "#dc2626",
-            Warning: "#d97706",
-            Info: "#71717a",
-          };
-          return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colors[params.value]};margin-right:6px"></span>${params.value}`;
-        },
-      },
-      { headerName: "Unit", field: "unit", width: 90 },
-      { headerName: "Tenant", field: "tenant", flex: 1, minWidth: 160 },
-      { headerName: "Issue", field: "issue", flex: 2, minWidth: 240 },
-      {
-        headerName: "At Risk",
-        field: "amountAtRisk",
-        width: 110,
-        valueFormatter: (params: { value: number }) =>
-          params.value > 0 ? formatCurrency(params.value) : "—",
-      },
-      {
-        headerName: "Action",
-        field: "action",
-        width: 130,
-        cellRenderer: (params: { value: string }) =>
-          `<span style="color:#18181b;font-weight:500;text-decoration:underline;text-underline-offset:2px;cursor:pointer">${params.value}</span>`,
-      },
-    ],
-    []
-  );
-
-  const onRowClicked = useCallback((event: { data: ActionItem | undefined }) => {
-    if (event.data) {
-      setSelected(event.data);
-      setDrawerOpen(true);
-    }
+    } catch {}
   }, []);
 
-  const t = selected?.tenantData;
+  const handleFilterApply = useCallback((units: Set<string>) => {
+    setFilteredUnits(units);
+    localStorage.setItem("redhorn_revenue_filter", JSON.stringify(Array.from(units)));
+  }, []);
+  const occupied = tenants.filter(t => t.status !== "vacant");
+  const vacant = tenants.filter(t => t.status === "vacant");
+  const totalSqft = tenants.reduce((sum, t) => sum + t.sqft, 0);
+  const occupiedSqft = occupied.reduce((sum, t) => sum + t.sqft, 0);
+  const occupancyPct = Math.round((occupiedSqft / totalSqft) * 100);
+  const totalMonthlyRent = occupied.reduce((sum, t) => sum + t.monthlyRent, 0);
+  const totalPastDue = tenants.reduce((sum, t) => sum + t.pastDueAmount, 0);
+  const electricMissing = tenants.filter(t => !t.electricPosted && t.leaseType === "Office Net Lease" && t.tenant && !t.tenant.includes("Owner"));
+  const alerts = getAlerts();
+  const expiringCount = tenants.filter(t => t.status === "expiring_soon").length;
+
+  const chartFont = "'Inter', -apple-system, system-ui, sans-serif";
+
+  const revenueChartOptions: ApexCharts.ApexOptions = {
+    chart: { type: "bar", toolbar: { show: false }, fontFamily: chartFont },
+    plotOptions: { bar: { borderRadius: 2, columnWidth: "55%" } },
+    colors: ["#18181b", "#71717a", "#d4d4d8"],
+    xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: "#a1a1aa", fontSize: "11px" } } },
+    yaxis: { labels: { style: { colors: "#a1a1aa", fontSize: "11px" }, formatter: (v: number) => `$${(v / 1000).toFixed(0)}k` } },
+    grid: { borderColor: "#f4f4f5", strokeDashArray: 0 },
+    legend: { position: "top", horizontalAlign: "right", fontSize: "11px", markers: { size: 6, shape: "square" as const } },
+    tooltip: { y: { formatter: (v: number) => formatCurrency(v) } },
+    dataLabels: { enabled: false },
+  };
+
+  // Scale chart data based on filtered units
+  const filteredRent = tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyRent, 0);
+  const filteredElectric = tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyElectric, 0);
+  const totalRentAll = tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")).reduce((s, t) => s + t.monthlyRent, 0);
+  const totalElectricAll = tenants.filter(t => t.status !== "vacant" && t.monthlyElectric > 0 && !t.tenant.includes("Owner")).reduce((s, t) => s + t.monthlyElectric, 0);
+  const rentRatio = totalRentAll > 0 ? filteredRent / totalRentAll : 1;
+  const electricRatio = totalElectricAll > 0 ? filteredElectric / totalElectricAll : 1;
+
+  const revenueSeries = useMemo(() => [
+    { name: "Rent", data: monthlyRevenue.map(m => Math.round(m.rent * rentRatio)) },
+    { name: "Electric", data: monthlyRevenue.map(m => Math.round(m.electric * electricRatio)) },
+    { name: "CAM", data: monthlyRevenue.map(m => Math.round(m.cam * rentRatio)) },
+  ], [rentRatio, electricRatio]);
+
+  const occupancyChartOptions: ApexCharts.ApexOptions = {
+    chart: { type: "area", toolbar: { show: false }, fontFamily: chartFont },
+    colors: ["#18181b"],
+    fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.12, opacityTo: 0, stops: [0, 100] } },
+    stroke: { curve: "smooth", width: 2 },
+    xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: "#a1a1aa", fontSize: "11px" } } },
+    yaxis: { min: 70, max: 100, labels: { style: { colors: "#a1a1aa", fontSize: "11px" }, formatter: (v: number) => `${v}%` } },
+    grid: { borderColor: "#f4f4f5", strokeDashArray: 0 },
+    markers: { size: 3, colors: ["#18181b"], strokeColors: "#fff", strokeWidth: 2 },
+    tooltip: { y: { formatter: (v: number) => `${v}%` } },
+    dataLabels: { enabled: false },
+  };
+
+  const occupancySeries = [{ name: "Occupancy", data: monthlyRevenue.map(m => m.occupancy) }];
 
   return (
-    <>
-      <PageHeader title="Action Board" subtitle="Prioritized tasks for this week" />
+    <div>
+      <PageHeader title="Monthly KPI Dashboard" subtitle="Hollister Business Park — March 2026" />
 
-      {/* Summary numbers */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-        <div className="border border-[#e4e4e7] bg-white px-4 py-3 rounded">
-          <div className="text-xs text-[#71717a] uppercase tracking-wide font-medium">Total Past Due</div>
-          <div className="text-lg font-semibold text-red-600 mt-0.5">{formatCurrency(totalPastDue)}</div>
-        </div>
-        <div className="border border-[#e4e4e7] bg-white px-4 py-3 rounded">
-          <div className="text-xs text-[#71717a] uppercase tracking-wide font-medium">Unposted Charges</div>
-          <div className="text-lg font-semibold text-[#18181b] mt-0.5">{unpostedCount}</div>
-        </div>
-        <div className="border border-[#e4e4e7] bg-white px-4 py-3 rounded">
-          <div className="text-xs text-[#71717a] uppercase tracking-wide font-medium">Leases Expiring (90d)</div>
-          <div className="text-lg font-semibold text-amber-600 mt-0.5">{expiringCount}</div>
-        </div>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3 mb-6">
+        <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} sparkline={monthlyRevenue.map(m => m.total)} onClick={() => setKpiDrawer("revenue")} />
+        <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${tenants.length} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
+        <KPICard title="Past Due" value={formatCurrency(totalPastDue)} color="text-[#dc2626]" onClick={() => setKpiDrawer("pastdue")} />
+        <KPICard title="Vacant" value={String(vacant.length)} subtitle={`${vacant.reduce((s, t) => s + t.sqft, 0).toLocaleString()} SF`} onClick={() => setKpiDrawer("vacant")} />
+        <KPICard title="Electric Posting" value={electricMissing.length > 0 ? `${electricMissing.length} Missing` : "All Posted"} color={electricMissing.length > 0 ? "text-[#d97706]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("electric")} />
+        <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
       </div>
 
-      {/* AG Grid */}
-      <div className="border border-[#e4e4e7] bg-white rounded overflow-auto">
-        <div className="ag-theme-alpine" style={{ width: "100%", minWidth: 600 }}>
-          <AgGridReact<ActionItem>
-            rowData={actions}
-            columnDefs={columnDefs}
-            domLayout="autoHeight"
-            onRowClicked={onRowClicked}
-            suppressCellFocus
-            getRowId={(params) => params.data.id}
-          />
-        </div>
-      </div>
+      {/* Notion-style Action Items */}
+      <ActionItems />
 
-      {/* Drawer */}
-      <Drawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        title={selected ? `${selected.unit} — ${selected.tenant}` : ""}
-        subtitle={selected ? `Building ${selected.building}` : ""}
-      >
-        {t && (
-          <div className="space-y-5">
-            <div>
-              <SeverityBadge severity={selected!.severity} />
-              <p className="text-sm text-[#18181b] mt-2 font-medium">{selected!.issue}</p>
+      {/* Charts */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mb-6">
+        <div className="bg-white border border-[#e4e4e7] rounded p-4">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[13px] font-semibold text-[#18181b]">Revenue Breakdown</p>
+            <div className="flex items-center gap-1.5">
+              {isFiltered && (
+                <button
+                  onClick={() => { setFilteredUnits(allOccupiedUnits); localStorage.removeItem("redhorn_revenue_filter"); }}
+                  className="text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors text-[#71717a] hover:text-[#18181b] border border-[#e4e4e7] hover:bg-[#f4f4f5]"
+                >
+                  Clear Filter
+                </button>
+              )}
+              <button
+                onClick={() => setFilterOpen(true)}
+                className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
+                  isFiltered ? "bg-[#18181b] text-white" : "text-[#71717a] hover:text-[#18181b] hover:bg-[#f4f4f5]"
+                }`}
+              >
+                <Filter size={12} />
+                {isFiltered ? `${filteredUnits.size} units` : "Filter"}
+              </button>
             </div>
-
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <span className="text-[#71717a] text-xs block">Lease Type</span>
-                <span className="font-medium">{t.leaseType}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Square Feet</span>
-                <span className="font-medium">{t.sqft.toLocaleString()} SF</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Monthly Rent</span>
-                <span className="font-medium">{formatCurrency(t.monthlyRent)}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Monthly Electric</span>
-                <span className="font-medium">{t.monthlyElectric > 0 ? formatCurrency(t.monthlyElectric) : "—"}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Lease Start</span>
-                <span className="font-medium">{t.leaseFrom || "—"}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Lease End</span>
-                <span className="font-medium">{t.leaseTo || "—"}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Security Deposit</span>
-                <span className="font-medium">{formatCurrency(t.securityDeposit)}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Last Payment</span>
-                <span className="font-medium">{t.lastPaymentDate || "—"}</span>
-              </div>
-              {t.pastDueAmount > 0 && (
-                <div>
-                  <span className="text-[#71717a] text-xs block">Past Due</span>
-                  <span className="font-medium text-red-600">{formatCurrency(t.pastDueAmount)}</span>
-                </div>
-              )}
-              {t.delinquencyStage && t.delinquencyStage !== "none" && (
-                <div>
-                  <span className="text-[#71717a] text-xs block">Delinquency Stage</span>
-                  <span className="font-medium">
-                    {t.delinquencyStage.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                  </span>
-                </div>
-              )}
-              {t.amps && (
-                <div>
-                  <span className="text-[#71717a] text-xs block">Amps</span>
-                  <span className="font-medium">{t.amps}A</span>
-                </div>
-              )}
-            </div>
-
-            {t.notes && (
-              <div>
-                <span className="text-[#71717a] text-xs block mb-1">Notes</span>
-                <p className="text-sm bg-[#f4f4f5] px-3 py-2 rounded">{t.notes}</p>
-              </div>
-            )}
-
-            <button className="w-full py-2 bg-[#18181b] text-white text-sm font-medium rounded hover:bg-zinc-800 transition-colors">
-              {selected!.action}
-            </button>
           </div>
-        )}
-      </Drawer>
-    </>
+          <p className="text-[11px] text-[#a1a1aa] mb-3">
+            {isFiltered
+              ? `Showing ${filteredUnits.size} of ${allOccupiedUnits.size} units — ${formatCurrency(tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyRent, 0))}/mo`
+              : "Last 9 months by category"}
+          </p>
+          <Chart options={revenueChartOptions} series={revenueSeries} type="bar" height={260} />
+        </div>
+
+      <RevenueFilter
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        selectedUnits={filteredUnits}
+        onApply={handleFilterApply}
+      />
+        <div className="bg-white border border-[#e4e4e7] rounded p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <div>
+              <p className="text-[13px] font-semibold text-[#18181b]">Occupancy Trend</p>
+              <p className="text-[11px] text-[#a1a1aa] mt-0.5">Portfolio-wide rate</p>
+            </div>
+            <p className="text-[12px] font-medium text-[#16a34a]">{occupancyPct}%</p>
+          </div>
+          <Chart options={occupancyChartOptions} series={occupancySeries} type="area" height={260} />
+        </div>
+      </div>
+
+      {/* PM Call Prep */}
+      <div className="bg-white border border-[#e4e4e7] rounded p-4">
+        <p className="text-[13px] font-semibold text-[#18181b] mb-4">Weekly PM Call Prep</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <p className="text-[11px] font-medium text-[#dc2626] uppercase tracking-wide mb-2">Past Due</p>
+            <div className="space-y-2">
+              {tenants.filter(t => t.pastDueAmount > 0).map(t => (
+                <div key={t.unit} className="text-[12px]">
+                  <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
+                  <p className="text-[#dc2626]">{formatCurrency(t.pastDueAmount)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-[#d97706] uppercase tracking-wide mb-2">Electric Not Posted</p>
+            <div className="space-y-2">
+              {electricMissing.map(t => (
+                <div key={t.unit} className="text-[12px]">
+                  <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
+                  <p className="text-[#71717a]">~{formatCurrency(t.monthlyElectric)}/mo expected</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-[#2563eb] uppercase tracking-wide mb-2">Expiring Soon</p>
+            <div className="space-y-2">
+              {tenants.filter(t => t.status === "expiring_soon").slice(0, 5).map(t => (
+                <div key={t.unit} className="text-[12px]">
+                  <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
+                  <p className="text-[#71717a]">Expires {t.leaseTo}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <KPIDrawer open={!!kpiDrawer} kpiKey={kpiDrawer} onClose={() => setKpiDrawer(null)} />
+    </div>
   );
 }

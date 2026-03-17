@@ -1,284 +1,153 @@
 "use client";
-
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef } from "ag-grid-community";
-import { tenants, Tenant, formatCurrency, getStatusLabel } from "@/data/tenants";
+import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
+import { tenants, formatCurrency, getStatusLabel, Tenant } from "@/data/tenants";
+import { exportRentRoll } from "@/data/export";
+import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
-import Drawer from "@/components/Drawer";
+import { Download } from "lucide-react";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-export default function RentRollPage() {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selected, setSelected] = useState<Tenant | null>(null);
-  const [search, setSearch] = useState("");
-
-  const totalUnits = tenants.length;
-  const totalSF = useMemo(() => tenants.reduce((s, t) => s + t.sqft, 0), []);
-  const totalMonthlyRent = useMemo(() => tenants.reduce((s, t) => s + t.monthlyRent, 0), []);
-  const occupiedCount = useMemo(() => tenants.filter((t) => t.status !== "vacant").length, []);
-
-  const columnDefs = useMemo<ColDef<Tenant>[]>(
-    () => [
-      { headerName: "Unit", field: "unit", width: 90, sort: "asc" as const },
-      { headerName: "Building", field: "building", width: 85 },
-      {
-        headerName: "Tenant",
-        field: "tenant",
-        flex: 1,
-        minWidth: 160,
-        valueFormatter: (params: { value: string }) => params.value || "VACANT",
-      },
-      {
-        headerName: "SF",
-        field: "sqft",
-        width: 85,
-        valueFormatter: (params: { value: number }) => params.value.toLocaleString(),
-      },
-      {
-        headerName: "Lease Type",
-        field: "leaseType",
-        width: 140,
-        valueFormatter: (params: { value: string }) => params.value.replace("Office ", ""),
-      },
-      {
-        headerName: "Monthly Rent",
-        field: "monthlyRent",
-        width: 120,
-        valueFormatter: (params: { value: number }) => (params.value > 0 ? formatCurrency(params.value) : "—"),
-      },
-      {
-        headerName: "Electric",
-        field: "monthlyElectric",
-        width: 100,
-        valueFormatter: (params: { value: number }) => (params.value > 0 ? formatCurrency(params.value) : "—"),
-      },
-      {
-        headerName: "Status",
-        field: "status",
-        width: 110,
-        cellRenderer: (params: { value: Tenant["status"] }) => {
-          const colors: Record<string, string> = {
-            current: "#16a34a",
-            past_due: "#dc2626",
-            locked_out: "#d97706",
-            vacant: "#71717a",
-            expiring_soon: "#2563eb",
-          };
-          const color = colors[params.value] || "#71717a";
-          const label = getStatusLabel(params.value);
-          return `<span style="display:inline-flex;align-items:center;gap:5px"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color}"></span><span style="font-size:12px">${label}</span></span>`;
-        },
-      },
-      {
-        headerName: "Lease End",
-        field: "leaseTo",
-        width: 110,
-        valueFormatter: (params: { value: string }) => params.value || "—",
-      },
-    ],
-    []
+function StatusCellRenderer(props: { value: string }) {
+  const status = props.value;
+  const dotColors: Record<string, string> = {
+    current: "bg-[#16a34a]",
+    past_due: "bg-[#dc2626]",
+    expiring_soon: "bg-[#2563eb]",
+    vacant: "bg-[#a1a1aa]",
+    locked_out: "bg-[#d97706]",
+  };
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b]">
+      <span className={`w-1.5 h-1.5 rounded-full ${dotColors[status] || "bg-[#a1a1aa]"}`} />
+      {getStatusLabel(status as Tenant["status"])}
+    </span>
   );
+}
 
-  const filteredData = useMemo(() => {
-    if (!search) return tenants;
-    const q = search.toLowerCase();
-    return tenants.filter(
-      (t) =>
-        t.unit.toLowerCase().includes(q) ||
-        t.tenant.toLowerCase().includes(q) ||
-        t.building.toLowerCase().includes(q) ||
-        t.status.toLowerCase().includes(q)
-    );
-  }, [search]);
+function CurrencyCellRenderer(props: { value: number }) {
+  return <span>{props.value > 0 ? formatCurrency(props.value) : "—"}</span>;
+}
 
-  const onRowClicked = useCallback((event: { data: Tenant | undefined }) => {
-    if (event.data) {
-      setSelected(event.data);
-      setDrawerOpen(true);
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isMobile;
+}
+
+export default function RentRollPage() {
+  const [selected, setSelected] = useState<Tenant | null>(null);
+  const gridRef = useRef<AgGridReact>(null);
+  const isMobile = useIsMobile();
+
+  const columnDefs = useMemo<ColDef[]>(() => {
+    const unitWidth = isMobile ? 90 : 120;
+    return [
+      { field: "unit", headerName: "Unit", width: unitWidth, pinned: "left", sort: "asc" },
+      { field: "tenant", headerName: "Tenant", minWidth: 180, flex: isMobile ? 0 : 1, width: isMobile ? 180 : undefined,
+        valueFormatter: (p: { value: string }) => p.value || "— Vacant —" },
+      { field: "leaseType", headerName: "Lease Type", width: 130,
+        valueFormatter: (p: { value: string }) => p.value?.replace("Office ", "") || "" },
+      { field: "building", headerName: "Bldg", width: 70, filter: true },
+      { field: "sqft", headerName: "Sq Ft", width: 90, type: "numericColumn",
+        valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
+      { field: "leaseFrom", headerName: "Lease Start", width: 110,
+        valueFormatter: (p: { value: string }) => p.value || "—" },
+      { field: "leaseTo", headerName: "Lease End", width: 110,
+        valueFormatter: (p: { value: string }) => p.value || "—" },
+      { field: "monthlyRent", headerName: "Rent", width: 110, type: "numericColumn",
+        cellRenderer: CurrencyCellRenderer },
+      { field: "monthlyElectric", headerName: "Electric", width: 90, type: "numericColumn",
+        cellRenderer: CurrencyCellRenderer },
+      { field: "pastDueAmount", headerName: "Past Due", width: 100, type: "numericColumn",
+        cellRenderer: CurrencyCellRenderer },
+      { field: "status", headerName: "Status", width: 130, cellRenderer: StatusCellRenderer, filter: true },
+    ];
+  }, [isMobile]);
+
+  const defaultColDef = useMemo<ColDef>(() => ({
+    sortable: true,
+    resizable: true,
+    filter: true,
+    suppressMovable: false,
+  }), []);
+
+  const onGridReady = useCallback((params: GridReadyEvent) => {
+    // Only auto-fit on desktop — on mobile let columns keep their width for horizontal scroll
+    if (window.innerWidth >= 768) {
+      params.api.sizeColumnsToFit();
     }
   }, []);
 
-  const exportCSV = useCallback(() => {
-    const headers = ["Unit", "Building", "Tenant", "SF", "Lease Type", "Monthly Rent", "Electric", "Status", "Lease Start", "Lease End"];
-    const csvRows = [headers.join(",")];
-    for (const t of tenants) {
-      csvRows.push(
-        [
-          t.unit,
-          t.building,
-          `"${t.tenant || "VACANT"}"`,
-          t.sqft,
-          t.leaseType,
-          t.monthlyRent,
-          t.monthlyElectric,
-          t.status,
-          t.leaseFrom,
-          t.leaseTo,
-        ].join(",")
-      );
-    }
-    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "rent-roll-hollister.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+  const onRowClicked = useCallback((event: RowClickedEvent) => {
+    setSelected(event.data as Tenant);
   }, []);
+
+  const totalRent = tenants.filter(t => t.status !== "vacant").reduce((s, t) => s + t.monthlyRent, 0);
+  const totalSqft = tenants.reduce((s, t) => s + t.sqft, 0);
 
   return (
-    <>
-      <PageHeader title="Rent Roll" subtitle={`${totalUnits} units · ${totalSF.toLocaleString()} SF · ${formatCurrency(totalMonthlyRent)}/mo`}>
-        <input
-          type="text"
-          placeholder="Search units..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="text-sm border border-[#e4e4e7] rounded px-3 py-1.5 bg-white text-[#18181b] w-48"
-        />
-        <button
-          onClick={exportCSV}
-          className="text-sm border border-[#e4e4e7] rounded px-3 py-1.5 bg-white text-[#18181b] hover:bg-[#f4f4f5] transition-colors"
-        >
-          Export CSV
+    <div>
+      <PageHeader title="Rent Roll" subtitle="All units as of March 2026 — Tap any row for details">
+        <button onClick={exportRentRoll} className="flex items-center gap-1.5 bg-white border border-[#e8eaef] hover:border-[#4f6ef7] text-[#5a5e73] hover:text-[#4f6ef7] text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+          <Download size={13} /> Export .xlsx
         </button>
       </PageHeader>
 
-      {/* Summary row */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        <div className="border border-[#e4e4e7] bg-white px-4 py-3 rounded">
-          <div className="text-xs text-[#71717a] uppercase tracking-wide font-medium">Total Units</div>
-          <div className="text-lg font-semibold mt-0.5">{totalUnits}</div>
+      {/* Summary bar */}
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-[#1e1e2d] font-semibold whitespace-nowrap">
+            {tenants.length} Units
+          </span>
+          <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-[#1e1e2d] whitespace-nowrap">
+            {totalSqft.toLocaleString()} SF
+          </span>
+          <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-emerald-700 font-semibold whitespace-nowrap">
+            {formatCurrency(totalRent)}/mo
+          </span>
         </div>
-        <div className="border border-[#e4e4e7] bg-white px-4 py-3 rounded">
-          <div className="text-xs text-[#71717a] uppercase tracking-wide font-medium">Occupied</div>
-          <div className="text-lg font-semibold mt-0.5">{occupiedCount}</div>
-        </div>
-        <div className="border border-[#e4e4e7] bg-white px-4 py-3 rounded">
-          <div className="text-xs text-[#71717a] uppercase tracking-wide font-medium">Total SF</div>
-          <div className="text-lg font-semibold mt-0.5">{totalSF.toLocaleString()}</div>
-        </div>
-        <div className="border border-[#e4e4e7] bg-white px-4 py-3 rounded">
-          <div className="text-xs text-[#71717a] uppercase tracking-wide font-medium">Monthly Rent</div>
-          <div className="text-lg font-semibold mt-0.5">{formatCurrency(totalMonthlyRent)}</div>
-        </div>
-      </div>
-
-      {/* AG Grid */}
-      <div className="border border-[#e4e4e7] bg-white rounded overflow-auto">
-        <div className="ag-theme-alpine" style={{ width: "100%", minWidth: 600 }}>
-          <AgGridReact<Tenant>
-            rowData={filteredData}
-            columnDefs={columnDefs}
-            domLayout="autoHeight"
-            onRowClicked={onRowClicked}
-            suppressCellFocus
-            getRowId={(params) => params.data.unit}
+        <div className="sm:ml-auto w-full sm:w-auto">
+          <input
+            type="text"
+            placeholder="Quick search all data..."
+            className="px-3 py-1.5 bg-white border border-[#e8eaef] rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7] w-full sm:w-64"
+            onChange={(e) => {
+              gridRef.current?.api?.setGridOption("quickFilterText", e.target.value);
+            }}
           />
         </div>
       </div>
 
-      {/* Drawer */}
-      <Drawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        title={selected ? `${selected.unit}${selected.tenant ? ` — ${selected.tenant}` : " — VACANT"}` : ""}
-        subtitle={selected ? `Building ${selected.building} · ${selected.sqft.toLocaleString()} SF` : ""}
-      >
-        {selected && (
-          <div className="space-y-5">
-            {/* Status badge */}
-            <div>
-              <span
-                className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded ${
-                  selected.status === "current"
-                    ? "bg-green-100 text-green-700"
-                    : selected.status === "past_due"
-                    ? "bg-red-100 text-red-700"
-                    : selected.status === "vacant"
-                    ? "bg-zinc-100 text-zinc-600"
-                    : selected.status === "expiring_soon"
-                    ? "bg-blue-100 text-blue-700"
-                    : "bg-amber-100 text-amber-700"
-                }`}
-              >
-                {getStatusLabel(selected.status)}
-              </span>
-            </div>
+      {/* AG Grid Table */}
+      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7]" style={{ height: "min(calc(100vh - 220px), 700px)", minHeight: 350 }}>
+        <AgGridReact
+          ref={gridRef}
+          rowData={tenants}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          onGridReady={onGridReady}
+          onRowClicked={onRowClicked}
+          rowSelection="single"
+          animateRows={true}
+          pagination={true}
+          paginationAutoPageSize={false}
+          paginationPageSize={500}
+          suppressRowHoverHighlight={false}
+          rowBuffer={20}
+          cacheBlockSize={500}
+          getRowId={(params) => params.data.unit}
+        />
+      </div>
 
-            {/* Tenant Info */}
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <span className="text-[#71717a] text-xs block">Lease Type</span>
-                <span className="font-medium">{selected.leaseType}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Square Feet</span>
-                <span className="font-medium">{selected.sqft.toLocaleString()} SF</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Monthly Rent</span>
-                <span className="font-medium">{selected.monthlyRent > 0 ? formatCurrency(selected.monthlyRent) : "—"}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Monthly Electric</span>
-                <span className="font-medium">{selected.monthlyElectric > 0 ? formatCurrency(selected.monthlyElectric) : "—"}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Lease Start</span>
-                <span className="font-medium">{selected.leaseFrom || "—"}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Lease End</span>
-                <span className="font-medium">{selected.leaseTo || "—"}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Security Deposit</span>
-                <span className="font-medium">{selected.securityDeposit > 0 ? formatCurrency(selected.securityDeposit) : "—"}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Last Payment</span>
-                <span className="font-medium">{selected.lastPaymentDate || "—"}</span>
-              </div>
-              {selected.pastDueAmount > 0 && (
-                <>
-                  <div>
-                    <span className="text-[#71717a] text-xs block">Past Due</span>
-                    <span className="font-semibold text-red-600">{formatCurrency(selected.pastDueAmount)}</span>
-                  </div>
-                  <div>
-                    <span className="text-[#71717a] text-xs block">Delinquency Stage</span>
-                    <span className="font-medium">
-                      {(selected.delinquencyStage || "past_due").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                    </span>
-                  </div>
-                </>
-              )}
-              {selected.amps && (
-                <div>
-                  <span className="text-[#71717a] text-xs block">Electrical</span>
-                  <span className="font-medium">{selected.amps}A</span>
-                </div>
-              )}
-              {selected.splittable && (
-                <div>
-                  <span className="text-[#71717a] text-xs block">Splittable</span>
-                  <span className="font-medium">{selected.splitDetail || "Yes"}</span>
-                </div>
-              )}
-            </div>
-
-            {selected.notes && (
-              <div>
-                <span className="text-[#71717a] text-xs block mb-1">Notes</span>
-                <p className="text-sm bg-[#f4f4f5] px-3 py-2 rounded">{selected.notes}</p>
-              </div>
-            )}
-          </div>
-        )}
-      </Drawer>
-    </>
+      <UnitDetailPanel tenant={selected} onClose={() => setSelected(null)} />
+    </div>
   );
 }

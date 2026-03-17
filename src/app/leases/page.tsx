@@ -1,329 +1,172 @@
 "use client";
-
-import { useState, useMemo, useCallback } from "react";
+import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef } from "ag-grid-community";
-import { tenants, Tenant, formatCurrency } from "@/data/tenants";
+import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
+import { tenants, formatCurrency } from "@/data/tenants";
 import PageHeader from "@/components/PageHeader";
-import Drawer from "@/components/Drawer";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-type TabFilter = "all" | "expired" | "critical" | "warning" | "ok";
+const now = new Date("2026-03-15");
 
-const RENEWAL_STAGES = ["Not Started", "Renewal Sent", "Tenant Responded", "New Terms", "Executed"] as const;
+type UrgencyFilter = "all" | "Expired" | "Critical (<90d)" | "Warning (90-180d)" | "OK (180d+)";
 
-interface LeaseRow {
-  unit: string;
-  tenant: string;
-  building: string;
-  leaseStart: string;
-  leaseEnd: string;
-  daysRemaining: number;
-  monthlyRent: number;
-  urgency: string;
-  tenantData: Tenant;
-}
-
-function getDaysRemaining(leaseTo: string): number {
-  if (!leaseTo) return -9999;
-  const today = new Date("2026-03-17");
+function getUrgency(leaseTo: string) {
   const end = new Date(leaseTo);
-  return Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (end <= now) return "Expired";
+  const days = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (days <= 90) return "Critical (<90d)";
+  if (days <= 180) return "Warning (90-180d)";
+  return "OK (180d+)";
 }
 
-function getUrgency(days: number): string {
-  if (days < 0) return "Expired";
-  if (days <= 90) return "Critical";
-  if (days <= 180) return "Warning";
-  return "OK";
+function daysUntil(date: string) {
+  return Math.ceil((new Date(date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function DaysRenderer(props: { value: number }) {
+  const d = props.value;
+  const color = d <= 0 ? "text-[#dc2626]" : d <= 90 ? "text-[#dc2626]" : d <= 180 ? "text-[#d97706]" : "text-[#16a34a]";
+  return <span className={`font-semibold text-[12px] ${color}`}>{d <= 0 ? "EXPIRED" : `${d}d`}</span>;
+}
+
+function UrgencyRenderer(props: { value: string }) {
+  const dots: Record<string, string> = {
+    "Expired": "bg-[#dc2626]",
+    "Critical (<90d)": "bg-[#dc2626]",
+    "Warning (90-180d)": "bg-[#d97706]",
+    "OK (180d+)": "bg-[#16a34a]",
+  };
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b]">
+      <span className={`w-1.5 h-1.5 rounded-full ${dots[props.value] || "bg-[#a1a1aa]"}`} />
+      {props.value}
+    </span>
+  );
+}
+
+function useIsMobile() {
+  const [m, setM] = useState(false);
+  useEffect(() => { const c = () => setM(window.innerWidth < 768); c(); window.addEventListener("resize", c); return () => window.removeEventListener("resize", c); }, []);
+  return m;
 }
 
 export default function LeasesPage() {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selected, setSelected] = useState<LeaseRow | null>(null);
-  const [tab, setTab] = useState<TabFilter>("all");
-  const [renewalStages, setRenewalStages] = useState<Record<string, string>>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("lease-renewal-stages");
-      if (saved) return JSON.parse(saved);
-    }
-    return {};
-  });
+  const gridRef = useRef<AgGridReact>(null);
+  const isMobile = useIsMobile();
+  const [activeFilter, setActiveFilter] = useState<UrgencyFilter>("all");
 
-  const leaseRows: LeaseRow[] = useMemo(
-    () =>
-      tenants
-        .filter((t) => t.status !== "vacant" && !t.tenant.includes("Owner"))
-        .map((t) => {
-          const days = getDaysRemaining(t.leaseTo);
-          return {
-            unit: t.unit,
-            tenant: t.tenant,
-            building: t.building,
-            leaseStart: t.leaseFrom,
-            leaseEnd: t.leaseTo,
-            daysRemaining: days,
-            monthlyRent: t.monthlyRent,
-            urgency: getUrgency(days),
-            tenantData: t,
-          };
-        })
-        .sort((a, b) => a.daysRemaining - b.daysRemaining),
-    []
-  );
-
-  const filteredRows = useMemo(() => {
-    if (tab === "all") return leaseRows;
-    if (tab === "expired") return leaseRows.filter((r) => r.urgency === "Expired");
-    if (tab === "critical") return leaseRows.filter((r) => r.urgency === "Critical");
-    if (tab === "warning") return leaseRows.filter((r) => r.urgency === "Warning");
-    return leaseRows.filter((r) => r.urgency === "OK");
-  }, [leaseRows, tab]);
-
-  // Summary: rent at risk by category
-  const rentAtRisk = useMemo(() => {
-    const totals = { expired: 0, critical: 0, warning: 0 };
-    for (const r of leaseRows) {
-      if (r.urgency === "Expired") totals.expired += r.monthlyRent;
-      if (r.urgency === "Critical") totals.critical += r.monthlyRent;
-      if (r.urgency === "Warning") totals.warning += r.monthlyRent;
-    }
-    return totals;
-  }, [leaseRows]);
-
-  const columnDefs = useMemo<ColDef<LeaseRow>[]>(
-    () => [
-      { headerName: "Unit", field: "unit", width: 90 },
-      { headerName: "Tenant", field: "tenant", flex: 1, minWidth: 160 },
-      { headerName: "Lease Start", field: "leaseStart", width: 110 },
-      { headerName: "Lease End", field: "leaseEnd", width: 110 },
-      {
-        headerName: "Days Left",
-        field: "daysRemaining",
-        width: 100,
-        cellRenderer: (params: { value: number }) => {
-          const v = params.value;
-          if (v < 0) return `<span style="color:#dc2626;font-weight:600">${v}d</span>`;
-          if (v <= 90) return `<span style="color:#dc2626;font-weight:600">${v}d</span>`;
-          if (v <= 180) return `<span style="color:#d97706;font-weight:600">${v}d</span>`;
-          return `<span style="color:#16a34a">${v}d</span>`;
-        },
-      },
-      {
-        headerName: "Monthly Rent",
-        field: "monthlyRent",
-        width: 120,
-        valueFormatter: (params: { value: number }) => formatCurrency(params.value),
-      },
-      {
-        headerName: "Status",
-        field: "urgency",
-        width: 100,
-        cellRenderer: (params: { value: string }) => {
-          const colors: Record<string, string> = {
-            Expired: "#dc2626",
-            Critical: "#dc2626",
-            Warning: "#d97706",
-            OK: "#16a34a",
-          };
-          const bg: Record<string, string> = {
-            Expired: "#fef2f2",
-            Critical: "#fef2f2",
-            Warning: "#fffbeb",
-            OK: "#f0fdf4",
-          };
-          return `<span style="display:inline-block;padding:1px 8px;border-radius:4px;font-size:11px;font-weight:500;color:${colors[params.value]};background:${bg[params.value]}">${params.value}</span>`;
-        },
-      },
-    ],
-    []
-  );
-
-  const onRowClicked = useCallback((event: { data: LeaseRow | undefined }) => {
-    if (event.data) {
-      setSelected(event.data);
-      setDrawerOpen(true);
-    }
+  const leaseData = useMemo(() => {
+    return tenants
+      .filter(t => t.leaseTo && t.tenant && !t.tenant.includes("Owner"))
+      .map(t => ({ ...t, urgency: getUrgency(t.leaseTo), daysLeft: daysUntil(t.leaseTo) }))
+      .sort((a, b) => a.daysLeft - b.daysLeft);
   }, []);
 
-  const advanceRenewal = useCallback(
-    (unit: string) => {
-      const current = renewalStages[unit] || "Not Started";
-      const currentIdx = RENEWAL_STAGES.indexOf(current as typeof RENEWAL_STAGES[number]);
-      const nextIdx = Math.min(currentIdx + 1, RENEWAL_STAGES.length - 1);
-      const updated = { ...renewalStages, [unit]: RENEWAL_STAGES[nextIdx] };
-      setRenewalStages(updated);
-      localStorage.setItem("lease-renewal-stages", JSON.stringify(updated));
-    },
-    [renewalStages]
-  );
+  const filteredData = useMemo(() => {
+    if (activeFilter === "all") return leaseData;
+    return leaseData.filter(t => t.urgency === activeFilter);
+  }, [leaseData, activeFilter]);
 
-  const tabs: { key: TabFilter; label: string; count: number }[] = [
-    { key: "all", label: "All", count: leaseRows.length },
-    { key: "expired", label: "Expired", count: leaseRows.filter((r) => r.urgency === "Expired").length },
-    { key: "critical", label: "Critical (<90d)", count: leaseRows.filter((r) => r.urgency === "Critical").length },
-    { key: "warning", label: "Warning (90-180d)", count: leaseRows.filter((r) => r.urgency === "Warning").length },
-    { key: "ok", label: "OK (180d+)", count: leaseRows.filter((r) => r.urgency === "OK").length },
+  const counts = useMemo(() => ({
+    expired: leaseData.filter(t => t.urgency === "Expired").length,
+    critical: leaseData.filter(t => t.urgency === "Critical (<90d)").length,
+    warning: leaseData.filter(t => t.urgency === "Warning (90-180d)").length,
+    ok: leaseData.filter(t => t.urgency === "OK (180d+)").length,
+  }), [leaseData]);
+
+  const filters: { key: UrgencyFilter; label: string; count: number; dot: string }[] = [
+    { key: "all", label: "All", count: leaseData.length, dot: "bg-[#18181b]" },
+    { key: "Expired", label: "Expired", count: counts.expired, dot: "bg-[#dc2626]" },
+    { key: "Critical (<90d)", label: "Critical", count: counts.critical, dot: "bg-[#dc2626]" },
+    { key: "Warning (90-180d)", label: "Warning", count: counts.warning, dot: "bg-[#d97706]" },
+    { key: "OK (180d+)", label: "OK", count: counts.ok, dot: "bg-[#16a34a]" },
   ];
 
+  const columnDefs = useMemo<ColDef[]>(() => {
+    if (isMobile) {
+      return [
+        { field: "unit", headerName: "Unit", width: 90 },
+        { field: "tenant", headerName: "Tenant", minWidth: 120, flex: 1 },
+        { field: "daysLeft", headerName: "Days", width: 70, type: "numericColumn", sort: "asc", cellRenderer: DaysRenderer },
+        { field: "urgency", headerName: "Urgency", width: 120, cellRenderer: UrgencyRenderer },
+      ];
+    }
+    return [
+      { field: "unit", headerName: "Unit", width: 110 },
+      { field: "tenant", headerName: "Tenant", minWidth: 180, flex: 1 },
+      { field: "building", headerName: "Bldg", width: 70 },
+      { field: "sqft", headerName: "Sq Ft", width: 90, type: "numericColumn",
+        valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
+      { field: "leaseFrom", headerName: "Start", width: 110 },
+      { field: "leaseTo", headerName: "End", width: 110 },
+      { field: "daysLeft", headerName: "Days Left", width: 100, type: "numericColumn", sort: "asc", cellRenderer: DaysRenderer },
+      { field: "monthlyRent", headerName: "Rent/Mo", width: 110, type: "numericColumn",
+        valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
+      { field: "urgency", headerName: "Urgency", width: 150, cellRenderer: UrgencyRenderer, filter: true },
+    ];
+  }, [isMobile]);
+
+  const defaultColDef = useMemo<ColDef>(() => ({ sortable: true, resizable: true, filter: true }), []);
+
+  const onGridReady = useCallback((params: GridReadyEvent) => {
+    if (window.innerWidth >= 768) params.api.sizeColumnsToFit();
+  }, []);
+
+  const atRiskRent = leaseData
+    .filter(t => t.urgency === "Expired" || t.urgency === "Critical (<90d)")
+    .reduce((s, t) => s + t.monthlyRent, 0);
+
   return (
-    <>
-      <PageHeader title="Leases" subtitle="Lease expiration tracker and renewal workflow" />
+    <div>
+      <PageHeader title="Lease Expirations" subtitle={`${leaseData.length} leases · ${formatCurrency(atRiskRent)}/mo at risk (expired + critical)`} />
 
-      {/* Rent at risk summary */}
-      <div className="flex flex-wrap gap-3 mb-4">
-        <div className="border border-[#e4e4e7] bg-white px-4 py-3 rounded">
-          <div className="text-xs text-[#71717a] uppercase tracking-wide font-medium">Expired — At Risk</div>
-          <div className="text-lg font-semibold text-red-600 mt-0.5">{formatCurrency(rentAtRisk.expired)}/mo</div>
-        </div>
-        <div className="border border-[#e4e4e7] bg-white px-4 py-3 rounded">
-          <div className="text-xs text-[#71717a] uppercase tracking-wide font-medium">Critical — At Risk</div>
-          <div className="text-lg font-semibold text-red-600 mt-0.5">{formatCurrency(rentAtRisk.critical)}/mo</div>
-        </div>
-        <div className="border border-[#e4e4e7] bg-white px-4 py-3 rounded">
-          <div className="text-xs text-[#71717a] uppercase tracking-wide font-medium">Warning — At Risk</div>
-          <div className="text-lg font-semibold text-amber-600 mt-0.5">{formatCurrency(rentAtRisk.warning)}/mo</div>
-        </div>
-      </div>
-
-      {/* Tab filters */}
-      <div className="flex gap-1 mb-4 overflow-x-auto">
-        {tabs.map((t) => (
+      {/* Filter tabs — click to filter the table */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {filters.map(f => (
           <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`text-xs font-medium px-3 py-1.5 rounded transition-colors whitespace-nowrap ${
-              tab === t.key
-                ? "bg-[#18181b] text-white"
-                : "bg-white text-[#71717a] border border-[#e4e4e7] hover:bg-[#f4f4f5]"
+            key={f.key}
+            onClick={() => setActiveFilter(f.key)}
+            className={`flex items-center gap-2 px-3 py-2 rounded border text-[12px] font-medium cursor-pointer transition-colors ${
+              activeFilter === f.key
+                ? "bg-[#18181b] text-white border-[#18181b]"
+                : "bg-white text-[#71717a] border-[#e4e4e7] hover:border-[#a1a1aa] hover:text-[#18181b]"
             }`}
           >
-            {t.label} ({t.count})
+            <span className={`w-2 h-2 rounded-full ${activeFilter === f.key ? "bg-white" : f.dot}`} />
+            {f.label}
+            <span className={`text-[10px] font-semibold ${activeFilter === f.key ? "text-white/70" : "text-[#a1a1aa]"}`}>{f.count}</span>
           </button>
         ))}
       </div>
 
-      {/* AG Grid */}
-      <div className="border border-[#e4e4e7] bg-white rounded overflow-auto">
-        <div className="ag-theme-alpine" style={{ width: "100%", minWidth: 600 }}>
-          <AgGridReact<LeaseRow>
-            rowData={filteredRows}
-            columnDefs={columnDefs}
-            domLayout="autoHeight"
-            onRowClicked={onRowClicked}
-            suppressCellFocus
-            getRowId={(params) => params.data.unit}
-          />
-        </div>
+      {/* Summary row */}
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[12px] text-[#71717a]">
+          {activeFilter === "all" ? `${leaseData.length} leases` : `${filteredData.length} leases — ${activeFilter}`}
+        </p>
+        <input
+          type="text"
+          placeholder="Search..."
+          className="px-3 py-1.5 bg-white border border-[#e4e4e7] rounded text-[12px] text-[#18181b] placeholder-[#a1a1aa] focus:outline-none focus:border-[#71717a] w-full sm:w-48"
+          onChange={(e) => gridRef.current?.api?.setGridOption("quickFilterText", e.target.value)}
+        />
       </div>
 
-      {/* Drawer */}
-      <Drawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        title={selected ? `${selected.unit} — Lease Detail` : ""}
-        subtitle={selected ? `${selected.tenant} · Building ${selected.building}` : ""}
-      >
-        {selected && (
-          <div className="space-y-5">
-            {/* Urgency badge */}
-            <div>
-              <span
-                className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded ${
-                  selected.urgency === "Expired" || selected.urgency === "Critical"
-                    ? "bg-red-100 text-red-700"
-                    : selected.urgency === "Warning"
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-green-100 text-green-700"
-                }`}
-              >
-                {selected.urgency} — {selected.daysRemaining}d remaining
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <span className="text-[#71717a] text-xs block">Lease Start</span>
-                <span className="font-medium">{selected.leaseStart}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Lease End</span>
-                <span className="font-medium">{selected.leaseEnd}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Monthly Rent</span>
-                <span className="font-semibold">{formatCurrency(selected.monthlyRent)}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Annualized</span>
-                <span className="font-semibold">{formatCurrency(selected.monthlyRent * 12)}</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">Square Feet</span>
-                <span className="font-medium">{selected.tenantData.sqft.toLocaleString()} SF</span>
-              </div>
-              <div>
-                <span className="text-[#71717a] text-xs block">$/SF/yr</span>
-                <span className="font-medium">
-                  {selected.tenantData.sqft > 0
-                    ? formatCurrency(Math.round((selected.monthlyRent * 12) / selected.tenantData.sqft))
-                    : "—"}
-                </span>
-              </div>
-            </div>
-
-            {/* Renewal workflow */}
-            <div>
-              <span className="text-[#71717a] text-xs block mb-2">Renewal Workflow</span>
-              <div className="space-y-1">
-                {RENEWAL_STAGES.map((stage, i) => {
-                  const current = renewalStages[selected.unit] || "Not Started";
-                  const currentIdx = RENEWAL_STAGES.indexOf(current as typeof RENEWAL_STAGES[number]);
-                  const isPast = i < currentIdx;
-                  const isCurrent = i === currentIdx;
-                  return (
-                    <div
-                      key={stage}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs ${
-                        isCurrent
-                          ? "bg-[#18181b] text-white font-medium"
-                          : isPast
-                          ? "bg-[#f4f4f5] text-[#71717a]"
-                          : "text-[#a1a1aa]"
-                      }`}
-                    >
-                      <span
-                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                        style={{
-                          background: isCurrent ? "#fff" : isPast ? "#16a34a" : "#d4d4d8",
-                        }}
-                      />
-                      {stage}
-                      {isPast && <span className="ml-auto text-[10px]">Done</span>}
-                      {isCurrent && <span className="ml-auto text-[10px]">Current</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {selected.tenantData.notes && (
-              <div>
-                <span className="text-[#71717a] text-xs block mb-1">Notes</span>
-                <p className="text-sm bg-[#f4f4f5] px-3 py-2 rounded">{selected.tenantData.notes}</p>
-              </div>
-            )}
-
-            <button
-              onClick={() => advanceRenewal(selected.unit)}
-              className="w-full py-2 bg-[#18181b] text-white text-sm font-medium rounded hover:bg-zinc-800 transition-colors"
-            >
-              Advance Renewal Stage
-            </button>
-          </div>
-        )}
-      </Drawer>
-    </>
+      {/* AG Grid */}
+      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7]" style={{ height: "min(calc(100vh - 260px), 550px)", minHeight: 300 }}>
+        <AgGridReact
+          ref={gridRef}
+          rowData={filteredData}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          onGridReady={onGridReady}
+          animateRows={true}
+          pagination={true}
+          paginationPageSize={500}
+          getRowId={(params) => params.data.unit}
+        />
+      </div>
+    </div>
   );
 }
