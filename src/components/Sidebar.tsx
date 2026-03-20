@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Trash2, Pencil } from "lucide-react";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Trash2, Pencil, Briefcase, Activity } from "lucide-react";
 import { getProperties, getActiveProperty, setActiveProperty, addProperty, deleteProperty, editProperty, Property } from "@/data/portfolio";
 
 const nav = [
@@ -11,6 +11,8 @@ const nav = [
   { href: "/rent-roll", label: "Rent Roll", icon: Table, badge: "52" },
   { href: "/leases", label: "Lease Expirations", icon: CalendarClock, badge: "7" },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle, badge: "6" },
+  { href: "/deals", label: "Deal Pipeline", icon: Briefcase, badge: "5" },
+  { href: "/activity", label: "Activity", icon: Activity, badge: null },
   { href: "/data-pipeline", label: "Data Pipeline", icon: Database, badge: null },
 ];
 
