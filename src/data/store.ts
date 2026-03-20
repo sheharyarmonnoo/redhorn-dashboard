@@ -139,17 +139,18 @@ export interface KanbanItem {
   column: KanbanColumn;
   priority: "high" | "medium" | "low";
   unit?: string; // optional link to a unit
+  assignedTo?: string; // Ori or Max — task assignment per demo call request
   createdAt: string;
 }
 
 const defaultKanban: KanbanItem[] = [
-  { id: "k1", text: "Follow up with PM — late fees not auto-posted for $40K past due", column: "todo", priority: "high", createdAt: "2026-03-12" },
-  { id: "k2", text: "C-212 & C-305 — electric charges not posted for March", column: "todo", priority: "high", unit: "C-212", createdAt: "2026-03-12" },
-  { id: "k3", text: "A-90 holdover — lease expired Feb 28. Escalate to legal", column: "todo", priority: "high", unit: "A-90", createdAt: "2026-03-10" },
-  { id: "k4", text: "C-207 default letter sent 03/10 — verify tenant response", column: "in_progress", priority: "medium", unit: "C-207", createdAt: "2026-03-10" },
-  { id: "k5", text: "A-106A lease expires Jun 30 — initiate renewal with QuickShip", column: "todo", priority: "medium", unit: "A-106A", createdAt: "2026-03-08" },
-  { id: "k6", text: "Request Yardi API access from PM company", column: "done", priority: "low", createdAt: "2026-03-01" },
-  { id: "k7", text: "Verify Feb electric billing for all Net Lease tenants", column: "done", priority: "medium", createdAt: "2026-02-15" },
+  { id: "k1", text: "Follow up with PM — late fees not auto-posted for $40K past due", column: "todo", priority: "high", assignedTo: "Max", createdAt: "2026-03-12" },
+  { id: "k2", text: "C-212 & C-305 — electric charges not posted for March", column: "todo", priority: "high", unit: "C-212", assignedTo: "Max", createdAt: "2026-03-12" },
+  { id: "k3", text: "A-90 holdover — lease expired Feb 28. Escalate to legal", column: "todo", priority: "high", unit: "A-90", assignedTo: "Ori", createdAt: "2026-03-10" },
+  { id: "k4", text: "C-207 default letter sent 03/10 — verify tenant response", column: "in_progress", priority: "medium", unit: "C-207", assignedTo: "Max", createdAt: "2026-03-10" },
+  { id: "k5", text: "A-106A lease expires Jun 30 — initiate renewal with QuickShip", column: "todo", priority: "medium", unit: "A-106A", assignedTo: "Ori", createdAt: "2026-03-08" },
+  { id: "k6", text: "Request Yardi API access from PM company", column: "done", priority: "low", assignedTo: "Max", createdAt: "2026-03-01" },
+  { id: "k7", text: "Verify Feb electric billing for all Net Lease tenants", column: "done", priority: "medium", assignedTo: "Max", createdAt: "2026-02-15" },
 ];
 
 export function loadKanban(): KanbanItem[] {
@@ -165,7 +166,7 @@ export function saveKanban(items: KanbanItem[]) {
   localStorage.setItem(KANBAN_KEY, JSON.stringify(items));
 }
 
-export function addKanbanItem(text: string, priority: KanbanItem["priority"] = "medium", unit?: string): KanbanItem {
+export function addKanbanItem(text: string, priority: KanbanItem["priority"] = "medium", unit?: string, assignedTo?: string): KanbanItem {
   const items = loadKanban();
   const item: KanbanItem = {
     id: Date.now().toString(),
@@ -173,6 +174,7 @@ export function addKanbanItem(text: string, priority: KanbanItem["priority"] = "
     column: "todo",
     priority,
     unit,
+    assignedTo,
     createdAt: new Date().toISOString().slice(0, 10),
   };
   saveKanban([item, ...items]);
@@ -190,7 +192,7 @@ export function removeKanbanItem(id: string) {
   saveKanban(items.filter(i => i.id !== id));
 }
 
-export function updateKanbanItem(id: string, updates: Partial<Pick<KanbanItem, "text" | "priority" | "unit">>) {
+export function updateKanbanItem(id: string, updates: Partial<Pick<KanbanItem, "text" | "priority" | "unit" | "assignedTo">>) {
   const items = loadKanban();
   const updated = items.map(i => i.id === id ? { ...i, ...updates } : i);
   saveKanban(updated);

@@ -25,15 +25,16 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
   item: KanbanItem;
   onMove: (id: string, col: KanbanColumn) => void;
   onRemove: (id: string) => void;
-  onEdit: (id: string, updates: Partial<Pick<KanbanItem, "text" | "priority" | "unit">>) => void;
+  onEdit: (id: string, updates: Partial<Pick<KanbanItem, "text" | "priority" | "unit" | "assignedTo">>) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
   const [editPriority, setEditPriority] = useState(item.priority);
+  const [editAssignee, setEditAssignee] = useState(item.assignedTo || "");
 
   function save() {
-    if (editText.trim() && editText.trim() !== item.text || editPriority !== item.priority) {
-      onEdit(item.id, { text: editText.trim(), priority: editPriority });
+    if (editText.trim() && (editText.trim() !== item.text || editPriority !== item.priority || editAssignee !== (item.assignedTo || ""))) {
+      onEdit(item.id, { text: editText.trim(), priority: editPriority, assignedTo: editAssignee || undefined });
     }
     setEditing(false);
   }
@@ -55,8 +56,14 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
                   <option value="medium">Medium</option>
                   <option value="low">Low</option>
                 </select>
+                <select value={editAssignee} onChange={e => setEditAssignee(e.target.value)}
+                  className="text-[10px] px-1.5 py-0.5 border border-[#e4e4e7] rounded bg-[#fafafa] text-[#71717a]">
+                  <option value="">Unassigned</option>
+                  <option value="Ori">Ori</option>
+                  <option value="Max">Max</option>
+                </select>
                 <button onClick={save} className="text-[10px] font-medium px-2 py-0.5 bg-[#18181b] text-white rounded cursor-pointer">Save</button>
-                <button onClick={() => { setEditing(false); setEditText(item.text); setEditPriority(item.priority); }}
+                <button onClick={() => { setEditing(false); setEditText(item.text); setEditPriority(item.priority); setEditAssignee(item.assignedTo || ""); }}
                   className="text-[10px] text-[#a1a1aa] cursor-pointer">Cancel</button>
               </div>
             </div>
@@ -69,6 +76,12 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
               <div className="flex items-center gap-2 mt-1.5">
                 <span className={`w-1.5 h-1.5 rounded-full ${priorityDot[item.priority]}`} />
                 <span className="text-[9px] text-[#a1a1aa] capitalize">{item.priority}</span>
+                {item.assignedTo && (
+                  <>
+                    <span className="text-[9px] text-[#d4d4d8]">·</span>
+                    <span className="text-[9px] text-[#2563eb] font-medium">{item.assignedTo}</span>
+                  </>
+                )}
                 {item.unit && (
                   <>
                     <span className="text-[9px] text-[#d4d4d8]">·</span>
@@ -128,6 +141,7 @@ export default function ActionItems() {
   const [showAdd, setShowAdd] = useState(false);
   const [newText, setNewText] = useState("");
   const [newPriority, setNewPriority] = useState<KanbanItem["priority"]>("medium");
+  const [newAssignee, setNewAssignee] = useState("");
 
   useEffect(() => { setItems(loadKanban()); }, []);
 
@@ -148,16 +162,17 @@ export default function ActionItems() {
     setItems(loadKanban());
   }
 
-  function handleEdit(id: string, updates: Partial<Pick<KanbanItem, "text" | "priority" | "unit">>) {
+  function handleEdit(id: string, updates: Partial<Pick<KanbanItem, "text" | "priority" | "unit" | "assignedTo">>) {
     updateKanbanItem(id, updates);
     setItems(loadKanban());
   }
 
   function handleAdd() {
     if (!newText.trim()) return;
-    addKanbanItem(newText.trim(), newPriority);
+    addKanbanItem(newText.trim(), newPriority, undefined, newAssignee || undefined);
     setItems(loadKanban());
     setNewText("");
+    setNewAssignee("");
     setShowAdd(false);
   }
 
@@ -184,6 +199,12 @@ export default function ActionItems() {
             <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
+          </select>
+          <select value={newAssignee} onChange={e => setNewAssignee(e.target.value)}
+            className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] text-[#71717a]">
+            <option value="">Assign to...</option>
+            <option value="Ori">Ori</option>
+            <option value="Max">Max</option>
           </select>
           <button onClick={handleAdd}
             className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] transition-colors cursor-pointer">

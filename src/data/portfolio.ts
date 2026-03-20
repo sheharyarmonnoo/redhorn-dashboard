@@ -14,6 +14,7 @@ export interface Property {
 
 const seedProperties: Property[] = [
   { id: "hollister", name: "Hollister Business Park", location: "Houston, TX", sqft: "~325K SF", hasData: true },
+  { id: "beza-bell", name: "Beza Bell Gold Business Park", location: "Houston, TX", sqft: "~80K SF", hasData: false },
   { id: "rv-ohio", name: "RV Park — Ohio", location: "Ohio", sqft: "~40 lots", hasData: false },
 ];
 
