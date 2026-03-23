@@ -19,14 +19,14 @@ export interface Tenant {
   electricPosted: boolean;
   lastPaymentDate: string;
   notes: string;
-  // Unit metadata (from meeting: Ori wanted amps, make-ready, splittable)
-  amps?: number;             // electrical capacity (200, 400)
-  makeReady?: boolean;       // unit needs make-ready work
-  splittable?: boolean;      // can be split into smaller units
-  splitDetail?: string;      // e.g. "2,500 + 1,250 SF"
+  // Unit metadata
+  amps?: number;
+  makeReady?: boolean;
+  splittable?: boolean;
+  splitDetail?: string;
   // Delinquency workflow stage
   delinquencyStage?: DelinquencyStage;
-  delinquencyDate?: string;  // date stage was set
+  delinquencyDate?: string;
 }
 
 export interface LedgerEntry {
@@ -49,141 +49,217 @@ export interface MonthlyRevenue {
   occupancy: number;
 }
 
-// Seed data derived from Yardi RentRoll export dated 03/12/2026
-// Property: Hollister Business Park, Houston TX
-// Buildings A, C, D — ~325,000 sq ft industrial/retail
+// Seed data from Yardi RentRoll + Income Statement exports dated 03/23/2026
+// Property: Hollister BP1 LLC (hol), Houston TX — Buildings A, C, D
+// 45 occupied / 10 vacant / 55 total units — 249,236 SF total
+// Trophy Windows LLC is anchor tenant: 195,812 SF (78.6% of property), lease thru Dec 2029
 
 export const tenants: Tenant[] = [
-  // Building A — occupied
-  { unit: "A-85", building: "A", tenant: "Gulf Coast Logistics LLC", leaseType: "Office Gross Lease", sqft: 4200, leaseFrom: "2024-06-01", leaseTo: "2027-05-31", monthlyRent: 4620, monthlyElectric: 380, securityDeposit: 4620, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "A-85A", building: "A", tenant: "Bayou City Printing", leaseType: "Office Gross Lease", sqft: 2100, leaseFrom: "2025-01-01", leaseTo: "2026-12-31", monthlyRent: 2310, monthlyElectric: 190, securityDeposit: 2310, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "A-90", building: "A", tenant: "Houston Hydraulics Inc", leaseType: "Office Net Lease", sqft: 6800, leaseFrom: "2023-03-01", leaseTo: "2026-02-28", monthlyRent: 6120, monthlyElectric: 520, securityDeposit: 6120, status: "past_due", pastDueAmount: 12760, electricPosted: false, lastPaymentDate: "2026-01-05", notes: "Lease expired — holdover tenant. 2 months past due. No renewal signed.", amps: 400, delinquencyStage: "default_notice", delinquencyDate: "2026-03-10" },
-  { unit: "A-95", building: "A", tenant: "Precision CNC Services", leaseType: "Office Net Lease", sqft: 3800, leaseFrom: "2024-09-01", leaseTo: "2027-08-31", monthlyRent: 3420, monthlyElectric: 310, securityDeposit: 3420, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "A-102", building: "A", tenant: "Lone Star Electric Co", leaseType: "Office Net Lease", sqft: 5200, leaseFrom: "2024-12-01", leaseTo: "2026-11-30", monthlyRent: 4680, monthlyElectric: 420, securityDeposit: 4680, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "ACH auto-pay. Good tenant.", amps: 200 },
-  { unit: "A-103", building: "A", tenant: "Gulf Coast Logistics LLC", leaseType: "Office Gross Lease", sqft: 3100, leaseFrom: "2024-06-01", leaseTo: "2027-05-31", monthlyRent: 3410, monthlyElectric: 0, securityDeposit: 3410, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant as A-85" },
-  { unit: "A-106", building: "A", tenant: "Fiesta Party Supplies", leaseType: "Office Gross Lease", sqft: 2800, leaseFrom: "2025-04-01", leaseTo: "2028-03-31", monthlyRent: 3080, monthlyElectric: 0, securityDeposit: 3080, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "A-106A", building: "A", tenant: "QuickShip Packaging", leaseType: "Office Gross Lease", sqft: 1400, leaseFrom: "2025-07-01", leaseTo: "2026-06-30", monthlyRent: 1540, monthlyElectric: 0, securityDeposit: 1540, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Lease expires in ~3.5 months. No renewal discussion." },
-  { unit: "A-107", building: "A", tenant: "H-Town Auto Parts", leaseType: "Office Gross Lease", sqft: 3600, leaseFrom: "2024-01-01", leaseTo: "2026-12-31", monthlyRent: 3960, monthlyElectric: 0, securityDeposit: 3960, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-02", notes: "" },
-  { unit: "A-108", building: "A", tenant: "Precision CNC Services", leaseType: "Office Net Lease", sqft: 4100, leaseFrom: "2024-09-01", leaseTo: "2027-08-31", monthlyRent: 3690, monthlyElectric: 340, securityDeposit: 3690, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant as A-95" },
-  { unit: "A-110", building: "A", tenant: "Precision CNC Services", leaseType: "Office Net Lease", sqft: 2900, leaseFrom: "2024-09-01", leaseTo: "2027-08-31", monthlyRent: 2610, monthlyElectric: 240, securityDeposit: 2610, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant as A-95, A-108" },
-  { unit: "A-111", building: "A", tenant: "SouthWest Coatings", leaseType: "Office Net Lease", sqft: 5500, leaseFrom: "2023-08-01", leaseTo: "2026-07-31", monthlyRent: 4950, monthlyElectric: 450, securityDeposit: 4950, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Lease expires in ~4.5 months. Tenant expressed interest in renewal." },
-  { unit: "A-112", building: "A", tenant: "Gulf Coast Logistics LLC", leaseType: "Office Gross Lease", sqft: 2400, leaseFrom: "2024-06-01", leaseTo: "2027-05-31", monthlyRent: 2640, monthlyElectric: 0, securityDeposit: 2640, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant as A-85, A-103" },
-  { unit: "A-120", building: "A", tenant: "Clear Lake IT Solutions", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "2025-10-01", leaseTo: "2027-09-30", monthlyRent: 1980, monthlyElectric: 0, securityDeposit: 1980, status: "past_due", pastDueAmount: 1980, electricPosted: true, lastPaymentDate: "2026-02-01", notes: "March rent not received. First-time late." },
 
-  // Building C — 2nd floor
-  { unit: "C-100", building: "C", tenant: "Texas Star Insurance", leaseType: "Office Gross Lease", sqft: 3200, leaseFrom: "2024-03-01", leaseTo: "2027-02-28", monthlyRent: 3840, monthlyElectric: 0, securityDeposit: 3840, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-192", building: "C", tenant: "Cypress Creek Welding", leaseType: "Office Net Lease", sqft: 7200, leaseFrom: "2022-06-01", leaseTo: "2027-05-31", monthlyRent: 6480, monthlyElectric: 580, securityDeposit: 6480, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-194", building: "C", tenant: "Alamo Staffing Group", leaseType: "Office Gross Lease", sqft: 2600, leaseFrom: "2025-02-01", leaseTo: "2028-01-31", monthlyRent: 3120, monthlyElectric: 0, securityDeposit: 3120, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-202", building: "C", tenant: "Memorial Dental Lab", leaseType: "Office Gross Lease", sqft: 1500, leaseFrom: "2025-06-01", leaseTo: "2026-05-31", monthlyRent: 1800, monthlyElectric: 0, securityDeposit: 1800, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Lease expires in ~2.5 months." },
-  { unit: "C-203", building: "C", tenant: "Westchase Accounting", leaseType: "Office Gross Lease", sqft: 1200, leaseFrom: "2024-11-01", leaseTo: "2026-10-31", monthlyRent: 1440, monthlyElectric: 0, securityDeposit: 1440, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-205", building: "C", tenant: "ProTech Security Systems", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "2025-03-01", leaseTo: "2027-02-28", monthlyRent: 2160, monthlyElectric: 0, securityDeposit: 2160, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-206", building: "C", tenant: "Katy Freight Brokers", leaseType: "Office Gross Lease", sqft: 1600, leaseFrom: "2024-08-01", leaseTo: "2026-07-31", monthlyRent: 1920, monthlyElectric: 0, securityDeposit: 1920, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Lease expires in ~4.5 months." },
-  { unit: "C-207", building: "C", tenant: "Brazos Valley Imports", leaseType: "Office Gross Lease", sqft: 1400, leaseFrom: "2025-01-01", leaseTo: "2026-12-31", monthlyRent: 1680, monthlyElectric: 0, securityDeposit: 1680, status: "past_due", pastDueAmount: 3360, electricPosted: true, lastPaymentDate: "2026-01-03", notes: "Feb + March past due. PM sent default letter 03/10.", delinquencyStage: "lockout_pending", delinquencyDate: "2026-03-12" },
-  { unit: "C-208", building: "C", tenant: "Galleria Copy Center", leaseType: "Office Gross Lease", sqft: 1100, leaseFrom: "2025-05-01", leaseTo: "2027-04-30", monthlyRent: 1320, monthlyElectric: 0, securityDeposit: 1320, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-209", building: "C", tenant: "Pearland Tax Services", leaseType: "Office Gross Lease", sqft: 1000, leaseFrom: "2024-04-01", leaseTo: "2027-03-31", monthlyRent: 1200, monthlyElectric: 0, securityDeposit: 1200, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-210", building: "C", tenant: "Greenway Chiropractic", leaseType: "Office Gross Lease", sqft: 1300, leaseFrom: "2025-09-01", leaseTo: "2027-08-31", monthlyRent: 1560, monthlyElectric: 0, securityDeposit: 1560, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-211", building: "C", tenant: "Spring Branch Tutoring", leaseType: "Office Gross Lease", sqft: 900, leaseFrom: "2025-08-01", leaseTo: "2026-07-31", monthlyRent: 1080, monthlyElectric: 0, securityDeposit: 1080, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Lease expires in ~4.5 months." },
-  { unit: "C-212", building: "C", tenant: "Westheimer Medical Supply", leaseType: "Office Net Lease", sqft: 4800, leaseFrom: "2023-01-01", leaseTo: "2027-12-31", monthlyRent: 4320, monthlyElectric: 390, securityDeposit: 4320, status: "current", pastDueAmount: 0, electricPosted: false, lastPaymentDate: "2026-03-01", notes: "March electric NOT posted by PM." },
-  { unit: "C-212A", building: "C", tenant: "ABC Notary Public", leaseType: "Office Gross Lease", sqft: 600, leaseFrom: "2025-11-01", leaseTo: "2026-10-31", monthlyRent: 720, monthlyElectric: 0, securityDeposit: 720, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-213", building: "C", tenant: "Montrose Design Studio", leaseType: "Office Gross Lease", sqft: 1100, leaseFrom: "2024-07-01", leaseTo: "2026-06-30", monthlyRent: 1320, monthlyElectric: 0, securityDeposit: 1320, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Lease expires in ~3.5 months." },
-  { unit: "C-215", building: "C", tenant: "Cypress Bookkeeping", leaseType: "Office Gross Lease", sqft: 800, leaseFrom: "2025-03-01", leaseTo: "2027-02-28", monthlyRent: 960, monthlyElectric: 0, securityDeposit: 960, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-216", building: "C", tenant: "SouthWest Coatings", leaseType: "Office Net Lease", sqft: 3800, leaseFrom: "2023-08-01", leaseTo: "2026-07-31", monthlyRent: 3420, monthlyElectric: 310, securityDeposit: 3420, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant as A-111. Combined expiry." },
-  { unit: "C-218", building: "C", tenant: "Redhorn Capital (Owner)", leaseType: "Office Gross Lease", sqft: 2000, leaseFrom: "2022-01-01", leaseTo: "2030-12-31", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Owner-occupied. No rent." },
+  // ── BUILDING A ──────────────────────────────────────────────────────────────
 
-  // Building C — 3rd floor
-  { unit: "C-301", building: "C", tenant: "Houston Web Developers", leaseType: "Office Gross Lease", sqft: 2200, leaseFrom: "2024-10-01", leaseTo: "2027-09-30", monthlyRent: 2640, monthlyElectric: 0, securityDeposit: 2640, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-302", building: "C", tenant: "Champion Recruiting", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "2025-01-01", leaseTo: "2027-12-31", monthlyRent: 2160, monthlyElectric: 0, securityDeposit: 2160, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-303", building: "C", tenant: "Lone Star Legal Aid", leaseType: "Office Gross Lease", sqft: 1500, leaseFrom: "2024-06-01", leaseTo: "2027-05-31", monthlyRent: 1800, monthlyElectric: 0, securityDeposit: 1800, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-304", building: "C", tenant: "Tanglewood Financial", leaseType: "Office Gross Lease", sqft: 1600, leaseFrom: "2025-04-01", leaseTo: "2028-03-31", monthlyRent: 1920, monthlyElectric: 0, securityDeposit: 1920, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-305", building: "C", tenant: "Energy Corridor Consulting", leaseType: "Office Net Lease", sqft: 3500, leaseFrom: "2024-01-01", leaseTo: "2026-12-31", monthlyRent: 3150, monthlyElectric: 290, securityDeposit: 3150, status: "current", pastDueAmount: 0, electricPosted: false, lastPaymentDate: "2026-03-01", notes: "March electric NOT posted by PM." },
-  { unit: "C-306", building: "C", tenant: "Heights Realty Group", leaseType: "Office Gross Lease", sqft: 1200, leaseFrom: "2025-06-01", leaseTo: "2027-05-31", monthlyRent: 1440, monthlyElectric: 0, securityDeposit: 1440, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-307", building: "C", tenant: "Sugarland Travel Agency", leaseType: "Office Gross Lease", sqft: 1000, leaseFrom: "2025-02-01", leaseTo: "2027-01-31", monthlyRent: 1200, monthlyElectric: 0, securityDeposit: 1200, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
-  { unit: "C-308", building: "C", tenant: "Med Center Billing Co", leaseType: "Office Gross Lease", sqft: 1400, leaseFrom: "2024-12-01", leaseTo: "2026-11-30", monthlyRent: 1680, monthlyElectric: 0, securityDeposit: 1680, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
+  // Trophy Windows LLC — anchor tenant spanning ABD + C-218 + D-150 + D-155
+  // 195,812 SF total, $123,714.02/mo, lease Aug 2023 – Dec 2029
+  // Represents ~78.6% of property SF and ~78.8% of monthly rent
+  { unit: "ABD", building: "A", tenant: "Trophy Windows, LLC", leaseType: "Office Gross Lease", sqft: 195812, leaseFrom: "2023-08-01", leaseTo: "2029-12-31", monthlyRent: 123714.02, monthlyElectric: 0, securityDeposit: 138302.19, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Anchor tenant. Spans ABD + C-218 + D-150 + D-155. Includes escalation per lease schedule. Security deposit held in trust." },
 
-  // Building D
-  { unit: "D-150", building: "D", tenant: "Redhorn Capital (Owner)", leaseType: "Office Gross Lease", sqft: 8000, leaseFrom: "2022-01-01", leaseTo: "2030-12-31", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Owner-occupied warehouse." },
-  { unit: "D-154", building: "D", tenant: "Westpark Industrial", leaseType: "Office Net Lease", sqft: 12000, leaseFrom: "2023-06-01", leaseTo: "2028-05-31", monthlyRent: 9600, monthlyElectric: 850, securityDeposit: 9600, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "", amps: 400 },
-  { unit: "D-155", building: "D", tenant: "Redhorn Capital (Owner)", leaseType: "Office Gross Lease", sqft: 6000, leaseFrom: "2022-01-01", leaseTo: "2030-12-31", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Owner-occupied." },
-  { unit: "D-160", building: "D", tenant: "Westpark Industrial", leaseType: "Office Net Lease", sqft: 8500, leaseFrom: "2023-06-01", leaseTo: "2028-05-31", monthlyRent: 6800, monthlyElectric: 610, securityDeposit: 6800, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant as D-154", amps: 400 },
+  // A-85A — Royal A Logistics Corporation (EXPIRES MARCH 31 — 8 DAYS)
+  { unit: "A-85A", building: "A", tenant: "Royal A Logistics Corporation", leaseType: "Office Gross Lease", sqft: 80, leaseFrom: "2022-05-01", leaseTo: "2026-03-31", monthlyRent: 315, monthlyElectric: 0, securityDeposit: 200, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "LEASE EXPIRES MARCH 31, 2026 — 8 days. No renewal on file. Same tenant holds C-209 (Apr 30 expiry)." },
 
-  // Vacant units (from rent roll rows 44-52, no lease type = vacant)
-  { unit: "C-101", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 2800, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant since 2025-09." },
-  { unit: "C-102", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 2400, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant since 2025-11." },
-  { unit: "C-103", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 2200, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant since 2025-07.", makeReady: true },
-  { unit: "C-200", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 3700, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant since 2026-01. Splittable — lock door to create 2 units.", splittable: true, splitDetail: "2,500 + 1,250 SF", makeReady: true },
-  { unit: "C-201", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1500, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "" },
-  { unit: "C-204", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1200, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "" },
-  { unit: "C-214", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 900, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "" },
-  { unit: "C-217", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1400, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "" },
+  // A-90 — TRTP Services
+  { unit: "A-90", building: "A", tenant: "TRTP Services", leaseType: "Office Net Lease", sqft: 110, leaseFrom: "2024-10-01", leaseTo: "2027-01-31", monthlyRent: 290.20, monthlyElectric: 30, securityDeposit: 0, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Net lease. No security deposit on file." },
+
+  // A-102 — Houston Luxury Lighting LLC
+  { unit: "A-102", building: "A", tenant: "Houston Luxury Lighting LLC", leaseType: "Office Net Lease", sqft: 180, leaseFrom: "2024-12-01", leaseTo: "2026-11-30", monthlyRent: 412, monthlyElectric: 15, securityDeposit: 400, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Net lease. CAM-Electric billed separately." },
+
+  // A-103 / A-112 / A-85 — Alliance Cargo Inc (combined lease, 728 SF)
+  { unit: "A-103", building: "A", tenant: "Alliance Cargo, Inc", leaseType: "Office Gross Lease", sqft: 728, leaseFrom: "2023-08-01", leaseTo: "2026-07-14", monthlyRent: 1646.40, monthlyElectric: 0, securityDeposit: 1450, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Combined lease covers A-103, A-112, A-85 (728 SF total). Expires Jul 14, 2026 — within 90 days. Renewal discussion needed." },
+
+  // A-106 — CNJ Holdings
+  { unit: "A-106", building: "A", tenant: "CNJ Holdings", leaseType: "Office Gross Lease", sqft: 208, leaseFrom: "2025-02-01", leaseTo: "2027-01-31", monthlyRent: 548.87, monthlyElectric: 0, securityDeposit: 450, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
+
+  // A-106A — Texas State Builders
+  { unit: "A-106A", building: "A", tenant: "Texas State Builders", leaseType: "Office Gross Lease", sqft: 208, leaseFrom: "2024-09-01", leaseTo: "2026-08-31", monthlyRent: 546, monthlyElectric: 0, securityDeposit: 1600, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires Aug 31, 2026." },
+
+  // A-107 — Gracious Advance Auto LLC
+  { unit: "A-107", building: "A", tenant: "Gracious Advance Auto, LLC", leaseType: "Office Gross Lease", sqft: 208, leaseFrom: "2025-02-01", leaseTo: "2027-01-31", monthlyRent: 450.67, monthlyElectric: 0, securityDeposit: 450.67, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant holds C-207." },
+
+  // A-108 / A-110 / A-95 — Clean Spec LLC (combined, 466 SF)
+  { unit: "A-108", building: "A", tenant: "Clean Spec, LLC", leaseType: "Office Net Lease", sqft: 466, leaseFrom: "2024-12-01", leaseTo: "2026-11-30", monthlyRent: 915, monthlyElectric: 30, securityDeposit: 550, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Combined lease covers A-108, A-110, A-95 (466 SF total). Same tenant holds C-215." },
+
+  // A-111 / C-216 — Beacon Restoration and Cleaning of Houston LLC (combined, 2,008 SF)
+  { unit: "A-111", building: "A", tenant: "Beacon Restoration and Cleaning of Houston, LLC", leaseType: "Office Net Lease", sqft: 2008, leaseFrom: "2024-06-01", leaseTo: "2026-06-30", monthlyRent: 1747, monthlyElectric: 60, securityDeposit: 1696, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Combined lease covers A-111 + C-216 (2,008 SF). Expires Jun 30, 2026 — within 90 days. Renewal needed." },
+
+  // A-120 — Car Care Cosmetics of Houston Inc (EXPIRES APRIL 30)
+  { unit: "A-120", building: "A", tenant: "Car Care Cosmetics of Houston, Inc.", leaseType: "Office Gross Lease", sqft: 250, leaseFrom: "2023-05-01", leaseTo: "2026-04-30", monthlyRent: 277.15, monthlyElectric: 0, securityDeposit: 800, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires April 30, 2026 — 38 days. No renewal on file." },
+
+  // ── BUILDING C ──────────────────────────────────────────────────────────────
+
+  // C-100 — Flavorly LLC
+  { unit: "C-100", building: "C", tenant: "Flavorly, LLC", leaseType: "Office Gross Lease", sqft: 5000, leaseFrom: "2023-12-01", leaseTo: "2028-12-31", monthlyRent: 3997.50, monthlyElectric: 0, securityDeposit: 3250, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Long-term lease through Dec 2028." },
+
+  // C-192 — Sergio Cuellar (expires May 31)
+  { unit: "C-192", building: "C", tenant: "Sergio Cuellar", leaseType: "Office Net Lease", sqft: 1250, leaseFrom: "2023-05-01", leaseTo: "2026-05-31", monthlyRent: 1025, monthlyElectric: 0, securityDeposit: 1000, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires May 31, 2026 — 69 days. Renewal discussion needed." },
+
+  // C-194 — Mark Rendon / Design HVAC Inc (NEW TENANT as of Mar 1, 2026)
+  { unit: "C-194", building: "C", tenant: "Mark Rendon / Design HVAC Inc.", leaseType: "Office Gross Lease", sqft: 1250, leaseFrom: "2026-03-01", leaseTo: "2027-02-28", monthlyRent: 1070, monthlyElectric: 0, securityDeposit: 0, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "New tenant as of Mar 2026. No security deposit collected. 12-month lease." },
+
+  // C-202 — Elite Pool Plastering (EXPIRES APRIL 30)
+  { unit: "C-202", building: "C", tenant: "Elite Pool Plastering", leaseType: "Office Gross Lease", sqft: 1250, leaseFrom: "2023-05-01", leaseTo: "2026-04-30", monthlyRent: 1060.50, monthlyElectric: 0, securityDeposit: 950, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires April 30, 2026 — 38 days. No renewal on file." },
+
+  // C-203 — Fervent Designs LLC (EXPIRES APRIL 30)
+  { unit: "C-203", building: "C", tenant: "Fervent Designs, LLC", leaseType: "Office Gross Lease", sqft: 1250, leaseFrom: "2024-04-01", leaseTo: "2026-04-30", monthlyRent: 1034.25, monthlyElectric: 0, securityDeposit: 985, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires April 30, 2026 — 38 days. No renewal on file." },
+
+  // C-205 — Miguel Angel Bueno Jr
+  { unit: "C-205", building: "C", tenant: "Miguel Angel Bueno, Jr.", leaseType: "Office Gross Lease", sqft: 650, leaseFrom: "2024-07-01", leaseTo: "2026-07-31", monthlyRent: 556.29, monthlyElectric: 0, securityDeposit: 530, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires Jul 31, 2026." },
+
+  // C-206 — Mohammad S. Imam
+  { unit: "C-206", building: "C", tenant: "Mohammad S. Imam", leaseType: "Office Gross Lease", sqft: 650, leaseFrom: "2024-12-01", leaseTo: "2026-11-30", monthlyRent: 584.46, monthlyElectric: 0, securityDeposit: 530, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
+
+  // C-207 — Gracious Advance Auto LLC (2nd unit)
+  { unit: "C-207", building: "C", tenant: "Gracious Advance Auto, LLC", leaseType: "Office Gross Lease", sqft: 650, leaseFrom: "2025-02-01", leaseTo: "2027-01-31", monthlyRent: 595.83, monthlyElectric: 0, securityDeposit: 595.83, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant holds A-107." },
+
+  // C-208 — Visual Design Blinds LLC (EXPIRES MARCH 31 — 8 DAYS)
+  { unit: "C-208", building: "C", tenant: "Visual Design Blinds, LLC", leaseType: "Office Gross Lease", sqft: 650, leaseFrom: "2025-04-01", leaseTo: "2026-03-31", monthlyRent: 550, monthlyElectric: 0, securityDeposit: 550, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "LEASE EXPIRES MARCH 31, 2026 — 8 days. No renewal on file." },
+
+  // C-209 — Royal A Logistics Corporation (2nd unit, EXPIRES APRIL 30)
+  { unit: "C-209", building: "C", tenant: "Royal A Logistics Corporation", leaseType: "Office Gross Lease", sqft: 1250, leaseFrom: "2022-05-01", leaseTo: "2026-04-30", monthlyRent: 1155, monthlyElectric: 0, securityDeposit: 1100, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires April 30, 2026 — 38 days. Same tenant holds A-85A (expires Mar 31). Coordinate both renewals." },
+
+  // C-210 — Chert Capital Management (EXPIRES APRIL 30)
+  { unit: "C-210", building: "C", tenant: "Chert Capital Management", leaseType: "Office Gross Lease", sqft: 650, leaseFrom: "2025-05-01", leaseTo: "2026-04-30", monthlyRent: 568.75, monthlyElectric: 0, securityDeposit: 568.75, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires April 30, 2026 — 38 days. No renewal on file." },
+
+  // C-211 — Emily W. Ogutu (expires May 31)
+  { unit: "C-211", building: "C", tenant: "Emily W. Ogutu", leaseType: "Office Gross Lease", sqft: 650, leaseFrom: "2024-06-01", leaseTo: "2026-05-31", monthlyRent: 598.50, monthlyElectric: 0, securityDeposit: 530, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires May 31, 2026 — 69 days." },
+
+  // C-212 — Ecofibre (expires May 31)
+  { unit: "C-212", building: "C", tenant: "Ecofibre", leaseType: "Office Net Lease", sqft: 1800, leaseFrom: "2024-10-01", leaseTo: "2026-05-31", monthlyRent: 1650, monthlyElectric: 75, securityDeposit: 1350, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires May 31, 2026 — 69 days. Net lease." },
+
+  // C-212A — Hugo Ayala
+  { unit: "C-212A", building: "C", tenant: "Hugo Ayala", leaseType: "Office Gross Lease", sqft: 625, leaseFrom: "2025-09-01", leaseTo: "2026-08-31", monthlyRent: 552.08, monthlyElectric: 0, securityDeposit: 0, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "No security deposit collected." },
+
+  // C-213 — Mauricio Cruz
+  { unit: "C-213", building: "C", tenant: "Mauricio Cruz", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "2024-03-01", leaseTo: "2027-02-28", monthlyRent: 1311, monthlyElectric: 0, securityDeposit: 1000, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
+
+  // C-215 — Clean Spec LLC (2nd unit)
+  { unit: "C-215", building: "C", tenant: "Clean Spec, LLC", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "2024-12-01", leaseTo: "2026-11-30", monthlyRent: 1590, monthlyElectric: 0, securityDeposit: 1750, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant holds A-108." },
+
+  // C-301 — Alexis M. Munoz & Myles Q. Jones (EXPIRES MARCH 31 — 8 DAYS)
+  { unit: "C-301", building: "C", tenant: "Alexis M. Munoz & Myles Q. Jones", leaseType: "Office Gross Lease", sqft: 1250, leaseFrom: "2023-03-01", leaseTo: "2026-03-31", monthlyRent: 1013.54, monthlyElectric: 0, securityDeposit: 1000, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "LEASE EXPIRES MARCH 31, 2026 — 8 days. No renewal on file." },
+
+  // C-302 — APRR Solutions LLC
+  { unit: "C-302", building: "C", tenant: "APRR Solutions, LLC", leaseType: "Office Gross Lease", sqft: 650, leaseFrom: "2024-11-01", leaseTo: "2026-11-30", monthlyRent: 535, monthlyElectric: 0, securityDeposit: 520, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Same tenant holds C-303." },
+
+  // C-303 — APRR Solutions LLC (2nd unit, EXPIRES APRIL 30)
+  { unit: "C-303", building: "C", tenant: "APRR Solutions, LLC", leaseType: "Office Gross Lease", sqft: 625, leaseFrom: "2024-05-01", leaseTo: "2026-04-30", monthlyRent: 520, monthlyElectric: 0, securityDeposit: 450, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires April 30, 2026 — 38 days. Same tenant holds C-302 through Nov 2026." },
+
+  // C-304 — Ace Custom Fab LLC (expires May 31)
+  { unit: "C-304", building: "C", tenant: "Ace Custom Fab, LLC", leaseType: "Office Gross Lease", sqft: 625, leaseFrom: "2025-06-01", leaseTo: "2026-05-31", monthlyRent: 560, monthlyElectric: 0, securityDeposit: 1120, status: "expiring_soon", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires May 31, 2026 — 69 days. Double security deposit on file." },
+
+  // C-305 — Cody R. Risner
+  { unit: "C-305", building: "C", tenant: "Cody R. Risner", leaseType: "Office Net Lease", sqft: 662, leaseFrom: "2025-02-01", leaseTo: "2027-01-31", monthlyRent: 551, monthlyElectric: 0, securityDeposit: 535, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Net lease." },
+
+  // C-306 — Angel Fabian Andueza
+  { unit: "C-306", building: "C", tenant: "Angel Fabian Andueza", leaseType: "Office Gross Lease", sqft: 466, leaseFrom: "2025-08-01", leaseTo: "2027-07-31", monthlyRent: 500, monthlyElectric: 0, securityDeposit: 550, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "" },
+
+  // C-307 — G&M Grocery Express
+  { unit: "C-307", building: "C", tenant: "G&M Grocery Express", leaseType: "Office Gross Lease", sqft: 625, leaseFrom: "2023-08-01", leaseTo: "2026-08-31", monthlyRent: 540.75, monthlyElectric: 0, securityDeposit: 500, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires Aug 31, 2026." },
+
+  // C-308 — Pierre-Louis Edriss
+  { unit: "C-308", building: "C", tenant: "Pierre-Louis Edriss", leaseType: "Office Gross Lease", sqft: 625, leaseFrom: "2024-09-01", leaseTo: "2026-08-31", monthlyRent: 656.25, monthlyElectric: 0, securityDeposit: 575, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Expires Aug 31, 2026." },
+
+  // ── BUILDING D ──────────────────────────────────────────────────────────────
+
+  // D-154 / D-160 — Wortham Madison Property LLC (combined, 4,525 SF)
+  { unit: "D-154", building: "D", tenant: "Wortham Madison Property, LLC", leaseType: "Office Net Lease", sqft: 4525, leaseFrom: "2024-08-01", leaseTo: "2028-12-31", monthlyRent: 3355.63, monthlyElectric: 200, securityDeposit: 2015, status: "current", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "2026-03-01", notes: "Combined lease covers D-154 + D-160 (4,525 SF total). Long-term through Dec 2028.", amps: 400 },
+
+  // ── VACANT UNITS ────────────────────────────────────────────────────────────
+
+  { unit: "C-101", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant." },
+  { unit: "C-102", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant." },
+  { unit: "C-103", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant.", makeReady: true },
+  { unit: "C-200", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 2500, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant. Splittable — lock door to create 2 units.", splittable: true, splitDetail: "2,500 SF or split into 1,250 + 1,250 SF", makeReady: true },
+  { unit: "C-200A", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1250, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant." },
+  { unit: "C-201", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1250, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant." },
+  { unit: "C-204", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 3750, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant. Large unit — splittable.", splittable: true },
+  { unit: "C-214", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant." },
+  { unit: "C-217", building: "C", tenant: "", leaseType: "Office Gross Lease", sqft: 1800, leaseFrom: "", leaseTo: "", monthlyRent: 0, monthlyElectric: 0, securityDeposit: 0, status: "vacant", pastDueAmount: 0, electricPosted: true, lastPaymentDate: "", notes: "Vacant." },
 ];
 
-// Lease ledger for A-102 (from Yardi export — Lone Star Electric Co)
+// Lease ledger for A-102 — Houston Luxury Lighting LLC
+// Net lease: $412/mo base rent + ~$15/mo electric CAM charge
 export const ledgerA102: LedgerEntry[] = [
-  { date: "2025-01-01", description: "Security Deposit", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-01-01", description: "Base Rent (01/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 9360, type: "charge" },
-  { date: "2025-01-01", description: "CAM-Electric (01/2025)", unit: "A-102", charge: 420, payment: 0, balance: 9780, type: "charge" },
-  { date: "2025-01-01", description: "Chk# Hol SD Transfer", unit: "A-102", charge: 0, payment: 4680, balance: 5100, type: "payment" },
-  { date: "2025-01-20", description: "Chk# ACH3.20.25", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-02-01", description: "Base Rent (02/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-02-01", description: "CAM-Electric (02/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-02-01", description: "ACH-11077 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-03-01", description: "Base Rent (03/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-03-01", description: "CAM-Electric (03/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-03-01", description: "ACH-11332 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-04-01", description: "Base Rent (04/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-04-01", description: "CAM-Electric (04/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-04-01", description: "ACH-11636 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-05-01", description: "Base Rent (05/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-05-01", description: "CAM-Electric (05/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-05-01", description: "ACH-11981 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-06-01", description: "Base Rent (06/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-06-01", description: "CAM-Electric (06/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-06-01", description: "ACH-12331 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-07-01", description: "Base Rent (07/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-07-01", description: "CAM-Electric (07/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-07-01", description: "ACH-12669 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-08-01", description: "Base Rent (08/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-08-01", description: "CAM-Electric (08/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-08-01", description: "ACH-13006 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-09-01", description: "Base Rent (09/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-09-01", description: "CAM-Electric (09/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-09-01", description: "ACH-13344 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-10-01", description: "Base Rent (10/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-10-01", description: "CAM-Electric (10/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-10-01", description: "ACH-13684 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-11-01", description: "Base Rent (11/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-11-01", description: "CAM-Electric (11/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-11-01", description: "ACH-14073 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2025-12-01", description: "Base Rent (12/2025)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2025-12-01", description: "CAM-Electric (12/2025)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2025-12-01", description: "ACH-14438 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2026-01-01", description: "Base Rent (01/2026)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2026-01-01", description: "CAM-Electric (01/2026)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2026-01-05", description: "ACH-WEB Online Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2026-02-01", description: "Base Rent (02/2026)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2026-02-01", description: "CAM-Electric (02/2026)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2026-02-01", description: "ACH-15219 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
-  { date: "2026-03-01", description: "Base Rent (03/2026)", unit: "A-102", charge: 4680, payment: 0, balance: 4680, type: "charge" },
-  { date: "2026-03-01", description: "CAM-Electric (03/2026)", unit: "A-102", charge: 420, payment: 0, balance: 5100, type: "charge" },
-  { date: "2026-03-01", description: "ACH-15601 Pre-Authorized Payment", unit: "A-102", charge: 0, payment: 5100, balance: 0, type: "payment" },
+  { date: "2024-12-01", description: "Security Deposit", unit: "A-102", charge: 400, payment: 0, balance: 400, type: "charge" },
+  { date: "2024-12-01", description: "Base Rent (12/2024)", unit: "A-102", charge: 412, payment: 0, balance: 812, type: "charge" },
+  { date: "2024-12-01", description: "CAM-Electric (12/2024)", unit: "A-102", charge: 15, payment: 0, balance: 827, type: "charge" },
+  { date: "2024-12-01", description: "Payment — SD Transfer", unit: "A-102", charge: 0, payment: 400, balance: 427, type: "payment" },
+  { date: "2024-12-15", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-01-01", description: "Base Rent (01/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-01-01", description: "CAM-Electric (01/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-01-05", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-02-01", description: "Base Rent (02/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-02-01", description: "CAM-Electric (02/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-02-03", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-03-01", description: "Base Rent (03/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-03-01", description: "CAM-Electric (03/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-03-04", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-04-01", description: "Base Rent (04/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-04-01", description: "CAM-Electric (04/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-04-03", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-05-01", description: "Base Rent (05/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-05-01", description: "CAM-Electric (05/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-05-02", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-06-01", description: "Base Rent (06/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-06-01", description: "CAM-Electric (06/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-06-03", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-07-01", description: "Base Rent (07/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-07-01", description: "CAM-Electric (07/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-07-07", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-08-01", description: "Base Rent (08/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-08-01", description: "CAM-Electric (08/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-08-04", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-09-01", description: "Base Rent (09/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-09-01", description: "CAM-Electric (09/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-09-03", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-10-01", description: "Base Rent (10/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-10-01", description: "CAM-Electric (10/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-10-06", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-11-01", description: "Base Rent (11/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-11-01", description: "CAM-Electric (11/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-11-04", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2025-12-01", description: "Base Rent (12/2025)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2025-12-01", description: "CAM-Electric (12/2025)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2025-12-03", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2026-01-01", description: "Base Rent (01/2026)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2026-01-01", description: "CAM-Electric (01/2026)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2026-01-05", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2026-02-01", description: "Base Rent (02/2026)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2026-02-01", description: "CAM-Electric (02/2026)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2026-02-03", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
+  { date: "2026-03-01", description: "Base Rent (03/2026)", unit: "A-102", charge: 412, payment: 0, balance: 412, type: "charge" },
+  { date: "2026-03-01", description: "CAM-Electric (03/2026)", unit: "A-102", charge: 15, payment: 0, balance: 427, type: "charge" },
+  { date: "2026-03-03", description: "ACH Payment", unit: "A-102", charge: 0, payment: 427, balance: 0, type: "payment" },
 ];
 
-// Monthly revenue trend data (derived from income statement structure)
+// Monthly revenue trend — Hollister BP1 LLC
+// Source: Yardi Income Statement 03/23/2026
+// Mar 2026 actual: $160,582 total income (cash basis)
+// YTD Jan–Mar 2026: $497,040 → Jan+Feb avg ~$168,229/mo
+// Prior months estimated based on Trophy Windows $123,714/mo anchor + small tenant run rate
 export const monthlyRevenue: MonthlyRevenue[] = [
-  { month: "2025-07", rent: 98450, cam: 4820, electric: 5380, lateFees: 450, total: 109100, occupancy: 82 },
-  { month: "2025-08", rent: 99200, cam: 4820, electric: 5380, lateFees: 0, total: 109400, occupancy: 82 },
-  { month: "2025-09", rent: 100800, cam: 4820, electric: 5380, lateFees: 225, total: 111225, occupancy: 84 },
-  { month: "2025-10", rent: 102350, cam: 4820, electric: 5380, lateFees: 0, total: 112550, occupancy: 85 },
-  { month: "2025-11", rent: 103100, cam: 4820, electric: 5380, lateFees: 675, total: 113975, occupancy: 85 },
-  { month: "2025-12", rent: 103100, cam: 4820, electric: 5380, lateFees: 0, total: 113300, occupancy: 85 },
-  { month: "2026-01", rent: 104680, cam: 4820, electric: 5380, lateFees: 0, total: 114880, occupancy: 85 },
-  { month: "2026-02", rent: 104680, cam: 4820, electric: 5380, lateFees: 450, total: 115330, occupancy: 85 },
-  { month: "2026-03", rent: 104680, cam: 4820, electric: 5380, lateFees: 225, total: 115105, occupancy: 85 },
+  { month: "2025-07", rent: 138200, cam: 9800, electric: 725, lateFees: 300, total: 149025, occupancy: 90 },
+  { month: "2025-08", rent: 140100, cam: 9800, electric: 725, lateFees: 0,   total: 150625, occupancy: 91 },
+  { month: "2025-09", rent: 143500, cam: 10200, electric: 725, lateFees: 450, total: 154875, occupancy: 91 },
+  { month: "2025-10", rent: 145800, cam: 10200, electric: 725, lateFees: 0,   total: 156725, occupancy: 92 },
+  { month: "2025-11", rent: 147200, cam: 10400, electric: 725, lateFees: 600, total: 158925, occupancy: 92 },
+  { month: "2025-12", rent: 148100, cam: 10400, electric: 725, lateFees: 0,   total: 159225, occupancy: 93 },
+  { month: "2026-01", rent: 155400, cam: 11200, electric: 725, lateFees: 0,   total: 167325, occupancy: 93 },
+  { month: "2026-02", rent: 155800, cam: 11400, electric: 725, lateFees: 575, total: 168500, occupancy: 93 },
+  { month: "2026-03", rent: 148801, cam: 11371, electric: 725, lateFees: 411, total: 160582, occupancy: 92.9 },
 ];
 
 // Helper functions
 export function getBuilding(unit: string): "A" | "C" | "D" {
-  if (unit.startsWith("A")) return "A";
+  if (unit.startsWith("A") || unit === "ABD") return "A";
   if (unit.startsWith("D")) return "D";
   return "C";
 }
@@ -219,18 +295,24 @@ export function getAlerts() {
     if (t.status === "vacant") continue;
 
     // Electric not posted
-    if (t.leaseType === "Office Net Lease" && !t.electricPosted && t.tenant !== "" && !t.tenant.includes("Owner")) {
-      alerts.push({ type: "critical", message: `Electric not posted for March 2026`, unit: t.unit, date: "2026-03-12" });
+    if (t.leaseType === "Office Net Lease" && !t.electricPosted && t.tenant !== "") {
+      alerts.push({ type: "critical", message: `Electric not posted`, unit: t.unit, date: "2026-03-01" });
     }
 
-    // Past due without late fee
+    // Past due
     if (t.pastDueAmount > 0) {
-      alerts.push({ type: "critical", message: `Past due: ${formatCurrency(t.pastDueAmount)}`, unit: t.unit, date: "2026-03-12" });
+      alerts.push({ type: "critical", message: `Past due: ${formatCurrency(t.pastDueAmount)}`, unit: t.unit, date: "2026-03-01" });
     }
 
-    // Lease expiring within 90 days
+    // Expiring soon
     if (t.status === "expiring_soon") {
-      alerts.push({ type: "warning", message: `Lease expires ${t.leaseTo} — no renewal on file`, unit: t.unit, date: t.leaseTo });
+      const isUrgent = t.leaseTo <= "2026-03-31";
+      alerts.push({
+        type: isUrgent ? "critical" : "warning",
+        message: `Lease expires ${t.leaseTo}${isUrgent ? " — URGENT" : " — no renewal on file"}`,
+        unit: t.unit,
+        date: t.leaseTo,
+      });
     }
   }
 
