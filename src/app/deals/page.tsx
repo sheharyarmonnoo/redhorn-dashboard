@@ -279,8 +279,6 @@ export default function DealsPage() {
       source: addForm.source.trim(),
       assignedTo: addForm.assignedTo,
       contacts: [],
-      notes: [],
-      emails: [],
     });
     setShowAddForm(false);
     setAddForm({ name: "", address: "", city: "Houston", state: "TX", propertyType: "Office/Warehouse", sqft: "", units: "", askingPrice: "", source: "", assignedTo: "Max" });
