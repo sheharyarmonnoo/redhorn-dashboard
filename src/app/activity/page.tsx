@@ -1,7 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { useActivityLog } from "@/hooks/useConvexData";
+
+const PAGE_SIZE = 25;
 
 type ActivityType = "task_added" | "task_completed" | "task_assigned" | "status_change" | "note_added" | "deal_update" | "alert_created" | "alert_resolved" | "email_sent" | "sync" | "login";
 
@@ -67,13 +70,25 @@ function getActivityColor(type: ActivityType): string {
 export default function ActivityPage() {
   const entries = useActivityLog() as ActivityEntry[];
   const [filter, setFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
 
   const types: ActivityType[] = Array.from(new Set(entries.map(e => e.type)));
-  const filtered = filter === "all" ? entries : entries.filter(e => e.type === filter);
+  const filtered = useMemo(
+    () => (filter === "all" ? entries : entries.filter(e => e.type === filter)),
+    [entries, filter]
+  );
 
-  // Group by date
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  useEffect(() => { setPage(1); }, [filter]);
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+
+  const pageStart = (page - 1) * PAGE_SIZE;
+  const pageEntries = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+
+  // Group by date (only the current page)
   const grouped: Record<string, ActivityEntry[]> = {};
-  for (const entry of filtered) {
+  for (const entry of pageEntries) {
     const date = new Date(entry.createdAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
     if (!grouped[date]) grouped[date] = [];
     grouped[date].push(entry);
@@ -121,8 +136,8 @@ export default function ActivityPage() {
         ))}
       </div>
 
-      {/* Timeline */}
-      <div className="space-y-6">
+      {/* Timeline (scrollable, capped at 80vh) */}
+      <div className="space-y-6 overflow-y-auto pr-2" style={{ maxHeight: "80vh" }}>
         {Object.entries(grouped).map(([date, dayEntries]) => (
           <div key={date}>
             <p className="text-[11px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide mb-3 sticky top-0 bg-[#fafafa] dark:bg-[#09090b] py-1 z-10">{date}</p>
@@ -170,6 +185,34 @@ export default function ActivityPage() {
 
       {filtered.length === 0 && (
         <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a] text-center py-10">No activity to show</p>
+      )}
+
+      {/* Pagination */}
+      {filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#e4e4e7] dark:border-[#3f3f46]">
+          <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa]">
+            Showing {pageStart + 1}&ndash;{Math.min(pageStart + PAGE_SIZE, filtered.length)} of {filtered.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="flex items-center justify-center w-7 h-7 rounded border border-[#e4e4e7] dark:border-[#3f3f46] text-[#71717a] dark:text-[#a1a1aa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] min-w-[60px] text-center">
+              Page {page} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="flex items-center justify-center w-7 h-7 rounded border border-[#e4e4e7] dark:border-[#3f3f46] text-[#71717a] dark:text-[#a1a1aa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

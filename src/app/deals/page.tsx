@@ -113,10 +113,7 @@ export default function DealsPage() {
       children: [
         { field: "name", headerName: "Name", minWidth: 180, flex: 2, editable: true,
           cellRenderer: (p: any) => (
-            <div>
-              <div className="font-medium text-[#18181b] dark:text-[#fafafa]">{p.data.name}</div>
-              <div className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{p.data.city}, {p.data.state}</div>
-            </div>
+            <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{p.data.name}</span>
           ) },
         { field: "propertyType", headerName: "Type", minWidth: 120, flex: 1, filter: true, editable: true,
           columnGroupShow: "open",
@@ -140,7 +137,7 @@ export default function DealsPage() {
       groupId: "deal",
       openByDefault: true,
       children: [
-        { field: "stage", headerName: "Stage", minWidth: 130, flex: 1, pinned: "left", cellRenderer: StageCellRenderer, filter: true, editable: true,
+        { field: "stage", headerName: "Stage", width: 50, minWidth: 35, pinned: "left", cellRenderer: StageCellRenderer, filter: true, editable: true,
           cellEditor: "agSelectCellEditor",
           cellEditorParams: { values: stages } },
         { field: "assignedTo", headerName: "Assigned", minWidth: 100, flex: 1, filter: true, editable: true,
@@ -312,9 +309,9 @@ export default function DealsPage() {
             onCellClicked={onCellClicked}
             onCellValueChanged={onCellValueChanged}
             onColumnGroupOpened={onColumnGroupOpened}
-            rowHeight={52}
-            headerHeight={32}
-            groupHeaderHeight={28}
+            rowHeight={32}
+            headerHeight={28}
+            groupHeaderHeight={24}
             suppressCellFocus={false}
             stopEditingWhenCellsLoseFocus={true}
           />

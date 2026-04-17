@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Briefcase, Activity, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Briefcase, Activity, Sun, Moon, UserCircle } from "lucide-react";
+import { UserButton, useUser } from "@clerk/nextjs";
 import { useProperties, useActivePropertyId } from "@/hooks/useConvexData";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -15,6 +16,7 @@ const nav = [
   { href: "/deals", label: "Deal Pipeline", icon: Briefcase, badge: null },
   { href: "/activity", label: "Activity", icon: Activity, badge: null },
   { href: "/data-pipeline", label: "Data Pipeline", icon: Database, badge: null },
+  { href: "/account", label: "Account", icon: UserCircle, badge: null },
 ];
 
 function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
@@ -23,6 +25,8 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
   const { propId, setActiveProperty } = useActivePropertyId();
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   const { theme, toggle: toggleTheme } = useTheme();
+  const { user } = useUser();
+  const firstName = user?.firstName || "";
 
   const current = properties.find(p => p.code === propId) || properties[0];
 
@@ -51,7 +55,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
             );
           })}
         </nav>
-        <div className="px-2 py-3 flex justify-center border-t border-white/[0.06]">
+        <div className="px-2 py-2 flex flex-col items-center gap-2 border-t border-white/[0.06]">
           <button
             onClick={toggleTheme}
             title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
@@ -59,6 +63,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
           >
             {theme === "dark" ? <Sun size={16} strokeWidth={1.5} /> : <Moon size={16} strokeWidth={1.5} />}
           </button>
+          <UserButton appearance={{ elements: { avatarBox: "w-7 h-7" } }} />
         </div>
       </>
     );
@@ -128,8 +133,13 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
         })}
       </nav>
 
-      <div className="px-5 py-3 border-t border-white/[0.06] flex items-center justify-between gap-2">
-        <p className="text-[10px] text-[#52525b]">Powered by Deal Manager AI</p>
+      {/* User */}
+      <div className="px-4 py-3 border-t border-white/[0.06] flex items-center gap-2.5">
+        <UserButton appearance={{ elements: { avatarBox: "w-7 h-7" } }} />
+        <div className="leading-none min-w-0 flex-1">
+          <p className="text-[12px] text-white/80 font-medium truncate">{user?.fullName || firstName || "User"}</p>
+          <p className="text-[10px] text-white/30 truncate leading-relaxed pb-0.5">{user?.primaryEmailAddress?.emailAddress}</p>
+        </div>
         <button
           onClick={toggleTheme}
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
@@ -137,6 +147,10 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
         >
           {theme === "dark" ? <Sun size={14} strokeWidth={1.5} /> : <Moon size={14} strokeWidth={1.5} />}
         </button>
+      </div>
+
+      <div className="px-4 py-2 pb-3 border-t border-white/[0.04] text-center">
+        <p className="text-[9px] text-white/25 leading-relaxed">Powered by Deal Manager AI</p>
       </div>
     </>
   );
