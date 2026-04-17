@@ -1,11 +1,11 @@
 "use client";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent, CellValueChangedEvent } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, GridReadyEvent, CellValueChangedEvent, CellClickedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
 import { DealStage, getStageLabel, getStageColor } from "@/data/_seed_deals";
 import { useDeals, formatCurrency } from "@/hooks/useConvexData";
-import { Plus, Trash2, LayoutGrid, List } from "lucide-react";
+import { Plus, Trash2, LayoutGrid, List, ArrowUpRight } from "lucide-react";
 import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
 import { DealDetail } from "@/components/pipeline/DealDetail";
 
@@ -78,54 +78,114 @@ export default function DealsPage() {
     updateStage({ id: dealId as any, stage });
   }
 
-  const columnDefs = useMemo<ColDef[]>(() => [
-    { field: "name", headerName: "Property", minWidth: 200, flex: 1, pinned: "left", editable: true,
-      cellRenderer: (p: any) => (
-        <div>
-          <div className="font-medium text-[#18181b] dark:text-[#fafafa]">{p.data.name}</div>
-          <div className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{p.data.city}, {p.data.state}</div>
-        </div>
-      ) },
-    { field: "stage", headerName: "Stage", width: 140, cellRenderer: StageCellRenderer, filter: true, editable: true,
-      cellEditor: "agSelectCellEditor",
-      cellEditorParams: { values: stages } },
-    { field: "askingPrice", headerName: "Asking Price", width: 130, type: "numericColumn", cellRenderer: CurrencyCellRenderer, editable: true,
-      valueParser: (p: any) => Number(p.newValue) || 0 },
-    { field: "capRate", headerName: "Cap Rate", width: 100, type: "numericColumn", cellRenderer: PercentCellRenderer, editable: true,
-      valueParser: (p: any) => Number(p.newValue) || 0 },
-    { field: "pricePerSF", headerName: "$/SF", width: 90, type: "numericColumn", editable: false,
-      valueFormatter: (p: any) => p.value ? `$${p.value}` : "\u2014" },
-    { field: "sqft", headerName: "Sq Ft", width: 100, type: "numericColumn", editable: true,
-      valueFormatter: (p: any) => p.value?.toLocaleString() || "\u2014",
-      valueParser: (p: any) => Number(p.newValue) || 0 },
-    { field: "units", headerName: "Units", width: 80, type: "numericColumn", editable: true,
-      valueParser: (p: any) => Number(p.newValue) || 0 },
-    { field: "propertyType", headerName: "Type", width: 140, filter: true, editable: true,
-      cellEditor: "agSelectCellEditor",
-      cellEditorParams: { values: ["Office/Warehouse", "Industrial", "Flex/Office", "Retail", "Warehouse", "Mixed Use"] } },
-    { field: "assignedTo", headerName: "Assigned", width: 110, filter: true, editable: true,
-      cellEditor: "agSelectCellEditor",
-      cellEditorParams: { values: ["Ori", "Max"] } },
-    { field: "source", headerName: "Source", minWidth: 150, flex: 1, editable: true },
-    { field: "city", headerName: "City", width: 120, editable: true, hide: true },
-    { field: "state", headerName: "State", width: 80, editable: true, hide: true },
-    { field: "address", headerName: "Address", minWidth: 200, editable: true, hide: true },
+  const columnDefs = useMemo<(ColDef | ColGroupDef)[]>(() => [
+    // Open-drawer icon column (pinned left)
     {
       headerName: "",
-      width: 60,
-      sortable: false,
-      filter: false,
-      editable: false,
-      cellRenderer: (p: any) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); handleDeleteDeal(p.data._id); }}
-          className="text-[#d4d4d8] dark:text-[#52525b] hover:text-[#dc2626] dark:hover:text-[#dc2626] cursor-pointer transition-colors"
-          title="Delete deal"
-        >
-          <Trash2 size={13} />
-        </button>
-      ),
-    },
+      groupId: "open",
+      children: [
+        {
+          headerName: "",
+          colId: "open",
+          width: 44,
+          minWidth: 44,
+          maxWidth: 44,
+          pinned: "left",
+          sortable: false,
+          filter: false,
+          resizable: false,
+          editable: false,
+          cellRenderer: (p: any) => (
+            <button
+              className="inline-flex items-center justify-center w-full h-full text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+              title="Open deal details"
+              onClick={(e) => { e.stopPropagation(); setSelectedDeal(p.data); }}
+            >
+              <ArrowUpRight size={13} />
+            </button>
+          ),
+        },
+      ],
+    } as ColGroupDef,
+    // Property group
+    {
+      headerName: "Property",
+      groupId: "property",
+      children: [
+        { field: "name", headerName: "Name", minWidth: 180, flex: 2, pinned: "left", editable: true,
+          cellRenderer: (p: any) => (
+            <div>
+              <div className="font-medium text-[#18181b] dark:text-[#fafafa]">{p.data.name}</div>
+              <div className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{p.data.city}, {p.data.state}</div>
+            </div>
+          ) },
+        { field: "propertyType", headerName: "Type", minWidth: 120, flex: 1, filter: true, editable: true,
+          cellEditor: "agSelectCellEditor",
+          cellEditorParams: { values: ["Office/Warehouse", "Industrial", "Flex/Office", "Retail", "Warehouse", "Mixed Use"] } },
+        { field: "sqft", headerName: "Sq Ft", minWidth: 90, flex: 1, type: "numericColumn", editable: true,
+          valueFormatter: (p: any) => p.value?.toLocaleString() || "\u2014",
+          valueParser: (p: any) => Number(p.newValue) || 0 },
+        { field: "units", headerName: "Units", minWidth: 80, flex: 1, type: "numericColumn", editable: true,
+          valueParser: (p: any) => Number(p.newValue) || 0 },
+        { field: "address", headerName: "Address", minWidth: 160, flex: 1, editable: true, hide: true },
+        { field: "city", headerName: "City", minWidth: 110, flex: 1, editable: true, hide: true },
+        { field: "state", headerName: "State", minWidth: 70, flex: 1, editable: true, hide: true },
+      ],
+    } as ColGroupDef,
+    // Deal group
+    {
+      headerName: "Deal",
+      groupId: "deal",
+      children: [
+        { field: "stage", headerName: "Stage", minWidth: 130, flex: 1, cellRenderer: StageCellRenderer, filter: true, editable: true,
+          cellEditor: "agSelectCellEditor",
+          cellEditorParams: { values: stages } },
+        { field: "assignedTo", headerName: "Assigned", minWidth: 100, flex: 1, filter: true, editable: true,
+          cellEditor: "agSelectCellEditor",
+          cellEditorParams: { values: ["Ori", "Max"] } },
+        { field: "source", headerName: "Source", minWidth: 130, flex: 1, editable: true },
+      ],
+    } as ColGroupDef,
+    // Financials group
+    {
+      headerName: "Financials",
+      groupId: "financials",
+      children: [
+        { field: "askingPrice", headerName: "Asking Price", minWidth: 120, flex: 1, type: "numericColumn", cellRenderer: CurrencyCellRenderer, editable: true,
+          valueParser: (p: any) => Number(p.newValue) || 0 },
+        { field: "capRate", headerName: "Cap Rate", minWidth: 95, flex: 1, type: "numericColumn", cellRenderer: PercentCellRenderer, editable: true,
+          valueParser: (p: any) => Number(p.newValue) || 0 },
+        { field: "pricePerSF", headerName: "$/SF", minWidth: 80, flex: 1, type: "numericColumn", editable: false,
+          valueFormatter: (p: any) => p.value ? `$${p.value}` : "\u2014" },
+      ],
+    } as ColGroupDef,
+    // Actions
+    {
+      headerName: "",
+      groupId: "actions",
+      children: [
+        {
+          headerName: "",
+          colId: "delete",
+          width: 50,
+          minWidth: 50,
+          maxWidth: 50,
+          sortable: false,
+          filter: false,
+          resizable: false,
+          editable: false,
+          cellRenderer: (p: any) => (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDeleteDeal(p.data._id); }}
+              className="text-[#d4d4d8] dark:text-[#52525b] hover:text-[#dc2626] dark:hover:text-[#dc2626] cursor-pointer transition-colors"
+              title="Delete deal"
+            >
+              <Trash2 size={13} />
+            </button>
+          ),
+        },
+      ],
+    } as ColGroupDef,
   ], []);
 
   const defaultColDef = useMemo<ColDef>(() => ({
@@ -147,14 +207,19 @@ export default function DealsPage() {
     }
   }, [updateStage, updateField]);
 
+  const onCellClicked = useCallback((event: CellClickedEvent) => {
+    // Only open drawer when user clicks the "open" icon column
+    const colId = (event.colDef as any).colId;
+    if (colId === "open") {
+      setSelectedDeal(event.data);
+    }
+    // All other cells (editable) — AG Grid handles inline editing
+  }, []);
+
   const onGridReady = useCallback((params: GridReadyEvent) => {
     if (window.innerWidth >= 768) {
       params.api.sizeColumnsToFit();
     }
-  }, []);
-
-  const onRowClicked = useCallback((event: RowClickedEvent) => {
-    setSelectedDeal(event.data);
   }, []);
 
   const activeDeals = deals.filter((d: any) => d.stage !== "dead" && d.stage !== "closed");
@@ -259,13 +324,13 @@ export default function DealsPage() {
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
             onGridReady={onGridReady}
-            onRowClicked={onRowClicked}
+            onCellClicked={onCellClicked}
             onCellValueChanged={onCellValueChanged}
             rowHeight={52}
-            headerHeight={36}
+            headerHeight={32}
+            groupHeaderHeight={28}
             suppressCellFocus={false}
             stopEditingWhenCellsLoseFocus={true}
-            rowClass="cursor-pointer"
           />
         </div>
       )}
