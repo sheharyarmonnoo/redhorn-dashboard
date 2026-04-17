@@ -1,50 +1,14 @@
 "use client";
 import { useState, useEffect } from "react";
-import { X, Save, Edit3, ChevronRight } from "lucide-react";
-import { Tenant, DelinquencyStage, ledgerA102, formatCurrency, getStatusLabel } from "@/data/_seed_tenants";
-import { updateTenantNote, getOverrideForUnit, updateDelinquencyStage, updateChargePosting, getChargePostings, getUnitNotes, addUnitNote, editUnitNote, deleteUnitNote, NoteEntry } from "@/data/_seed_store";
+import { X, ChevronRight } from "lucide-react";
+import { useUnitNotes, useTenantMutations, formatCurrency } from "@/hooks/useConvexData";
+
+type DelinquencyStage = "none" | "past_due" | "default_notice" | "lockout_pending" | "locked_out" | "auction_pending" | "auction";
 
 interface Props {
-  tenant: Tenant | null;
+  tenant: any | null;
   onClose: () => void;
   onUpdated?: () => void;
-}
-
-const POSTING_KEY = "redhorn_posting_overrides";
-const DELINQ_KEY = "redhorn_delinquency_overrides";
-const PENDING_KEY = "redhorn_pending_changes";
-
-// Pending changes that need manual approval
-interface PendingChange {
-  id: string;
-  unit: string;
-  field: string;
-  oldValue: string;
-  newValue: string;
-  source: string;
-  timestamp: string;
-}
-
-function loadPostings(): Record<string, Record<string, boolean>> {
-  if (typeof window === "undefined") return {};
-  try { return JSON.parse(localStorage.getItem(POSTING_KEY) || "{}"); } catch { return {}; }
-}
-function savePostings(data: Record<string, Record<string, boolean>>) {
-  if (typeof window !== "undefined") localStorage.setItem(POSTING_KEY, JSON.stringify(data));
-}
-function loadDelinqOverrides(): Record<string, { stage: DelinquencyStage; date: string }> {
-  if (typeof window === "undefined") return {};
-  try { return JSON.parse(localStorage.getItem(DELINQ_KEY) || "{}"); } catch { return {}; }
-}
-function saveDelinqOverrides(data: Record<string, { stage: DelinquencyStage; date: string }>) {
-  if (typeof window !== "undefined") localStorage.setItem(DELINQ_KEY, JSON.stringify(data));
-}
-function loadPending(): PendingChange[] {
-  if (typeof window === "undefined") return [];
-  try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "[]"); } catch { return []; }
-}
-function savePending(data: PendingChange[]) {
-  if (typeof window !== "undefined") localStorage.setItem(PENDING_KEY, JSON.stringify(data));
 }
 
 const stageLabels: Record<string, string> = {
@@ -54,72 +18,50 @@ const stageLabels: Record<string, string> = {
 };
 const stageOrder: DelinquencyStage[] = ["none", "past_due", "default_notice", "lockout_pending", "locked_out", "auction_pending", "auction"];
 
-const postingTypes = [
-  { key: "electric", label: "Electric / Utility" },
-  { key: "cam", label: "CAM Charges" },
-  { key: "lateFees", label: "Late Fees" },
-  { key: "insurance", label: "Insurance" },
-  { key: "other", label: "Other Fees" },
-];
-
 export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
   const [notesDraft, setNotesDraft] = useState("");
-  const [notesLog, setNotesLog] = useState<NoteEntry[]>([]);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
-  const [postings, setPostings] = useState<Record<string, boolean>>({});
-  const [delinqStage, setDelinqStage] = useState<DelinquencyStage>("none");
-  const [pending, setPending] = useState<PendingChange[]>([]);
+
+  const { notes: notesLog, createNote, updateNote, removeNote } = useUnitNotes(
+    tenant?.propertyId,
+    tenant?.unit
+  );
+  const { updateDelinquency, updateElectricPosted } = useTenantMutations();
 
   useEffect(() => {
     if (tenant) {
       setNotesDraft("");
       setEditingNoteId(null);
-      setNotesLog(getUnitNotes(tenant.unit));
-
-      // Load posting overrides for this unit
-      const allPostings = loadPostings();
-      const unitPostings = allPostings[tenant.unit] || {
-        electric: tenant.electricPosted,
-        cam: true, lateFees: true, insurance: true, other: true,
-      };
-      setPostings(unitPostings);
-
-      // Load delinquency override
-      const delinqOverrides = loadDelinqOverrides();
-      setDelinqStage(delinqOverrides[tenant.unit]?.stage || tenant.delinquencyStage || "none");
-
-      // Load pending changes for this unit
-      setPending(loadPending().filter(p => p.unit === tenant.unit));
     }
-  }, [tenant]);
+  }, [tenant?._id]);
 
   if (!tenant) return null;
 
-  const ledger = tenant.unit === "A-102" ? ledgerA102 : [];
+  // M4: ledger hidden until real ledger entries are wired to Convex
+  const ledger: any[] = [];
+
+  const delinqStage: DelinquencyStage = (tenant.delinquencyStage as DelinquencyStage) || "none";
 
   // Seed note from tenant data if no log entries exist
   const seedNote = tenant.notes && notesLog.length === 0 ? tenant.notes : null;
 
-  function handleAddNote() {
-    if (!notesDraft.trim()) return;
-    addUnitNote(tenant!.unit, notesDraft.trim());
-    setNotesLog(getUnitNotes(tenant!.unit));
+  async function handleAddNote() {
+    if (!notesDraft.trim() || !tenant) return;
+    await createNote({ propertyId: tenant.propertyId, unit: tenant.unit, text: notesDraft.trim() });
     setNotesDraft("");
     onUpdated?.();
   }
 
-  function handleEditNote(id: string) {
+  async function handleEditNote(id: string) {
     if (!editDraft.trim()) return;
-    editUnitNote(tenant!.unit, id, editDraft.trim());
-    setNotesLog(getUnitNotes(tenant!.unit));
+    await updateNote({ id: id as any, text: editDraft.trim() });
     setEditingNoteId(null);
     setEditDraft("");
   }
 
-  function handleDeleteNote(id: string) {
-    deleteUnitNote(tenant!.unit, id);
-    setNotesLog(getUnitNotes(tenant!.unit));
+  async function handleDeleteNote(id: string) {
+    await removeNote({ id: id as any });
   }
 
   function formatTimestamp(iso: string) {
@@ -128,31 +70,20 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
       " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   }
 
-  function togglePosting(key: string) {
-    const updated = { ...postings, [key]: !postings[key] };
-    setPostings(updated);
-    const all = loadPostings();
-    all[tenant!.unit] = updated;
-    savePostings(all);
+  async function toggleElectric() {
+    if (!tenant) return;
+    await updateElectricPosted({ id: tenant._id as any, electricPosted: !tenant.electricPosted });
+    onUpdated?.();
   }
 
-  function setDelinquency(stage: DelinquencyStage) {
-    setDelinqStage(stage);
-    const overrides = loadDelinqOverrides();
-    overrides[tenant!.unit] = { stage, date: new Date().toISOString().slice(0, 10) };
-    saveDelinqOverrides(overrides);
-  }
-
-  function approvePending(id: string) {
-    const all = loadPending().filter(p => p.id !== id);
-    savePending(all);
-    setPending(all.filter(p => p.unit === tenant!.unit));
-  }
-
-  function rejectPending(id: string) {
-    const all = loadPending().filter(p => p.id !== id);
-    savePending(all);
-    setPending(all.filter(p => p.unit === tenant!.unit));
+  async function setDelinquency(stage: DelinquencyStage) {
+    if (!tenant) return;
+    await updateDelinquency({
+      id: tenant._id as any,
+      delinquencyStage: stage,
+      delinquencyDate: new Date().toISOString().slice(0, 10),
+    });
+    onUpdated?.();
   }
 
   return (
@@ -171,25 +102,6 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
         </div>
 
         <div className="px-5 py-5 space-y-5">
-
-          {/* Pending Data Changes (manual approval) */}
-          {pending.length > 0 && (
-            <div className="border border-[#d97706] bg-amber-50 dark:bg-amber-950/30 rounded p-3">
-              <p className="text-[11px] font-semibold text-[#d97706] uppercase tracking-wide mb-2">Pending Data Changes — Requires Approval</p>
-              {pending.map(p => (
-                <div key={p.id} className="flex items-start justify-between gap-2 py-2 border-b border-amber-200 dark:border-amber-900 last:border-0">
-                  <div className="text-[11px]">
-                    <p className="text-[#18181b] dark:text-[#fafafa]"><strong>{p.field}</strong>: {p.oldValue} → {p.newValue}</p>
-                    <p className="text-[#a1a1aa] dark:text-[#71717a]">Source: {p.source} · {p.timestamp}</p>
-                  </div>
-                  <div className="flex gap-1.5 flex-shrink-0">
-                    <button onClick={() => approvePending(p.id)} className="text-[10px] font-medium px-2 py-0.5 bg-[#16a34a] text-white rounded cursor-pointer">Approve</button>
-                    <button onClick={() => rejectPending(p.id)} className="text-[10px] font-medium px-2 py-0.5 bg-[#dc2626] text-white rounded cursor-pointer">Reject</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
 
           {tenant.status === "vacant" ? (
             <div>
@@ -281,25 +193,25 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
                 <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1">Click to manually adjust stage</p>
               </div>
 
-              {/* Posting Status — editable toggles for all fee types */}
-              <div>
-                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Posting Status (March 2026)</p>
-                <div className="space-y-1">
-                  {postingTypes.map(pt => (
-                    <div key={pt.key} className="flex items-center justify-between py-1.5 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
-                      <p className="text-[12px] text-[#18181b] dark:text-[#fafafa]">{pt.label}</p>
-                      <button
-                        onClick={() => togglePosting(pt.key)}
-                        className={`text-[10px] font-medium px-2.5 py-0.5 rounded cursor-pointer transition-colors ${
-                          postings[pt.key] ? "bg-[#16a34a] text-white" : "bg-red-100 dark:bg-red-950/50 text-[#dc2626]"
-                        }`}
-                      >
-                        {postings[pt.key] ? "Posted" : "Not Posted"}
-                      </button>
-                    </div>
-                  ))}
+              {/* Posting Status — electric is the only toggle backed by Convex today */}
+              {tenant.leaseType === "Office Net Lease" && (
+                <div>
+                  <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">
+                    Electric Posting ({new Date().toLocaleString("en-US", { month: "long", year: "numeric" })})
+                  </p>
+                  <div className="flex items-center justify-between py-1.5">
+                    <p className="text-[12px] text-[#18181b] dark:text-[#fafafa]">Electric / Utility charge posted</p>
+                    <button
+                      onClick={toggleElectric}
+                      className={`text-[10px] font-medium px-2.5 py-0.5 rounded cursor-pointer transition-colors ${
+                        tenant.electricPosted ? "bg-[#16a34a] text-white" : "bg-red-100 dark:bg-red-950/50 text-[#dc2626]"
+                      }`}
+                    >
+                      {tenant.electricPosted ? "Posted" : "Not Posted"}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </>
           )}
 
@@ -340,14 +252,14 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
             {notesLog.length > 0 ? (
               <div className="space-y-2 max-h-[240px] overflow-y-auto">
                 {notesLog.map(entry => (
-                  <div key={entry.id} className="group bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2.5">
-                    {editingNoteId === entry.id ? (
+                  <div key={entry._id} className="group bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2.5">
+                    {editingNoteId === entry._id ? (
                       <div className="space-y-1.5">
                         <textarea value={editDraft} onChange={e => setEditDraft(e.target.value)}
                           className="w-full text-[12px] text-[#18181b] dark:text-[#fafafa] bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2 leading-relaxed focus:outline-none focus:border-[#71717a] resize-none min-h-[40px]"
                           autoFocus />
                         <div className="flex gap-1.5">
-                          <button onClick={() => handleEditNote(entry.id)}
+                          <button onClick={() => handleEditNote(entry._id)}
                             className="text-[10px] font-medium px-2 py-0.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded cursor-pointer">Save</button>
                           <button onClick={() => setEditingNoteId(null)}
                             className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] cursor-pointer">Cancel</button>
@@ -364,9 +276,9 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
                             )}
                           </div>
                           <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => { setEditingNoteId(entry.id); setEditDraft(entry.text); }}
+                            <button onClick={() => { setEditingNoteId(entry._id); setEditDraft(entry.text); }}
                               className="text-[9px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer">Edit</button>
-                            <button onClick={() => handleDeleteNote(entry.id)}
+                            <button onClick={() => handleDeleteNote(entry._id)}
                               className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer">Delete</button>
                           </div>
                         </div>

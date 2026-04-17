@@ -2,12 +2,15 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, GridReadyEvent, CellValueChangedEvent, CellClickedEvent } from "ag-grid-community";
+import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
 import { DealStage, getStageLabel, getStageColor } from "@/data/_seed_deals";
 import { useDeals, formatCurrency } from "@/hooks/useConvexData";
 import { Plus, Trash2, LayoutGrid, List, ArrowUpRight } from "lucide-react";
 import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
 import { DealDetail } from "@/components/pipeline/DealDetail";
+
+const TEAM_ASSIGNEES = ["Ori", "Max"];
 
 const VIEW_KEY = "redhorn_deals_view";
 
@@ -34,6 +37,12 @@ function PercentCellRenderer(props: { value: number }) {
 
 export default function DealsPage() {
   const { deals, createDeal, updateStage, updateField, addNote, addTask, updateTask, toggleTask, removeTask, addDocument, removeDocument, removeDeal } = useDeals();
+  const { user } = useUser();
+  const currentUserName = user?.firstName?.trim() || "Max";
+  const assigneeOptions = useMemo(
+    () => (currentUserName && !TEAM_ASSIGNEES.includes(currentUserName) ? [...TEAM_ASSIGNEES, currentUserName] : TEAM_ASSIGNEES),
+    [currentUserName]
+  );
   const [selectedDeal, setSelectedDeal] = useState<any>(null);
   const [viewMode, setViewMode] = useState<"pipeline" | "table">(() => {
     if (typeof window === "undefined") return "pipeline";
@@ -59,7 +68,7 @@ export default function DealsPage() {
       askingPrice: 0,
       stage: "lead",
       source: "",
-      assignedTo: "Max",
+      assignedTo: currentUserName,
       contacts: [],
     });
     // Mark this id as a draft so we can auto-delete it on close if the user didn't edit anything
@@ -175,7 +184,7 @@ export default function DealsPage() {
         { field: "assignedTo", headerName: "Assigned", minWidth: 100, flex: 1, filter: true, editable: true,
           columnGroupShow: "open",
           cellEditor: "agSelectCellEditor",
-          cellEditorParams: { values: ["Ori", "Max"] } },
+          cellEditorParams: { values: assigneeOptions } },
         { field: "source", headerName: "Source", minWidth: 130, flex: 1, editable: true,
           columnGroupShow: "open" },
       ],
@@ -224,7 +233,7 @@ export default function DealsPage() {
         },
       ],
     } as ColGroupDef,
-  ], []);
+  ], [assigneeOptions]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,

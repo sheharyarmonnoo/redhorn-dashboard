@@ -161,11 +161,11 @@ export default function ActivityPage() {
                           <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{entry.user}</span>
                           {entry.unit && (
                             <>
-                              <span className="text-[10px] text-[#d4d4d8] dark:text-[#52525b]">\u00B7</span>
+                              <span className="text-[10px] text-[#d4d4d8] dark:text-[#52525b]">·</span>
                               <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] font-medium">{entry.unit}</span>
                             </>
                           )}
-                          <span className="text-[10px] text-[#d4d4d8] dark:text-[#52525b]">\u00B7</span>
+                          <span className="text-[10px] text-[#d4d4d8] dark:text-[#52525b]">·</span>
                           <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">
                             {new Date(entry.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                           </span>

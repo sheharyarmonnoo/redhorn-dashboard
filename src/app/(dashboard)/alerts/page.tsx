@@ -2,7 +2,7 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
-import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useActivityLog, formatCurrency } from "@/hooks/useConvexData";
 import PageHeader from "@/components/PageHeader";
 import { Zap, DollarSign, CalendarClock, AlertTriangle, Clock } from "lucide-react";
 
@@ -280,16 +280,26 @@ export default function AlertsPage() {
     params.api.sizeColumnsToFit();
   }, []);
 
-  const alertHistory = [
-    { date: "2026-03-12", message: "Default letter sent to C-207 (Brazos Valley Imports)", type: "Action", category: "Past Due" },
-    { date: "2026-03-10", message: "A-90 lease expired — holdover status triggered", type: "System", category: "Holdover" },
-    { date: "2026-03-05", message: "February late fees assessed: A-120 ($99), C-207 ($84)", type: "System", category: "Past Due" },
-    { date: "2026-03-01", message: "Monthly charges posted for March 2026", type: "System", category: "Charges" },
-    { date: "2026-02-15", message: "Electric posting missed for C-212, C-305 — flagged for PM", type: "Alert", category: "Electric" },
-    { date: "2026-02-12", message: "A-120 (Clear Lake IT) — first late notice sent", type: "Action", category: "Past Due" },
-    { date: "2026-02-01", message: "Monthly charges posted for February 2026", type: "System", category: "Charges" },
-    { date: "2026-01-20", message: "Lease renewal discussion initiated for A-111/C-216", type: "Action", category: "Lease" },
-  ];
+  // Pull alert-relevant activity from the real audit log so the history reflects the live system.
+  const activityLog = useActivityLog(100) as any[];
+  const alertHistory = useMemo(() => {
+    const keepTypes = new Set(["alert_created", "alert_resolved", "status_change", "sync"]);
+    const typeToLabel: Record<string, string> = {
+      alert_created: "Alert",
+      alert_resolved: "Action",
+      status_change: "Action",
+      sync: "System",
+    };
+    return activityLog
+      .filter((a: any) => keepTypes.has(a.type))
+      .slice(0, 50)
+      .map((a: any) => ({
+        date: (a.createdAt || "").slice(0, 10),
+        message: a.description,
+        type: typeToLabel[a.type] || "System",
+        category: a.type.replace("_", " "),
+      }));
+  }, [activityLog]);
 
   const historyColDefs = useMemo<ColDef[]>(() => {
     const typeRenderer = (p: { value: string }) => {
@@ -417,16 +427,23 @@ export default function AlertsPage() {
         <Clock size={16} className="text-[#a1a1aa] dark:text-[#71717a]" />
         <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Alert History Log</p>
       </div>
-      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] dark:border-[#3f3f46] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: 340 }}>
-        <AgGridReact
-          ref={historyGridRef}
-          rowData={alertHistory}
-          columnDefs={historyColDefs}
-          defaultColDef={defaultColDef}
-          onGridReady={(params) => params.api.sizeColumnsToFit()}
-          animateRows={true}
-        />
-      </div>
+      {alertHistory.length === 0 ? (
+        <div className="w-full border border-dashed border-[#e4e4e7] dark:border-[#3f3f46] rounded p-8 text-center bg-white dark:bg-[#18181b]">
+          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">No alert history yet.</p>
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mt-1">Created, resolved, and sync events will appear here as the system runs.</p>
+        </div>
+      ) : (
+        <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] dark:border-[#3f3f46] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: 340 }}>
+          <AgGridReact
+            ref={historyGridRef}
+            rowData={alertHistory}
+            columnDefs={historyColDefs}
+            defaultColDef={defaultColDef}
+            onGridReady={(params) => params.api.sizeColumnsToFit()}
+            animateRows={true}
+          />
+        </div>
+      )}
     </div>
   );
 }

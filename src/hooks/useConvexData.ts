@@ -157,10 +157,10 @@ export function useDelinquentCases() {
 
 // ===== UNIT NOTES =====
 
-export function useUnitNotes(propertyId: string | undefined, unit: string) {
+export function useUnitNotes(propertyId: string | undefined, unit: string | undefined) {
   const notes = useQuery(
     api.unitNotes.listByUnit,
-    propertyId ? { propertyId: propertyId as any, unit } : "skip"
+    propertyId && unit ? { propertyId: propertyId as any, unit } : "skip"
   );
   const createNote = useMutation(api.unitNotes.create);
   const updateNote = useMutation(api.unitNotes.update);

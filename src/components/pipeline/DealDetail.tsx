@@ -820,11 +820,11 @@ function DocRow({ doc, dealId, removeDocument }: { doc: any; dealId: any; remove
         <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate">{doc.name}</p>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[9px] text-[#71717a] dark:text-[#a1a1aa]">{doc.uploadedBy}</span>
-          <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">\u00B7</span>
+          <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">·</span>
           <span className="text-[9px] text-[#a1a1aa] dark:text-[#71717a]">{formatDateTime(doc.uploadedAt)}</span>
           {doc.size && (
             <>
-              <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">\u00B7</span>
+              <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">·</span>
               <span className="text-[9px] text-[#a1a1aa] dark:text-[#71717a]">{formatFileSize(doc.size)}</span>
             </>
           )}

@@ -1,9 +1,39 @@
 "use client";
 import { useState } from "react";
 import { Plus, X, GripVertical } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
 import { useActionItems } from "@/hooks/useConvexData";
 
 type KanbanColumn = "todo" | "in_progress" | "done";
+
+// Core Redhorn team today — rendered alongside the signed-in user so any new
+// Clerk account gets their name in the dropdown without a code change.
+const TEAM_ASSIGNEES = ["Ori", "Max"];
+
+function useAssigneeOptions() {
+  const { user } = useUser();
+  const meName = user?.firstName?.trim();
+  const options = meName && !TEAM_ASSIGNEES.includes(meName)
+    ? [...TEAM_ASSIGNEES, meName]
+    : TEAM_ASSIGNEES;
+  return { options, meName };
+}
+
+function AssigneeSelect({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const { options } = useAssigneeOptions();
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa]"
+    >
+      <option value="">{placeholder || "Unassigned"}</option>
+      {options.map(name => (
+        <option key={name} value={name}>{name}</option>
+      ))}
+    </select>
+  );
+}
 
 const columns: { key: KanbanColumn; label: string }[] = [
   { key: "todo", label: "To Do" },
@@ -67,12 +97,7 @@ function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging
                   <option value="medium">Medium</option>
                   <option value="low">Low</option>
                 </select>
-                <select value={editAssignee} onChange={e => setEditAssignee(e.target.value)}
-                  className="text-[10px] px-1.5 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa]">
-                  <option value="">Unassigned</option>
-                  <option value="Ori">Ori</option>
-                  <option value="Max">Max</option>
-                </select>
+                <AssigneeSelect value={editAssignee} onChange={setEditAssignee} />
                 <button onClick={save} className="text-[10px] font-medium px-2 py-0.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded cursor-pointer">Save</button>
                 <button onClick={() => { setEditing(false); setEditText(item.text); setEditPriority(item.priority); setEditAssignee(item.assignedTo || ""); }}
                   className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] cursor-pointer">Cancel</button>
@@ -89,17 +114,17 @@ function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging
                 <span className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] capitalize">{item.priority}</span>
                 {item.assignedTo && (
                   <>
-                    <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">\u00B7</span>
+                    <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">·</span>
                     <span className="text-[9px] text-[#2563eb] dark:text-[#60a5fa] font-medium">{item.assignedTo}</span>
                   </>
                 )}
                 {item.unit && (
                   <>
-                    <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">\u00B7</span>
+                    <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">·</span>
                     <span className="text-[9px] text-[#71717a] dark:text-[#a1a1aa] font-medium">{item.unit}</span>
                   </>
                 )}
-                <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">\u00B7</span>
+                <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">·</span>
                 <span className="text-[9px] text-[#a1a1aa] dark:text-[#71717a]">{item.createdAt?.slice(0, 10)}</span>
               </div>
             </>
@@ -190,12 +215,7 @@ export default function ActionItems() {
             <option value="medium">Medium</option>
             <option value="low">Low</option>
           </select>
-          <select value={newAssignee} onChange={e => setNewAssignee(e.target.value)}
-            className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa]">
-            <option value="">Assign to...</option>
-            <option value="Ori">Ori</option>
-            <option value="Max">Max</option>
-          </select>
+          <AssigneeSelect value={newAssignee} onChange={setNewAssignee} placeholder="Assign to..." />
           <button onClick={handleAdd}
             className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors cursor-pointer">
             Add

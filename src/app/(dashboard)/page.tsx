@@ -136,13 +136,25 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Monthly KPI Dashboard" subtitle={`${property.name} — ${monthlyRevenue.length > 0 ? monthlyRevenue[monthlyRevenue.length - 1].month : ""}`} />
+      <PageHeader
+        title="Monthly KPI Dashboard"
+        subtitle={(() => {
+          const latestMonth = monthlyRevenue.length > 0 ? monthlyRevenue[monthlyRevenue.length - 1].month : "";
+          // "2026-03" → "March 2026"; leaves anything that isn't a YYYY-MM alone
+          let pretty = latestMonth;
+          if (/^\d{4}-\d{2}$/.test(latestMonth)) {
+            const [y, m] = latestMonth.split("-");
+            pretty = new Date(Number(y), Number(m) - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+          }
+          return pretty ? `${property.name} — ${pretty}` : property.name;
+        })()}
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3 mb-6">
         <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} sparkline={monthlyRevenue.map(m => m.total)} onClick={() => setKpiDrawer("revenue")} />
         <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${tenants.length} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
-        <KPICard title="Past Due" value={formatCurrency(totalPastDue)} color="text-[#dc2626]" onClick={() => setKpiDrawer("pastdue")} />
+        <KPICard title="Past Due" value={formatCurrency(totalPastDue)} color={totalPastDue > 0 ? "text-[#dc2626]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("pastdue")} />
         <KPICard title="Vacant" value={String(vacant.length)} subtitle={`${vacant.reduce((s, t) => s + t.sqft, 0).toLocaleString()} SF`} onClick={() => setKpiDrawer("vacant")} />
         <KPICard title="Electric Posting" value={electricMissing.length > 0 ? `${electricMissing.length} Missing` : "All Posted"} color={electricMissing.length > 0 ? "text-[#d97706]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("electric")} />
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
