@@ -66,6 +66,59 @@ export const create = mutation({
   },
 });
 
+export const updateField = mutation({
+  args: {
+    id: v.id("deals"),
+    field: v.string(),
+    value: v.any(),
+    user: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const deal = await ctx.db.get(args.id);
+    if (!deal) return;
+    const patch: any = { [args.field]: args.value, updatedAt: new Date().toISOString() };
+    // Auto-calculate pricePerSF when askingPrice or sqft changes
+    if (args.field === "askingPrice" && deal.sqft > 0) {
+      patch.pricePerSF = Math.round(Number(args.value) / deal.sqft);
+    }
+    if (args.field === "sqft" && Number(args.value) > 0) {
+      patch.pricePerSF = Math.round(deal.askingPrice / Number(args.value));
+    }
+    await ctx.db.patch(args.id, patch);
+    await logActivity(ctx, {
+      type: "deal_update",
+      description: `${deal.name}: ${args.field} updated`,
+      user: args.user || "System",
+      dealId: args.id,
+    });
+  },
+});
+
+export const updateTask = mutation({
+  args: {
+    id: v.id("deals"),
+    taskId: v.string(),
+    text: v.optional(v.string()),
+    assignedTo: v.optional(v.string()),
+    dueDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const deal = await ctx.db.get(args.id);
+    if (!deal || !deal.tasks) return;
+    const tasks = deal.tasks.map((t: any) =>
+      t.id === args.taskId
+        ? {
+            ...t,
+            ...(args.text !== undefined ? { text: args.text } : {}),
+            ...(args.assignedTo !== undefined ? { assignedTo: args.assignedTo || undefined } : {}),
+            ...(args.dueDate !== undefined ? { dueDate: args.dueDate || undefined } : {}),
+          }
+        : t
+    );
+    await ctx.db.patch(args.id, { tasks, updatedAt: new Date().toISOString() });
+  },
+});
+
 export const updateStage = mutation({
   args: { id: v.id("deals"), stage: v.string(), user: v.optional(v.string()) },
   handler: async (ctx, args) => {

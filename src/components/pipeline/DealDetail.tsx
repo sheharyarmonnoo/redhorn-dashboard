@@ -65,6 +65,7 @@ interface DealDetailProps {
   onDelete: () => void;
   addNote: (args: { id: any; text: string; author: string }) => void;
   addTask: (args: { id: any; text: string; assignedTo?: string; dueDate?: string; createdBy?: string }) => void;
+  updateTask: (args: { id: any; taskId: string; text?: string; assignedTo?: string; dueDate?: string }) => void;
   toggleTask: (args: { id: any; taskId: string; user?: string }) => void;
   removeTask: (args: { id: any; taskId: string }) => void;
   addDocument: (args: { id: any; name: string; storageId?: any; type: string; uploadedBy: string; size?: number }) => void;
@@ -79,6 +80,7 @@ export function DealDetail({
   onDelete,
   addNote,
   addTask,
+  updateTask,
   toggleTask,
   removeTask,
   addDocument,
@@ -157,16 +159,16 @@ export function DealDetail({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-40 animate-in fade-in" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-screen w-full max-w-[600px] bg-white z-50 flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right">
+      <div className="fixed inset-0 bg-black/30 dark:bg-black/60 backdrop-blur-[2px] z-40 animate-in fade-in" onClick={onClose} />
+      <div className="fixed right-0 top-0 h-screen w-full max-w-[600px] bg-white dark:bg-[#18181b] z-50 flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-[#e4e4e7] flex items-start justify-between bg-gradient-to-br from-white to-[#fafafa]">
+        <div className="px-5 py-4 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex items-start justify-between bg-gradient-to-br from-white to-[#fafafa] dark:from-[#18181b] dark:to-[#27272a]">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <Building2 size={14} className="text-[#71717a]" />
-              <p className="text-[15px] font-semibold text-[#18181b] truncate">{deal.name}</p>
+              <Building2 size={14} className="text-[#71717a] dark:text-[#a1a1aa]" />
+              <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] truncate">{deal.name}</p>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#71717a]">
+            <div className="flex items-center gap-1.5 text-[11px] text-[#71717a] dark:text-[#a1a1aa]">
               <MapPin size={11} />
               <span>{deal.address}, {deal.city}, {deal.state}</span>
             </div>
@@ -175,7 +177,7 @@ export function DealDetail({
             <select
               value={currentUser}
               onChange={(e) => setCurrentUser(e.target.value)}
-              className="text-[10px] px-2 py-1 border border-[#e4e4e7] rounded bg-white text-[#71717a] cursor-pointer"
+              className="text-[10px] px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa] cursor-pointer"
               title="Acting as"
             >
               <option value="Ori">as Ori</option>
@@ -183,19 +185,19 @@ export function DealDetail({
             </select>
             <button
               onClick={handleDelete}
-              className="text-[#a1a1aa] hover:text-[#dc2626] cursor-pointer p-1 rounded transition-colors"
+              className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer p-1 rounded transition-colors"
               title="Delete deal"
             >
               <Trash2 size={15} />
             </button>
-            <button onClick={onClose} className="text-[#a1a1aa] hover:text-[#18181b] cursor-pointer p-1">
+            <button onClick={onClose} className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer p-1">
               <X size={18} />
             </button>
           </div>
         </div>
 
         {/* Stage selector */}
-        <div className="px-5 py-3 border-b border-[#e4e4e7] flex items-center gap-1.5 overflow-x-auto">
+        <div className="px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex items-center gap-1.5 overflow-x-auto">
           {STAGES.map((s) => (
             <button
               key={s}
@@ -204,7 +206,7 @@ export function DealDetail({
                 "text-[10px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors whitespace-nowrap",
                 deal.stage === s
                   ? `${getStageColor(s)} text-white`
-                  : "bg-[#f4f4f5] text-[#71717a] hover:bg-[#e4e4e7]"
+                  : "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa] hover:bg-[#e4e4e7] dark:hover:bg-[#3f3f46]"
               )}
             >
               {getStageLabel(s)}
@@ -213,7 +215,7 @@ export function DealDetail({
         </div>
 
         {/* Tabs */}
-        <div className="px-5 border-b border-[#e4e4e7] flex gap-5">
+        <div className="px-5 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex gap-5">
           {([
             { key: "overview", label: "Overview" },
             { key: "tasks", label: "Tasks", count: tasks.length },
@@ -226,8 +228,8 @@ export function DealDetail({
               className={cn(
                 "text-[12px] font-medium py-2.5 border-b-2 cursor-pointer transition-colors",
                 activeTab === tab.key
-                  ? "border-[#18181b] text-[#18181b]"
-                  : "border-transparent text-[#a1a1aa] hover:text-[#71717a]"
+                  ? "border-[#18181b] dark:border-[#fafafa] text-[#18181b] dark:text-[#fafafa]"
+                  : "border-transparent text-[#a1a1aa] dark:text-[#71717a] hover:text-[#71717a] dark:hover:text-[#a1a1aa]"
               )}
             >
               {tab.label}
@@ -240,62 +242,98 @@ export function DealDetail({
         <div className="flex-1 overflow-y-auto p-5">
           {activeTab === "overview" && (
             <div className="space-y-5">
-              {/* Metric cards */}
+              {/* Key Metrics */}
               <div className="grid grid-cols-3 gap-2">
-                <div className="bg-gradient-to-br from-[#fafafa] to-white border border-[#e4e4e7] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] uppercase tracking-wide font-medium">Asking</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] mt-1">{formatCurrency(deal.askingPrice || 0)}</p>
+                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Asking</p>
+                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{formatCurrency(deal.askingPrice || 0)}</p>
                 </div>
-                <div className="bg-gradient-to-br from-[#fafafa] to-white border border-[#e4e4e7] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] uppercase tracking-wide font-medium">Cap Rate</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] mt-1">{deal.capRate ? `${deal.capRate}%` : "\u2014"}</p>
+                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Cap Rate</p>
+                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{deal.capRate ? `${deal.capRate}%` : "\u2014"}</p>
                 </div>
-                <div className="bg-gradient-to-br from-[#fafafa] to-white border border-[#e4e4e7] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] uppercase tracking-wide font-medium">$/SF</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] mt-1">{deal.pricePerSF ? `$${deal.pricePerSF}` : "\u2014"}</p>
+                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">$/SF</p>
+                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{deal.pricePerSF ? `$${deal.pricePerSF}` : "\u2014"}</p>
+                </div>
+                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Size</p>
+                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{formatNumber(deal.sqft)} SF</p>
+                </div>
+                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Units</p>
+                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{deal.units || "\u2014"}</p>
+                </div>
+                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">$/Unit</p>
+                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">
+                    {deal.units && deal.askingPrice ? formatCurrency(Math.round(deal.askingPrice / deal.units)) : "\u2014"}
+                  </p>
+                </div>
+                {deal.capRate && deal.askingPrice ? (
+                  <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+                    <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Est. NOI</p>
+                    <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">
+                      {formatCurrency(Math.round(deal.askingPrice * (deal.capRate / 100)))}
+                    </p>
+                  </div>
+                ) : null}
+                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Days in Stage</p>
+                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">
+                    {deal.updatedAt ? Math.floor((Date.now() - new Date(deal.updatedAt).getTime()) / 86400000) : "\u2014"}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Activity</p>
+                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">
+                    {(deal.notes?.length || 0) + (deal.tasks?.length || 0) + (deal.documents?.length || 0)}
+                  </p>
                 </div>
               </div>
 
               {/* Property */}
               <section>
-                <p className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider mb-2.5">Property</p>
+                <p className="text-[10px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wider mb-2.5">Property</p>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Type" value={deal.propertyType} />
-                  <Field label="Sq Ft" value={formatNumber(deal.sqft)} />
-                  <Field label="Units" value={String(deal.units || "\u2014")} />
+                  <Field label="Address" value={`${deal.address || ""}, ${deal.city || ""}, ${deal.state || ""}`.replace(/^, |, $/g, "")} icon={<MapPin size={11} />} />
                   <Field label="Closing Date" value={formatDate(deal.closingDate)} />
+                  <Field label="Created" value={formatDate(deal.createdAt)} />
                 </div>
               </section>
 
               {/* Team & Source */}
               <section>
-                <p className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider mb-2.5">Team & Source</p>
+                <p className="text-[10px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wider mb-2.5">Team & Source</p>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Assigned To" value={deal.assignedTo} icon={<User size={11} />} />
                   <Field label="Source" value={deal.source || "\u2014"} />
+                  <Field label="Last Updated" value={formatDateTime(deal.updatedAt)} />
+                  <Field label="Stage" value={getStageLabel(deal.stage)} />
                 </div>
               </section>
 
               {/* Contacts */}
               {deal.contacts && deal.contacts.length > 0 && (
                 <section>
-                  <p className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider mb-2.5">Contacts</p>
+                  <p className="text-[10px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wider mb-2.5">Contacts</p>
                   <div className="space-y-2">
                     {deal.contacts.map((c: any, i: number) => (
-                      <div key={i} className="bg-[#fafafa] border border-[#e4e4e7] rounded-lg p-3">
+                      <div key={i} className="bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
                         <div className="flex items-center justify-between mb-1">
-                          <p className="text-[12px] font-medium text-[#18181b]">{c.name}</p>
-                          <span className="text-[10px] text-[#71717a] bg-white px-2 py-0.5 rounded border border-[#e4e4e7]">
+                          <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{c.name}</p>
+                          <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] bg-white dark:bg-[#18181b] px-2 py-0.5 rounded border border-[#e4e4e7] dark:border-[#3f3f46]">
                             {c.role}
                           </span>
                         </div>
                         {c.email && (
-                          <a href={`mailto:${c.email}`} className="flex items-center gap-1.5 text-[11px] text-[#2563eb] hover:underline mt-1">
+                          <a href={`mailto:${c.email}`} className="flex items-center gap-1.5 text-[11px] text-[#2563eb] dark:text-[#60a5fa] hover:underline mt-1">
                             <Mail size={11} /> {c.email}
                           </a>
                         )}
                         {c.phone && (
-                          <div className="flex items-center gap-1.5 text-[11px] text-[#71717a] mt-0.5">
+                          <div className="flex items-center gap-1.5 text-[11px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5">
                             <Phone size={11} /> {c.phone}
                           </div>
                         )}
@@ -310,19 +348,19 @@ export function DealDetail({
           {activeTab === "tasks" && (
             <div className="space-y-4">
               {/* Add task */}
-              <div className="bg-[#fafafa] border border-[#e4e4e7] rounded-lg p-3 space-y-2">
+              <div className="bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3 space-y-2">
                 <input
                   value={newTaskText}
                   onChange={(e) => setNewTaskText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
                   placeholder="New task..."
-                  className="w-full text-[12px] px-3 py-2 border border-[#e4e4e7] rounded bg-white focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]"
+                  className="w-full text-[12px] px-3 py-2 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]"
                 />
                 <div className="flex gap-2">
                   <select
                     value={newTaskAssignee}
                     onChange={(e) => setNewTaskAssignee(e.target.value)}
-                    className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] rounded bg-white text-[#71717a] flex-1"
+                    className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] flex-1"
                   >
                     <option value="">Unassigned</option>
                     <option value="Ori">Ori</option>
@@ -332,12 +370,12 @@ export function DealDetail({
                     type="date"
                     value={newTaskDueDate}
                     onChange={(e) => setNewTaskDueDate(e.target.value)}
-                    className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] rounded bg-white text-[#71717a] flex-1"
+                    className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] flex-1"
                   />
                   <button
                     onClick={handleAddTask}
                     disabled={!newTaskText.trim()}
-                    className="flex items-center gap-1 text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] transition-colors cursor-pointer disabled:opacity-40"
+                    className="flex items-center gap-1 text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors cursor-pointer disabled:opacity-40"
                   >
                     <Plus size={11} /> Add
                   </button>
@@ -347,49 +385,18 @@ export function DealDetail({
               {/* Task list */}
               <div className="space-y-1.5">
                 {tasks.map((task: any) => (
-                  <div
+                  <TaskRow
                     key={task.id}
-                    className="group flex items-start gap-2 p-2.5 border border-[#e4e4e7] rounded-lg hover:border-[#a1a1aa] transition-colors"
-                  >
-                    <button
-                      onClick={() => toggleTask({ id: deal._id, taskId: task.id, user: currentUser })}
-                      className="mt-0.5 flex-shrink-0 cursor-pointer"
-                    >
-                      {task.done ? (
-                        <CheckSquare size={15} className="text-[#16a34a]" />
-                      ) : (
-                        <Square size={15} className="text-[#a1a1aa] hover:text-[#18181b] transition-colors" />
-                      )}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className={cn(
-                          "text-[12px] leading-relaxed",
-                          task.done ? "text-[#a1a1aa] line-through" : "text-[#18181b]"
-                        )}
-                      >
-                        {task.text}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        {task.assignedTo && (
-                          <span className="text-[9px] text-[#2563eb] font-medium">{task.assignedTo}</span>
-                        )}
-                        {task.dueDate && (
-                          <span className="text-[9px] text-[#71717a]">Due {formatDate(task.dueDate)}</span>
-                        )}
-                        <span className="text-[9px] text-[#a1a1aa]">Created {formatDateTime(task.createdAt)}</span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => removeTask({ id: deal._id, taskId: task.id })}
-                      className="opacity-0 group-hover:opacity-100 text-[#a1a1aa] hover:text-[#dc2626] transition-all cursor-pointer"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+                    task={task}
+                    dealId={deal._id}
+                    currentUser={currentUser}
+                    toggleTask={toggleTask}
+                    updateTask={updateTask}
+                    removeTask={removeTask}
+                  />
                 ))}
                 {tasks.length === 0 && (
-                  <p className="text-[12px] text-[#a1a1aa] text-center py-8">No tasks yet. Add one above.</p>
+                  <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a] text-center py-8">No tasks yet. Add one above.</p>
                 )}
               </div>
             </div>
@@ -408,7 +415,7 @@ export function DealDetail({
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="w-full flex items-center justify-center gap-2 text-[12px] font-medium px-3 py-3 bg-[#fafafa] border-2 border-dashed border-[#e4e4e7] rounded-lg text-[#71717a] hover:border-[#18181b] hover:text-[#18181b] transition-colors cursor-pointer disabled:opacity-40"
+                  className="w-full flex items-center justify-center gap-2 text-[12px] font-medium px-3 py-3 bg-[#fafafa] dark:bg-[#27272a] border-2 border-dashed border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg text-[#71717a] dark:text-[#a1a1aa] hover:border-[#18181b] dark:hover:border-[#fafafa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer disabled:opacity-40"
                 >
                   <Upload size={14} />
                   {uploading ? "Uploading..." : "Upload Document"}
@@ -421,7 +428,7 @@ export function DealDetail({
                   <DocRow key={doc.id} doc={doc} dealId={deal._id} removeDocument={removeDocument} />
                 ))}
                 {documents.length === 0 && (
-                  <p className="text-[12px] text-[#a1a1aa] text-center py-8">No documents yet.</p>
+                  <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a] text-center py-8">No documents yet.</p>
                 )}
               </div>
             </div>
@@ -429,32 +436,40 @@ export function DealDetail({
 
           {activeTab === "notes" && (
             <div className="space-y-3">
-              <div className="flex gap-2">
-                <input
+              <div className="space-y-2 bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+                <textarea
                   value={newNote}
                   onChange={(e) => setNewNote(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddNote()}
-                  placeholder="Add a note..."
-                  className="flex-1 text-[12px] px-3 py-2 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      handleAddNote();
+                    }
+                  }}
+                  placeholder="Write a note... (Cmd/Ctrl + Enter to save)"
+                  rows={3}
+                  className="w-full text-[12px] px-3 py-2 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] resize-y leading-relaxed"
                 />
-                <button
-                  onClick={handleAddNote}
-                  disabled={!newNote.trim()}
-                  className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] transition-colors cursor-pointer disabled:opacity-40"
-                >
-                  Add
-                </button>
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleAddNote}
+                    disabled={!newNote.trim()}
+                    className="flex items-center gap-1 text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors cursor-pointer disabled:opacity-40"
+                  >
+                    <Plus size={11} /> Add Note
+                  </button>
+                </div>
               </div>
               <div className="space-y-3">
                 {notes.map((note: any, idx: number) => (
-                  <div key={note.id || idx} className="border-l-2 border-[#e4e4e7] pl-3 py-1">
-                    <p className="text-[12px] text-[#18181b] leading-relaxed whitespace-pre-wrap">{note.text}</p>
-                    <p className="text-[10px] text-[#a1a1aa] mt-1">
+                  <div key={note.id || idx} className="border-l-2 border-[#e4e4e7] dark:border-[#3f3f46] pl-3 py-1">
+                    <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed whitespace-pre-wrap">{note.text}</p>
+                    <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1">
                       {note.author} \u00B7 {formatDateTime(note.createdAt)}
                     </p>
                   </div>
                 ))}
-                {notes.length === 0 && <p className="text-[12px] text-[#a1a1aa] text-center py-6">No notes yet</p>}
+                {notes.length === 0 && <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a] text-center py-6">No notes yet</p>}
               </div>
             </div>
           )}
@@ -464,14 +479,151 @@ export function DealDetail({
   );
 }
 
+function TaskRow({
+  task,
+  dealId,
+  currentUser,
+  toggleTask,
+  updateTask,
+  removeTask,
+}: {
+  task: any;
+  dealId: any;
+  currentUser: string;
+  toggleTask: (args: { id: any; taskId: string; user?: string }) => void;
+  updateTask: (args: { id: any; taskId: string; text?: string; assignedTo?: string; dueDate?: string }) => void;
+  removeTask: (args: { id: any; taskId: string }) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(task.text);
+  const [editAssignee, setEditAssignee] = useState(task.assignedTo || "");
+  const [editDueDate, setEditDueDate] = useState(task.dueDate || "");
+
+  function save() {
+    const patch: any = { id: dealId, taskId: task.id };
+    if (editText.trim() !== task.text) patch.text = editText.trim();
+    if (editAssignee !== (task.assignedTo || "")) patch.assignedTo = editAssignee;
+    if (editDueDate !== (task.dueDate || "")) patch.dueDate = editDueDate;
+    if (editText.trim()) {
+      updateTask(patch);
+    }
+    setEditing(false);
+  }
+
+  function cancel() {
+    setEditText(task.text);
+    setEditAssignee(task.assignedTo || "");
+    setEditDueDate(task.dueDate || "");
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="border border-[#18181b] dark:border-[#fafafa] rounded-lg p-3 bg-[#fafafa] dark:bg-[#27272a] space-y-2">
+        <input
+          value={editText}
+          onChange={(e) => setEditText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") cancel(); }}
+          autoFocus
+          className="w-full text-[12px] px-3 py-2 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
+        />
+        <div className="flex gap-2">
+          <select
+            value={editAssignee}
+            onChange={(e) => setEditAssignee(e.target.value)}
+            className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] flex-1"
+          >
+            <option value="">Unassigned</option>
+            <option value="Ori">Ori</option>
+            <option value="Max">Max</option>
+          </select>
+          <input
+            type="date"
+            value={editDueDate}
+            onChange={(e) => setEditDueDate(e.target.value)}
+            className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] flex-1"
+          />
+          <button onClick={save} className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded cursor-pointer">
+            Save
+          </button>
+          <button onClick={cancel} className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] cursor-pointer px-2">
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const isOverdue = task.dueDate && !task.done && new Date(task.dueDate) < new Date();
+
+  return (
+    <div className="group flex items-start gap-2 p-2.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg hover:border-[#a1a1aa] dark:hover:border-[#52525b] transition-colors">
+      <button
+        onClick={() => toggleTask({ id: dealId, taskId: task.id, user: currentUser })}
+        className="mt-0.5 flex-shrink-0 cursor-pointer"
+        title={task.done ? "Mark incomplete" : "Mark complete"}
+      >
+        {task.done ? (
+          <CheckSquare size={15} className="text-[#16a34a]" />
+        ) : (
+          <Square size={15} className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors" />
+        )}
+      </button>
+      <div className="flex-1 min-w-0" onDoubleClick={() => setEditing(true)}>
+        <p
+          className={cn(
+            "text-[12px] leading-relaxed cursor-text",
+            task.done ? "text-[#a1a1aa] dark:text-[#71717a] line-through" : "text-[#18181b] dark:text-[#fafafa]"
+          )}
+        >
+          {task.text}
+        </p>
+        <div className="flex items-center gap-2 mt-1">
+          {task.assignedTo && (
+            <span className="text-[9px] text-[#2563eb] dark:text-[#60a5fa] font-medium">{task.assignedTo}</span>
+          )}
+          {task.dueDate && (
+            <span className={cn("text-[9px] font-medium", isOverdue ? "text-[#dc2626]" : "text-[#71717a] dark:text-[#a1a1aa]")}>
+              Due {formatDate(task.dueDate)}
+            </span>
+          )}
+          <span className="text-[9px] text-[#a1a1aa] dark:text-[#71717a]">Created {formatDateTime(task.createdAt)}</span>
+          {task.done && task.completedAt && (
+            <span className="text-[9px] text-[#16a34a]">Done {formatDateTime(task.completedAt)}</span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => setEditing(true)}
+          className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer p-1"
+          title="Edit task"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
+        <button
+          onClick={() => removeTask({ id: dealId, taskId: task.id })}
+          className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer p-1"
+          title="Delete task"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Field({ label, value, icon }: { label: string; value: string | undefined; icon?: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide mb-1 flex items-center gap-1">
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide mb-1 flex items-center gap-1">
         {icon}
         {label}
       </p>
-      <p className="text-[12px] text-[#18181b]">{value || "\u2014"}</p>
+      <p className="text-[12px] text-[#18181b] dark:text-[#fafafa]">{value || "\u2014"}</p>
     </div>
   );
 }
@@ -480,18 +632,18 @@ function DocRow({ doc, dealId, removeDocument }: { doc: any; dealId: any; remove
   const url = useQuery(api.files.getUrl, doc.storageId ? { storageId: doc.storageId } : "skip");
 
   return (
-    <div className="group flex items-center gap-2 p-2.5 border border-[#e4e4e7] rounded-lg hover:border-[#a1a1aa] transition-colors">
-      <Paperclip size={13} className="text-[#71717a] flex-shrink-0" />
+    <div className="group flex items-center gap-2 p-2.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg hover:border-[#a1a1aa] dark:hover:border-[#52525b] transition-colors">
+      <Paperclip size={13} className="text-[#71717a] dark:text-[#a1a1aa] flex-shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] font-medium text-[#18181b] truncate">{doc.name}</p>
+        <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate">{doc.name}</p>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[9px] text-[#71717a]">{doc.uploadedBy}</span>
-          <span className="text-[9px] text-[#d4d4d8]">\u00B7</span>
-          <span className="text-[9px] text-[#a1a1aa]">{formatDateTime(doc.uploadedAt)}</span>
+          <span className="text-[9px] text-[#71717a] dark:text-[#a1a1aa]">{doc.uploadedBy}</span>
+          <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">\u00B7</span>
+          <span className="text-[9px] text-[#a1a1aa] dark:text-[#71717a]">{formatDateTime(doc.uploadedAt)}</span>
           {doc.size && (
             <>
-              <span className="text-[9px] text-[#d4d4d8]">\u00B7</span>
-              <span className="text-[9px] text-[#a1a1aa]">{formatFileSize(doc.size)}</span>
+              <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">\u00B7</span>
+              <span className="text-[9px] text-[#a1a1aa] dark:text-[#71717a]">{formatFileSize(doc.size)}</span>
             </>
           )}
         </div>
@@ -503,7 +655,7 @@ function DocRow({ doc, dealId, removeDocument }: { doc: any; dealId: any; remove
             download={doc.name}
             target="_blank"
             rel="noreferrer"
-            className="text-[#a1a1aa] hover:text-[#18181b] cursor-pointer p-1"
+            className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer p-1"
             title="Download"
           >
             <Download size={12} />
@@ -515,7 +667,7 @@ function DocRow({ doc, dealId, removeDocument }: { doc: any; dealId: any; remove
               removeDocument({ id: dealId, docId: doc.id });
             }
           }}
-          className="text-[#a1a1aa] hover:text-[#dc2626] cursor-pointer p-1"
+          className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer p-1"
         >
           <Trash2 size={12} />
         </button>

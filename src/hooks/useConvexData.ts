@@ -57,6 +57,11 @@ export function useTenants(propertyId: string | undefined) {
   return tenants ?? [];
 }
 
+export function useAllTenants() {
+  const tenants = useQuery(api.tenants.listAll);
+  return tenants ?? [];
+}
+
 // ===== MONTHLY REVENUE =====
 
 export function useMonthlyRevenue(propertyId: string | undefined) {
@@ -73,8 +78,10 @@ export function useDeals() {
   const deals = useQuery(api.deals.list);
   const createDeal = useMutation(api.deals.create);
   const updateStage = useMutation(api.deals.updateStage);
+  const updateField = useMutation(api.deals.updateField);
   const addNote = useMutation(api.deals.addNote);
   const addTask = useMutation(api.deals.addTask);
+  const updateTask = useMutation(api.deals.updateTask);
   const toggleTask = useMutation(api.deals.toggleTask);
   const removeTask = useMutation(api.deals.removeTask);
   const addDocument = useMutation(api.deals.addDocument);
@@ -84,8 +91,10 @@ export function useDeals() {
     deals: deals ?? [],
     createDeal,
     updateStage,
+    updateField,
     addNote,
     addTask,
+    updateTask,
     toggleTask,
     removeTask,
     addDocument,

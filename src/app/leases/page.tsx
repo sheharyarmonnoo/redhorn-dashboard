@@ -38,7 +38,7 @@ function UrgencyRenderer(props: { value: string }) {
     "OK (180d+)": "bg-[#16a34a]",
   };
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b]">
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b] dark:text-[#fafafa]">
       <span className={`w-1.5 h-1.5 rounded-full ${dots[props.value] || "bg-[#a1a1aa]"}`} />
       {props.value}
     </span>
@@ -78,7 +78,7 @@ export default function LeasesPage() {
   }), [leaseData]);
 
   const filters: { key: UrgencyFilter; label: string; count: number; dot: string }[] = [
-    { key: "all", label: "All", count: leaseData.length, dot: "bg-[#18181b]" },
+    { key: "all", label: "All", count: leaseData.length, dot: "bg-[#18181b] dark:bg-[#fafafa]" },
     { key: "Expired", label: "Expired", count: counts.expired, dot: "bg-[#dc2626]" },
     { key: "Critical (<90d)", label: "Critical", count: counts.critical, dot: "bg-[#dc2626]" },
     { key: "Warning (90-180d)", label: "Warning", count: counts.warning, dot: "bg-[#d97706]" },
@@ -131,32 +131,32 @@ export default function LeasesPage() {
             onClick={() => setActiveFilter(f.key)}
             className={`flex items-center gap-2 px-3 py-2 rounded border text-[12px] font-medium cursor-pointer transition-colors ${
               activeFilter === f.key
-                ? "bg-[#18181b] text-white border-[#18181b]"
-                : "bg-white text-[#71717a] border-[#e4e4e7] hover:border-[#a1a1aa] hover:text-[#18181b]"
+                ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] border-[#18181b] dark:border-[#fafafa]"
+                : "bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] border-[#e4e4e7] dark:border-[#3f3f46] hover:border-[#a1a1aa] dark:hover:border-[#52525b] hover:text-[#18181b] dark:hover:text-[#fafafa]"
             }`}
           >
-            <span className={`w-2 h-2 rounded-full ${activeFilter === f.key ? "bg-white" : f.dot}`} />
+            <span className={`w-2 h-2 rounded-full ${activeFilter === f.key ? "bg-white dark:bg-[#18181b]" : f.dot}`} />
             {f.label}
-            <span className={`text-[10px] font-semibold ${activeFilter === f.key ? "text-white/70" : "text-[#a1a1aa]"}`}>{f.count}</span>
+            <span className={`text-[10px] font-semibold ${activeFilter === f.key ? "text-white/70 dark:text-[#18181b]/70" : "text-[#a1a1aa] dark:text-[#71717a]"}`}>{f.count}</span>
           </button>
         ))}
       </div>
 
       {/* Summary row */}
       <div className="flex items-center justify-between mb-3">
-        <p className="text-[12px] text-[#71717a]">
+        <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">
           {activeFilter === "all" ? `${leaseData.length} leases` : `${filteredData.length} leases — ${activeFilter}`}
         </p>
         <input
           type="text"
           placeholder="Search..."
-          className="px-3 py-1.5 bg-white border border-[#e4e4e7] rounded text-[12px] text-[#18181b] placeholder-[#a1a1aa] focus:outline-none focus:border-[#71717a] w-full sm:w-48"
+          className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded text-[12px] text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] focus:outline-none focus:border-[#71717a] w-full sm:w-48"
           onChange={(e) => gridRef.current?.api?.setGridOption("quickFilterText", e.target.value)}
         />
       </div>
 
       {/* AG Grid */}
-      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7]" style={{ height: "min(calc(100vh - 260px), 550px)", minHeight: 300 }}>
+      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: "min(calc(100vh - 260px), 550px)", minHeight: 300 }}>
         <AgGridReact
           ref={gridRef}
           rowData={filteredData}

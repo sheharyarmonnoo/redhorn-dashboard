@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tailwind v4 — enable class-based dark mode so `dark:` variants respond to the `dark` class on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --bg: #f7f7f8;
   --fg: #18181b;
@@ -11,6 +14,15 @@
   --amber: #d97706;
   --green: #16a34a;
   --blue: #2563eb;
+}
+
+.dark {
+  --bg: #09090b;
+  --fg: #fafafa;
+  --muted: #a1a1aa;
+  --border: #3f3f46;
+  --card: #18181b;
+  --accent: #fafafa;
 }
 
 * {
@@ -31,6 +43,8 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+.dark ::-webkit-scrollbar-thumb { background: #3f3f46; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #52525b; }
 
 /* AG Grid — flat enterprise theme */
 .ag-theme-alpine {
@@ -65,6 +79,27 @@ body {
   border-radius: 0 !important;
 }
 
+/* AG Grid — dark variants (applies when `dark` class is on html or any ancestor) */
+.dark .ag-theme-alpine,
+.dark .ag-theme-quartz {
+  --ag-background-color: #18181b;
+  --ag-foreground-color: #fafafa;
+  --ag-header-background-color: #27272a;
+  --ag-header-foreground-color: #a1a1aa;
+  --ag-border-color: #3f3f46;
+  --ag-row-border-color: #27272a;
+  --ag-odd-row-background-color: #1c1c20;
+  --ag-row-hover-color: #27272a;
+  --ag-selected-row-background-color: #3f3f46;
+  --ag-control-panel-background-color: #18181b;
+  --ag-subheader-background-color: #27272a;
+  --ag-chip-background-color: #27272a;
+  --ag-input-focus-border-color: #52525b;
+}
+.dark .ag-theme-alpine .ag-paging-panel {
+  border-top-color: #3f3f46;
+}
+
 /* AG Grid mobile */
 @media (max-width: 640px) {
   .ag-theme-alpine {
@@ -82,6 +117,16 @@ body {
   border-radius: 4px !important;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
   border: 1px solid #e4e4e7 !important;
+}
+.dark .apexcharts-tooltip {
+  background: #27272a !important;
+  border-color: #3f3f46 !important;
+  color: #fafafa !important;
+}
+.dark .apexcharts-tooltip-title {
+  background: #3f3f46 !important;
+  border-bottom-color: #3f3f46 !important;
+  color: #fafafa !important;
 }
 
 /* Sidebar responsive */

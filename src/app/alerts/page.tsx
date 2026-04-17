@@ -27,7 +27,7 @@ function SeverityCellRenderer(props: { value: string }) {
     Info: "bg-[#2563eb]",
   };
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b]">
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b] dark:text-[#fafafa]">
       <span className={`w-1.5 h-1.5 rounded-full ${dots[props.value] || "bg-[#a1a1aa]"}`} />
       {props.value}
     </span>
@@ -224,12 +224,12 @@ export default function AlertsPage() {
       <div className="flex items-center gap-1">
         {isCustom && (
           <button onClick={(e) => { e.stopPropagation(); startEditAlert(props.data); }}
-            className="text-[10px] font-medium text-[#71717a] hover:text-[#18181b] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] rounded hover:bg-[#f4f4f5] transition-colors">
+            className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] transition-colors">
             Edit
           </button>
         )}
         <button onClick={(e) => { e.stopPropagation(); archiveAlert(props.data.id); }}
-          className="text-[10px] font-medium text-[#71717a] hover:text-[#18181b] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] rounded hover:bg-[#f4f4f5] transition-colors">
+          className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] transition-colors">
           Handled
         </button>
       </div>
@@ -239,7 +239,7 @@ export default function AlertsPage() {
   function RestoreCell(props: { data: AlertRow }) {
     return (
       <button onClick={(e) => { e.stopPropagation(); restoreAlert(props.data.id); }}
-        className="text-[10px] font-medium text-[#71717a] hover:text-[#18181b] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] rounded hover:bg-[#f4f4f5] transition-colors">
+        className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] transition-colors">
         Restore
       </button>
     );
@@ -290,7 +290,7 @@ export default function AlertsPage() {
 
   const historyColDefs = useMemo<ColDef[]>(() => {
     const typeRenderer = (p: { value: string }) => {
-      const c: Record<string, string> = { Alert: "bg-amber-100 text-amber-700", Action: "bg-blue-100 text-blue-700", System: "bg-gray-100 text-gray-500" };
+      const c: Record<string, string> = { Alert: "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300", Action: "bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300", System: "bg-gray-100 dark:bg-[#27272a] text-gray-500 dark:text-[#a1a1aa]" };
       return <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${c[p.value] || ""}`}>{p.value}</span>;
     };
     if (isMobile) {
@@ -318,7 +318,7 @@ export default function AlertsPage() {
           <span className="text-[11px] font-medium text-[#dc2626]">{criticalCount} critical</span>
           <span className="text-[11px] font-medium text-[#d97706]">{warningCount} warnings</span>
           <button onClick={() => { setEditingAlertId(null); setNewAlert({ unit: "", category: "General", severity: "Warning", detail: "" }); setShowAddAlert(!showAddAlert); }}
-            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer transition-colors">
+            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] cursor-pointer transition-colors">
             Add Alert
           </button>
         </div>
@@ -326,13 +326,13 @@ export default function AlertsPage() {
 
       {/* Add Alert Form */}
       {showAddAlert && (
-        <div className="bg-white border border-[#e4e4e7] rounded p-4 mb-4 space-y-3">
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4 mb-4 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
             <input type="text" value={newAlert.unit} onChange={e => setNewAlert({ ...newAlert, unit: e.target.value })}
               placeholder="Unit (e.g. A-102)"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
             <select value={newAlert.category} onChange={e => setNewAlert({ ...newAlert, category: e.target.value })}
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] text-[#18181b]">
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa]">
               <option value="General">General</option>
               <option value="Electric Not Posted">Electric Not Posted</option>
               <option value="Past Due">Past Due</option>
@@ -342,40 +342,40 @@ export default function AlertsPage() {
               <option value="PM Follow-up">PM Follow-up</option>
             </select>
             <select value={newAlert.severity} onChange={e => setNewAlert({ ...newAlert, severity: e.target.value as AlertRow["severity"] })}
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] text-[#18181b]">
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa]">
               <option value="Critical">Critical</option>
               <option value="Warning">Warning</option>
               <option value="Info">Info</option>
             </select>
             <div className="flex gap-2">
               <button onClick={editingAlertId ? saveEditAlert : addAlert} disabled={!newAlert.detail.trim()}
-                className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] disabled:bg-[#e4e4e7] disabled:text-[#a1a1aa] cursor-pointer transition-colors">
+                className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] disabled:bg-[#e4e4e7] dark:disabled:bg-[#3f3f46] disabled:text-[#a1a1aa] dark:disabled:text-[#71717a] cursor-pointer transition-colors">
                 {editingAlertId ? "Save" : "Add"}
               </button>
               <button onClick={() => { setShowAddAlert(false); setEditingAlertId(null); setNewAlert({ unit: "", category: "General", severity: "Warning", detail: "" }); }}
-                className="text-[11px] text-[#71717a] cursor-pointer px-2 py-1">Cancel</button>
+                className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] cursor-pointer px-2 py-1">Cancel</button>
             </div>
           </div>
           <textarea value={newAlert.detail} onChange={e => setNewAlert({ ...newAlert, detail: e.target.value })}
             placeholder="Alert description..."
             rows={2}
-            className="w-full text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] resize-none" />
+            className="w-full text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] resize-none" />
         </div>
       )}
 
       {/* Active Alerts Grid */}
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[13px] font-semibold text-[#18181b]">Active Alerts ({activeAlerts.length})</h3>
+        <h3 className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Active Alerts ({activeAlerts.length})</h3>
         <input
           type="text"
           placeholder="Search alerts..."
-          className="px-3 py-1.5 bg-white border border-[#e8eaef] rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#4f6ef7] w-48 sm:w-64"
+          className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-sm text-gray-900 dark:text-[#fafafa] placeholder-gray-400 dark:placeholder-[#71717a] focus:outline-none focus:border-[#4f6ef7] w-48 sm:w-64"
           onChange={(e) => {
             gridRef.current?.api?.setGridOption("quickFilterText", e.target.value);
           }}
         />
       </div>
-      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8" style={{ height: 340 }}>
+      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] dark:border-[#3f3f46] shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8" style={{ height: 340 }}>
         <AgGridReact
           ref={gridRef}
           rowData={activeAlerts}
@@ -392,15 +392,15 @@ export default function AlertsPage() {
       {/* Archived / Handled */}
       {archivedAlerts.length > 0 && (
         <div className="mb-8">
-          <p className="text-[13px] font-semibold text-[#18181b] mb-3">Handled ({archivedAlerts.length})</p>
-          <div className="space-y-0 border border-[#e4e4e7] rounded overflow-hidden">
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">Handled ({archivedAlerts.length})</p>
+          <div className="space-y-0 border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
             {archivedAlerts.map(a => (
-              <div key={a.id} className="flex items-center gap-3 px-3 py-2 border-b border-[#f4f4f5] last:border-0 bg-[#fafafa]">
+              <div key={a.id} className="flex items-center gap-3 px-3 py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 bg-[#fafafa] dark:bg-[#27272a]">
                 <span className="text-[11px] text-[#16a34a] font-medium">✓</span>
-                <span className="text-[12px] font-medium text-[#71717a] w-14 flex-shrink-0">{a.unit}</span>
-                <p className="flex-1 text-[12px] text-[#a1a1aa] line-through truncate">{a.detail}</p>
+                <span className="text-[12px] font-medium text-[#71717a] dark:text-[#a1a1aa] w-14 flex-shrink-0">{a.unit}</span>
+                <p className="flex-1 text-[12px] text-[#a1a1aa] dark:text-[#71717a] line-through truncate">{a.detail}</p>
                 <button onClick={() => restoreAlert(a.id)}
-                  className="text-[10px] text-[#a1a1aa] hover:text-[#18181b] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] rounded hover:bg-white transition-colors flex-shrink-0">
+                  className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded hover:bg-white dark:hover:bg-[#18181b] transition-colors flex-shrink-0">
                   Restore
                 </button>
               </div>
@@ -411,10 +411,10 @@ export default function AlertsPage() {
 
       {/* Alert History */}
       <div className="flex items-center gap-2 mb-3">
-        <Clock size={16} className="text-[#a1a1aa]" />
-        <p className="text-[13px] font-semibold text-[#18181b]">Alert History Log</p>
+        <Clock size={16} className="text-[#a1a1aa] dark:text-[#71717a]" />
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Alert History Log</p>
       </div>
-      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: 340 }}>
+      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] dark:border-[#3f3f46] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: 340 }}>
         <AgGridReact
           ref={historyGridRef}
           rowData={alertHistory}

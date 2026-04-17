@@ -13,6 +13,25 @@ export const listByProperty = query({
   },
 });
 
+export const listAll = query({
+  handler: async (ctx) => {
+    const tenants = await ctx.db
+      .query("tenants")
+      .filter((q) => q.eq(q.field("isLatest"), true))
+      .collect();
+    const properties = await ctx.db.query("properties").collect();
+    const propMap: Record<string, { name: string; code: string }> = {};
+    for (const p of properties) {
+      propMap[p._id] = { name: p.name, code: p.code };
+    }
+    return tenants.map((t) => ({
+      ...t,
+      propertyName: propMap[t.propertyId]?.name || "Unknown",
+      propertyCode: propMap[t.propertyId]?.code || "",
+    }));
+  },
+});
+
 export const getByUnit = query({
   args: { propertyId: v.id("properties"), unit: v.string() },
   handler: async (ctx, args) => {

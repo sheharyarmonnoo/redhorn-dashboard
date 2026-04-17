@@ -1,13 +1,15 @@
 "use client";
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent, CellValueChangedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
 import { DealStage, getStageLabel, getStageColor } from "@/data/_seed_deals";
 import { useDeals, formatCurrency } from "@/hooks/useConvexData";
 import { Plus, Trash2, LayoutGrid, List } from "lucide-react";
 import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
 import { DealDetail } from "@/components/pipeline/DealDetail";
+
+const VIEW_KEY = "redhorn_deals_view";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -31,12 +33,20 @@ function PercentCellRenderer(props: { value: number }) {
 }
 
 export default function DealsPage() {
-  const { deals, createDeal, updateStage, addNote, addTask, toggleTask, removeTask, addDocument, removeDocument, removeDeal } = useDeals();
+  const { deals, createDeal, updateStage, updateField, addNote, addTask, updateTask, toggleTask, removeTask, addDocument, removeDocument, removeDeal } = useDeals();
   const [selectedDeal, setSelectedDeal] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<"pipeline" | "table">("pipeline");
+  const [viewMode, setViewMode] = useState<"pipeline" | "table">(() => {
+    if (typeof window === "undefined") return "pipeline";
+    return (localStorage.getItem(VIEW_KEY) as "pipeline" | "table") || "pipeline";
+  });
   const [showAddForm, setShowAddForm] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", address: "", city: "Houston", state: "TX", propertyType: "Office/Warehouse", sqft: "", units: "", askingPrice: "", source: "", assignedTo: "Max" });
   const gridRef = useRef<AgGridReact>(null);
+
+  function switchView(mode: "pipeline" | "table") {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_KEY, mode);
+  }
 
   function handleAddDeal() {
     if (!addForm.name.trim() || !addForm.address.trim()) return;
@@ -69,33 +79,47 @@ export default function DealsPage() {
   }
 
   const columnDefs = useMemo<ColDef[]>(() => [
-    { field: "name", headerName: "Property", minWidth: 200, flex: 1, pinned: "left",
+    { field: "name", headerName: "Property", minWidth: 200, flex: 1, pinned: "left", editable: true,
       cellRenderer: (p: any) => (
         <div>
-          <div className="font-medium text-[#18181b]">{p.data.name}</div>
-          <div className="text-[10px] text-[#a1a1aa]">{p.data.city}, {p.data.state}</div>
+          <div className="font-medium text-[#18181b] dark:text-[#fafafa]">{p.data.name}</div>
+          <div className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{p.data.city}, {p.data.state}</div>
         </div>
       ) },
-    { field: "stage", headerName: "Stage", width: 140, cellRenderer: StageCellRenderer, filter: true },
-    { field: "askingPrice", headerName: "Asking Price", width: 130, type: "numericColumn", cellRenderer: CurrencyCellRenderer },
-    { field: "capRate", headerName: "Cap Rate", width: 100, type: "numericColumn", cellRenderer: PercentCellRenderer },
-    { field: "pricePerSF", headerName: "$/SF", width: 90, type: "numericColumn",
+    { field: "stage", headerName: "Stage", width: 140, cellRenderer: StageCellRenderer, filter: true, editable: true,
+      cellEditor: "agSelectCellEditor",
+      cellEditorParams: { values: stages } },
+    { field: "askingPrice", headerName: "Asking Price", width: 130, type: "numericColumn", cellRenderer: CurrencyCellRenderer, editable: true,
+      valueParser: (p: any) => Number(p.newValue) || 0 },
+    { field: "capRate", headerName: "Cap Rate", width: 100, type: "numericColumn", cellRenderer: PercentCellRenderer, editable: true,
+      valueParser: (p: any) => Number(p.newValue) || 0 },
+    { field: "pricePerSF", headerName: "$/SF", width: 90, type: "numericColumn", editable: false,
       valueFormatter: (p: any) => p.value ? `$${p.value}` : "\u2014" },
-    { field: "sqft", headerName: "Sq Ft", width: 100, type: "numericColumn",
-      valueFormatter: (p: any) => p.value?.toLocaleString() || "\u2014" },
-    { field: "units", headerName: "Units", width: 80, type: "numericColumn" },
-    { field: "propertyType", headerName: "Type", width: 140, filter: true },
-    { field: "assignedTo", headerName: "Assigned", width: 110, filter: true },
-    { field: "source", headerName: "Source", minWidth: 150, flex: 1 },
+    { field: "sqft", headerName: "Sq Ft", width: 100, type: "numericColumn", editable: true,
+      valueFormatter: (p: any) => p.value?.toLocaleString() || "\u2014",
+      valueParser: (p: any) => Number(p.newValue) || 0 },
+    { field: "units", headerName: "Units", width: 80, type: "numericColumn", editable: true,
+      valueParser: (p: any) => Number(p.newValue) || 0 },
+    { field: "propertyType", headerName: "Type", width: 140, filter: true, editable: true,
+      cellEditor: "agSelectCellEditor",
+      cellEditorParams: { values: ["Office/Warehouse", "Industrial", "Flex/Office", "Retail", "Warehouse", "Mixed Use"] } },
+    { field: "assignedTo", headerName: "Assigned", width: 110, filter: true, editable: true,
+      cellEditor: "agSelectCellEditor",
+      cellEditorParams: { values: ["Ori", "Max"] } },
+    { field: "source", headerName: "Source", minWidth: 150, flex: 1, editable: true },
+    { field: "city", headerName: "City", width: 120, editable: true, hide: true },
+    { field: "state", headerName: "State", width: 80, editable: true, hide: true },
+    { field: "address", headerName: "Address", minWidth: 200, editable: true, hide: true },
     {
       headerName: "",
       width: 60,
       sortable: false,
       filter: false,
+      editable: false,
       cellRenderer: (p: any) => (
         <button
           onClick={(e) => { e.stopPropagation(); handleDeleteDeal(p.data._id); }}
-          className="text-[#d4d4d8] hover:text-[#dc2626] cursor-pointer transition-colors"
+          className="text-[#d4d4d8] dark:text-[#52525b] hover:text-[#dc2626] dark:hover:text-[#dc2626] cursor-pointer transition-colors"
           title="Delete deal"
         >
           <Trash2 size={13} />
@@ -109,7 +133,19 @@ export default function DealsPage() {
     resizable: true,
     filter: true,
     suppressMovable: false,
+    singleClickEdit: true,
   }), []);
+
+  const onCellValueChanged = useCallback((event: CellValueChangedEvent) => {
+    const field = event.colDef.field;
+    const value = event.newValue;
+    if (!field || value === event.oldValue) return;
+    if (field === "stage") {
+      updateStage({ id: event.data._id, stage: value });
+    } else {
+      updateField({ id: event.data._id, field, value });
+    }
+  }, [updateStage, updateField]);
 
   const onGridReady = useCallback((params: GridReadyEvent) => {
     if (window.innerWidth >= 768) {
@@ -130,65 +166,67 @@ export default function DealsPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mb-6">
-        <div className="bg-white border border-[#e4e4e7] rounded p-3">
-          <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Active Deals</p>
-          <p className="text-[18px] font-semibold text-[#18181b] mt-0.5">{activeDeals.length}</p>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3">
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">Active Deals</p>
+          <p className="text-[18px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-0.5">{activeDeals.length}</p>
         </div>
-        <div className="bg-white border border-[#e4e4e7] rounded p-3">
-          <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Pipeline Value</p>
-          <p className="text-[18px] font-semibold text-[#18181b] mt-0.5">{formatCurrency(totalPipeline)}</p>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3">
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">Pipeline Value</p>
+          <p className="text-[18px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-0.5">{formatCurrency(totalPipeline)}</p>
         </div>
-        <div className="bg-white border border-[#e4e4e7] rounded p-3">
-          <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">In LOI+</p>
-          <p className="text-[18px] font-semibold text-[#18181b] mt-0.5">{deals.filter((d: any) => ["loi","due_diligence","closing"].includes(d.stage)).length}</p>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3">
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">In LOI+</p>
+          <p className="text-[18px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-0.5">{deals.filter((d: any) => ["loi","due_diligence","closing"].includes(d.stage)).length}</p>
         </div>
-        <div className="bg-white border border-[#e4e4e7] rounded p-3">
-          <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Dead Deals</p>
-          <p className="text-[18px] font-semibold text-[#71717a] mt-0.5">{deals.filter((d: any) => d.stage === "dead").length}</p>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3">
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">Dead Deals</p>
+          <p className="text-[18px] font-semibold text-[#71717a] dark:text-[#a1a1aa] mt-0.5">{deals.filter((d: any) => d.stage === "dead").length}</p>
         </div>
       </div>
 
       {/* Controls */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex border border-[#e4e4e7] rounded-lg overflow-hidden">
-          <button onClick={() => setViewMode("pipeline")}
-            className={`flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 cursor-pointer transition-colors ${viewMode === "pipeline" ? "bg-[#18181b] text-white" : "bg-white text-[#71717a] hover:bg-[#f4f4f5]"}`}>
-            <LayoutGrid size={12} /> Kanban
+        <div className="flex border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
+          <button onClick={() => switchView("pipeline")}
+            title="Board view"
+            className={`flex items-center justify-center px-3 py-1.5 cursor-pointer transition-colors ${viewMode === "pipeline" ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]" : "bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a]"}`}>
+            <LayoutGrid size={14} />
           </button>
-          <button onClick={() => setViewMode("table")}
-            className={`flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 cursor-pointer transition-colors ${viewMode === "table" ? "bg-[#18181b] text-white" : "bg-white text-[#71717a] hover:bg-[#f4f4f5]"}`}>
-            <List size={12} /> Table
+          <button onClick={() => switchView("table")}
+            title="Grid view"
+            className={`flex items-center justify-center px-3 py-1.5 cursor-pointer transition-colors ${viewMode === "table" ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]" : "bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a]"}`}>
+            <List size={14} />
           </button>
         </div>
         <button onClick={() => setShowAddForm(true)}
-          className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded cursor-pointer hover:bg-[#27272a] transition-colors">
+          className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded cursor-pointer hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors">
           <Plus size={13} /> New Deal
         </button>
       </div>
 
       {/* Add Deal Form */}
       {showAddForm && (
-        <div className="bg-white border border-[#e4e4e7] rounded p-4 mb-4">
-          <p className="text-[13px] font-semibold text-[#18181b] mb-3">New Deal</p>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4 mb-4">
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">New Deal</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })} placeholder="Property Name"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" autoFocus />
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" autoFocus />
             <input value={addForm.address} onChange={e => setAddForm({ ...addForm, address: e.target.value })} placeholder="Address"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
             <input value={addForm.city} onChange={e => setAddForm({ ...addForm, city: e.target.value })} placeholder="City"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
             <input value={addForm.state} onChange={e => setAddForm({ ...addForm, state: e.target.value })} placeholder="State"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
             <input value={addForm.sqft} onChange={e => setAddForm({ ...addForm, sqft: e.target.value })} placeholder="Sq Ft" type="number"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
             <input value={addForm.units} onChange={e => setAddForm({ ...addForm, units: e.target.value })} placeholder="Units" type="number"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
             <input value={addForm.askingPrice} onChange={e => setAddForm({ ...addForm, askingPrice: e.target.value })} placeholder="Asking Price" type="number"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
             <input value={addForm.source} onChange={e => setAddForm({ ...addForm, source: e.target.value })} placeholder="Source (e.g. Broker, Cold Call)"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
             <select value={addForm.propertyType} onChange={e => setAddForm({ ...addForm, propertyType: e.target.value })}
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] text-[#71717a]">
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa]">
               <option>Office/Warehouse</option>
               <option>Industrial</option>
               <option>Flex/Office</option>
@@ -197,17 +235,17 @@ export default function DealsPage() {
               <option>Mixed Use</option>
             </select>
             <select value={addForm.assignedTo} onChange={e => setAddForm({ ...addForm, assignedTo: e.target.value })}
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] text-[#71717a]">
+              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa]">
               <option value="Ori">Assigned: Ori</option>
               <option value="Max">Assigned: Max</option>
             </select>
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={handleAddDeal} disabled={!addForm.name.trim() || !addForm.address.trim()}
-              className="text-[11px] font-medium px-4 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] transition-colors cursor-pointer disabled:opacity-40">
+              className="text-[11px] font-medium px-4 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors cursor-pointer disabled:opacity-40">
               Add Deal
             </button>
-            <button onClick={() => setShowAddForm(false)} className="text-[11px] text-[#71717a] cursor-pointer px-3 py-1.5">Cancel</button>
+            <button onClick={() => setShowAddForm(false)} className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] cursor-pointer px-3 py-1.5">Cancel</button>
           </div>
         </div>
       )}
@@ -222,9 +260,11 @@ export default function DealsPage() {
             defaultColDef={defaultColDef}
             onGridReady={onGridReady}
             onRowClicked={onRowClicked}
+            onCellValueChanged={onCellValueChanged}
             rowHeight={52}
             headerHeight={36}
-            suppressCellFocus={true}
+            suppressCellFocus={false}
+            stopEditingWhenCellsLoseFocus={true}
             rowClass="cursor-pointer"
           />
         </div>
@@ -252,6 +292,7 @@ export default function DealsPage() {
             onDelete={() => { setSelectedDeal(null); }}
             addNote={addNote}
             addTask={addTask}
+            updateTask={updateTask}
             toggleTask={toggleTask}
             removeTask={removeTask}
             addDocument={addDocument}

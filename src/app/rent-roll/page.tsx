@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
-import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
+import { useAllTenants, formatCurrency } from "@/hooks/useConvexData";
 import { exportRentRoll } from "@/data/_seed_export";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
@@ -32,7 +32,7 @@ function StatusCellRenderer(props: { value: string }) {
     locked_out: "bg-[#d97706]",
   };
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b]">
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b] dark:text-[#fafafa]">
       <span className={`w-1.5 h-1.5 rounded-full ${dotColors[status] || "bg-[#a1a1aa]"}`} />
       {getStatusLabel(status as TenantStatus)}
     </span>
@@ -58,18 +58,18 @@ export default function RentRollPage() {
   const [selected, setSelected] = useState<any>(null);
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
-  const activeProperty = useActiveProperty();
-  const tenants = useTenants(activeProperty?._id);
+  const tenants = useAllTenants();
 
   const columnDefs = useMemo<ColDef[]>(() => {
     const unitWidth = isMobile ? 90 : 120;
     return [
+      { field: "propertyName", headerName: "Property", rowGroup: true, hide: true },
+      { field: "building", headerName: "Bldg", rowGroup: true, hide: true, filter: true },
       { field: "unit", headerName: "Unit", width: unitWidth, pinned: "left", sort: "asc" },
       { field: "tenant", headerName: "Tenant", minWidth: 180, flex: isMobile ? 0 : 1, width: isMobile ? 180 : undefined,
         valueFormatter: (p: { value: string }) => p.value || "— Vacant —" },
       { field: "leaseType", headerName: "Lease Type", width: 130,
         valueFormatter: (p: { value: string }) => p.value?.replace("Office ", "") || "" },
-      { field: "building", headerName: "Bldg", width: 70, filter: true },
       { field: "sqft", headerName: "Sq Ft", width: 90, type: "numericColumn",
         valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
       { field: "leaseFrom", headerName: "Lease Start", width: 110,
@@ -86,6 +86,13 @@ export default function RentRollPage() {
     ];
   }, [isMobile]);
 
+  const autoGroupColumnDef = useMemo<ColDef>(() => ({
+    headerName: "Property / Building",
+    minWidth: 250,
+    pinned: "left",
+    cellRendererParams: { suppressCount: false },
+  }), []);
+
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
     resizable: true,
@@ -101,6 +108,9 @@ export default function RentRollPage() {
   }, []);
 
   const onRowClicked = useCallback((event: RowClickedEvent) => {
+    // Ignore clicks on group rows — only open the detail panel for leaf tenant rows
+    if (event.node?.group) return;
+    if (!event.data) return;
     setSelected(event.data);
   }, []);
 
@@ -110,7 +120,7 @@ export default function RentRollPage() {
   return (
     <div>
       <PageHeader title="Rent Roll" subtitle="All units as of March 2026 — Tap any row for details">
-        <button onClick={exportRentRoll} className="flex items-center gap-1.5 bg-white border border-[#e8eaef] hover:border-[#4f6ef7] text-[#5a5e73] hover:text-[#4f6ef7] text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+        <button onClick={exportRentRoll} className="flex items-center gap-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] hover:border-[#4f6ef7] text-[#5a5e73] dark:text-[#a1a1aa] hover:text-[#4f6ef7] text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
           <Download size={13} /> Export .xlsx
         </button>
       </PageHeader>
@@ -118,13 +128,13 @@ export default function RentRollPage() {
       {/* Summary bar */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">
         <div className="flex items-center gap-2 overflow-x-auto">
-          <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-[#1e1e2d] font-semibold whitespace-nowrap">
+          <span className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 text-[#1e1e2d] dark:text-[#fafafa] font-semibold whitespace-nowrap">
             {tenants.length} Units
           </span>
-          <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-[#1e1e2d] whitespace-nowrap">
+          <span className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 text-[#1e1e2d] dark:text-[#fafafa] whitespace-nowrap">
             {totalSqft.toLocaleString()} SF
           </span>
-          <span className="bg-white border border-[#e8eaef] rounded-lg px-3 py-1.5 text-emerald-700 font-semibold whitespace-nowrap">
+          <span className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 text-emerald-700 dark:text-emerald-400 font-semibold whitespace-nowrap">
             {formatCurrency(totalRent)}/mo
           </span>
         </div>
@@ -132,7 +142,7 @@ export default function RentRollPage() {
           <input
             type="text"
             placeholder="Quick search all data..."
-            className="px-3 py-1.5 bg-white border border-[#e8eaef] rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7] w-full sm:w-64"
+            className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-sm text-gray-900 dark:text-[#fafafa] placeholder-gray-400 dark:placeholder-[#71717a] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7] w-full sm:w-64"
             onChange={(e) => {
               gridRef.current?.api?.setGridOption("quickFilterText", e.target.value);
             }}
@@ -141,12 +151,15 @@ export default function RentRollPage() {
       </div>
 
       {/* AG Grid Table */}
-      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7]" style={{ height: "min(calc(100vh - 220px), 700px)", minHeight: 350 }}>
+      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: "min(calc(100vh - 220px), 700px)", minHeight: 350 }}>
         <AgGridReact
           ref={gridRef}
           rowData={tenants}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
+          autoGroupColumnDef={autoGroupColumnDef}
+          groupDisplayType="groupRows"
+          groupDefaultExpanded={1}
           onGridReady={onGridReady}
           onRowClicked={onRowClicked}
           rowSelection="single"
@@ -157,7 +170,7 @@ export default function RentRollPage() {
           suppressRowHoverHighlight={false}
           rowBuffer={20}
           cacheBlockSize={500}
-          getRowId={(params) => params.data.unit}
+          getRowId={(params) => `${params.data.propertyCode || "x"}-${params.data.unit}`}
         />
       </div>
 

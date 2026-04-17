@@ -8,6 +8,7 @@ import RevenueFilter from "@/components/RevenueFilter";
 import { useActiveProperty, useTenants, useMonthlyRevenue, formatCurrency } from "@/hooks/useConvexData";
 import { Filter } from "lucide-react";
 import dynamic from "next/dynamic";
+import { useTheme } from "@/components/ThemeProvider";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
@@ -15,6 +16,8 @@ export default function DashboardPage() {
   const property = useActiveProperty();
   const tenants = useTenants(property?._id);
   const monthlyRevenue = useMonthlyRevenue(property?._id);
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   const allOccupiedUnits = useMemo(() =>
     new Set(tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")).map(t => t.unit)),
@@ -47,7 +50,7 @@ export default function DashboardPage() {
   }, []);
 
   if (!property || tenants.length === 0) {
-    return <div className="text-[13px] text-[#a1a1aa] py-12 text-center">Loading dashboard data...</div>;
+    return <div className="text-[13px] text-[#a1a1aa] dark:text-[#71717a] py-12 text-center">Loading dashboard data...</div>;
   }
 
   const occupied = tenants.filter(t => t.status !== "vacant");
@@ -78,15 +81,19 @@ export default function DashboardPage() {
 
   const chartFont = "'Inter', -apple-system, system-ui, sans-serif";
 
+  const axisColor = isDark ? "#71717a" : "#a1a1aa";
+  const gridColor = isDark ? "#27272a" : "#f4f4f5";
+
   const revenueChartOptions: ApexCharts.ApexOptions = {
-    chart: { type: "bar", toolbar: { show: false }, fontFamily: chartFont },
+    chart: { type: "bar", toolbar: { show: false }, fontFamily: chartFont, background: "transparent" },
+    theme: { mode: isDark ? "dark" : "light" },
     plotOptions: { bar: { borderRadius: 2, columnWidth: "55%" } },
-    colors: ["#18181b", "#71717a", "#d4d4d8"],
-    xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: "#a1a1aa", fontSize: "11px" } } },
-    yaxis: { labels: { style: { colors: "#a1a1aa", fontSize: "11px" }, formatter: (v: number) => `$${(v / 1000).toFixed(0)}k` } },
-    grid: { borderColor: "#f4f4f5", strokeDashArray: 0 },
-    legend: { position: "top", horizontalAlign: "right", fontSize: "11px", markers: { size: 6, shape: "square" as const } },
-    tooltip: { y: { formatter: (v: number) => formatCurrency(v) } },
+    colors: isDark ? ["#fafafa", "#a1a1aa", "#52525b"] : ["#18181b", "#71717a", "#d4d4d8"],
+    xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: axisColor, fontSize: "11px" } } },
+    yaxis: { labels: { style: { colors: axisColor, fontSize: "11px" }, formatter: (v: number) => `$${(v / 1000).toFixed(0)}k` } },
+    grid: { borderColor: gridColor, strokeDashArray: 0 },
+    legend: { position: "top", horizontalAlign: "right", fontSize: "11px", markers: { size: 6, shape: "square" as const }, labels: { colors: axisColor } },
+    tooltip: { y: { formatter: (v: number) => formatCurrency(v) }, theme: isDark ? "dark" : "light" },
     dataLabels: { enabled: false },
   };
 
@@ -106,15 +113,16 @@ export default function DashboardPage() {
   ];
 
   const occupancyChartOptions: ApexCharts.ApexOptions = {
-    chart: { type: "area", toolbar: { show: false }, fontFamily: chartFont },
-    colors: ["#18181b"],
+    chart: { type: "area", toolbar: { show: false }, fontFamily: chartFont, background: "transparent" },
+    theme: { mode: isDark ? "dark" : "light" },
+    colors: [isDark ? "#fafafa" : "#18181b"],
     fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.12, opacityTo: 0, stops: [0, 100] } },
     stroke: { curve: "smooth", width: 2 },
-    xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: "#a1a1aa", fontSize: "11px" } } },
-    yaxis: { min: 70, max: 100, labels: { style: { colors: "#a1a1aa", fontSize: "11px" }, formatter: (v: number) => `${v}%` } },
-    grid: { borderColor: "#f4f4f5", strokeDashArray: 0 },
-    markers: { size: 3, colors: ["#18181b"], strokeColors: "#fff", strokeWidth: 2 },
-    tooltip: { y: { formatter: (v: number) => `${v}%` } },
+    xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: axisColor, fontSize: "11px" } } },
+    yaxis: { min: 70, max: 100, labels: { style: { colors: axisColor, fontSize: "11px" }, formatter: (v: number) => `${v}%` } },
+    grid: { borderColor: gridColor, strokeDashArray: 0 },
+    markers: { size: 3, colors: [isDark ? "#fafafa" : "#18181b"], strokeColors: isDark ? "#18181b" : "#fff", strokeWidth: 2 },
+    tooltip: { y: { formatter: (v: number) => `${v}%` }, theme: isDark ? "dark" : "light" },
     dataLabels: { enabled: false },
   };
 
@@ -138,14 +146,14 @@ export default function DashboardPage() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mb-6">
-        <div className="bg-white border border-[#e4e4e7] rounded p-4">
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-[13px] font-semibold text-[#18181b]">Revenue Breakdown</p>
+            <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Revenue Breakdown</p>
             <div className="flex items-center gap-1.5">
               {isFiltered && (
                 <button
                   onClick={() => { setFilteredUnits(allOccupiedUnits); localStorage.removeItem("redhorn_revenue_filter"); }}
-                  className="text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors text-[#71717a] hover:text-[#18181b] border border-[#e4e4e7] hover:bg-[#f4f4f5]"
+                  className="text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] border border-[#e4e4e7] dark:border-[#3f3f46] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a]"
                 >
                   Clear Filter
                 </button>
@@ -153,7 +161,7 @@ export default function DashboardPage() {
               <button
                 onClick={() => setFilterOpen(true)}
                 className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
-                  isFiltered ? "bg-[#18181b] text-white" : "text-[#71717a] hover:text-[#18181b] hover:bg-[#f4f4f5]"
+                  isFiltered ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]" : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a]"
                 }`}
               >
                 <Filter size={12} />
@@ -161,7 +169,7 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
-          <p className="text-[11px] text-[#a1a1aa] mb-3">
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mb-3">
             {isFiltered
               ? `Showing ${filteredUnits.size} of ${allOccupiedUnits.size} units — ${formatCurrency(tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyRent, 0))}/mo`
               : `Last ${monthlyRevenue.length} months by category`}
@@ -175,11 +183,11 @@ export default function DashboardPage() {
           selectedUnits={activeFilterUnits}
           onApply={handleFilterApply}
         />
-        <div className="bg-white border border-[#e4e4e7] rounded p-4">
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
           <div className="flex items-baseline justify-between mb-3">
             <div>
-              <p className="text-[13px] font-semibold text-[#18181b]">Occupancy Trend</p>
-              <p className="text-[11px] text-[#a1a1aa] mt-0.5">Portfolio-wide rate</p>
+              <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Occupancy Trend</p>
+              <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">Portfolio-wide rate</p>
             </div>
             <p className="text-[12px] font-medium text-[#16a34a]">{occupancyPct}%</p>
           </div>
@@ -189,19 +197,19 @@ export default function DashboardPage() {
 
       {/* PM Call Prep */}
       <div className="bg-white border border-[#e4e4e7] rounded p-4">
-        <p className="text-[13px] font-semibold text-[#18181b] mb-4">Weekly PM Call Prep</p>
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-4">Weekly PM Call Prep</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <p className="text-[11px] font-medium text-[#dc2626] uppercase tracking-wide mb-2">Past Due</p>
             <div className="space-y-2">
               {tenants.filter(t => t.pastDueAmount > 0).map(t => (
                 <div key={t._id} className="text-[12px]">
-                  <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
+                  <p className="font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} — {t.tenant}</p>
                   <p className="text-[#dc2626]">{formatCurrency(t.pastDueAmount)}</p>
                 </div>
               ))}
               {tenants.filter(t => t.pastDueAmount > 0).length === 0 && (
-                <p className="text-[11px] text-[#a1a1aa]">No past due tenants</p>
+                <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No past due tenants</p>
               )}
             </div>
           </div>
@@ -210,8 +218,8 @@ export default function DashboardPage() {
             <div className="space-y-2">
               {electricMissing.map(t => (
                 <div key={t._id} className="text-[12px]">
-                  <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
-                  <p className="text-[#71717a]">~{formatCurrency(t.monthlyElectric)}/mo expected</p>
+                  <p className="font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} — {t.tenant}</p>
+                  <p className="text-[#71717a] dark:text-[#a1a1aa]">~{formatCurrency(t.monthlyElectric)}/mo expected</p>
                 </div>
               ))}
               {electricMissing.length === 0 && (
@@ -224,12 +232,12 @@ export default function DashboardPage() {
             <div className="space-y-2">
               {tenants.filter(t => t.status === "expiring_soon").slice(0, 5).map(t => (
                 <div key={t._id} className="text-[12px]">
-                  <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
-                  <p className="text-[#71717a]">Expires {t.leaseTo}</p>
+                  <p className="font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} — {t.tenant}</p>
+                  <p className="text-[#71717a] dark:text-[#a1a1aa]">Expires {t.leaseTo}</p>
                 </div>
               ))}
               {tenants.filter(t => t.status === "expiring_soon").length === 0 && (
-                <p className="text-[11px] text-[#a1a1aa]">No leases expiring within 90 days</p>
+                <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No leases expiring within 90 days</p>
               )}
             </div>
           </div>

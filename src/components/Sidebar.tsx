@@ -2,8 +2,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Briefcase, Activity } from "lucide-react";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Briefcase, Activity, Sun, Moon } from "lucide-react";
 import { useProperties, useActivePropertyId } from "@/hooks/useConvexData";
+import { useTheme } from "@/components/ThemeProvider";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
@@ -21,6 +22,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
   const { properties } = useProperties();
   const { propId, setActiveProperty } = useActivePropertyId();
   const [portfolioOpen, setPortfolioOpen] = useState(false);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const current = properties.find(p => p.code === propId) || properties[0];
 
@@ -49,6 +51,15 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
             );
           })}
         </nav>
+        <div className="px-2 py-3 flex justify-center border-t border-white/[0.06]">
+          <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="flex items-center justify-center w-9 h-9 rounded text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04] transition-colors cursor-pointer"
+          >
+            {theme === "dark" ? <Sun size={16} strokeWidth={1.5} /> : <Moon size={16} strokeWidth={1.5} />}
+          </button>
+        </div>
       </>
     );
   }
@@ -118,8 +129,15 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
         })}
       </nav>
 
-      <div className="px-5 py-3 border-t border-white/[0.06]">
+      <div className="px-5 py-3 border-t border-white/[0.06] flex items-center justify-between gap-2">
         <p className="text-[10px] text-[#52525b]">Powered by Deal Manager AI</p>
+        <button
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          className="flex items-center justify-center w-7 h-7 rounded text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04] transition-colors cursor-pointer flex-shrink-0"
+        >
+          {theme === "dark" ? <Sun size={14} strokeWidth={1.5} /> : <Moon size={14} strokeWidth={1.5} />}
+        </button>
       </div>
     </>
   );

@@ -34,17 +34,17 @@ export default function KPICard({
   subtitle,
   trend,
   trendUp,
-  color = "text-[#18181b]",
+  color = "text-[#18181b] dark:text-[#fafafa]",
   sparkline,
   onClick,
 }: KPICardProps) {
   return (
     <div
       onClick={onClick}
-      className={`bg-white border border-[#e4e4e7] rounded p-3 sm:p-4 ${onClick ? "cursor-pointer hover:border-[#a1a1aa] transition-colors" : ""}`}
+      className={`bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4 ${onClick ? "cursor-pointer hover:border-[#a1a1aa] dark:hover:border-[#52525b] transition-colors" : ""}`}
     >
       <div className="flex items-start justify-between">
-        <p className="text-[11px] text-[#71717a] font-medium uppercase tracking-wide">{title}</p>
+        <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] font-medium uppercase tracking-wide">{title}</p>
         {sparkline && <Sparkline data={sparkline} up={trendUp} />}
       </div>
       <div className="flex items-baseline gap-2 mt-1">
@@ -55,7 +55,7 @@ export default function KPICard({
           </span>
         )}
       </div>
-      {subtitle && <p className="text-[11px] text-[#a1a1aa] mt-1">{subtitle}</p>}
+      {subtitle && <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mt-1">{subtitle}</p>}
     </div>
   );
 }

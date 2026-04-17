@@ -88,7 +88,7 @@ function StatusCell(props: { value: string }) {
 function DownloadCell(props: { data: FileSyncRow }) {
   const fn = exportMap[props.data.type] || exportFullPackage;
   return (
-    <button onClick={(e) => { e.stopPropagation(); fn(); }} className="text-[#71717a] hover:text-[#18181b] transition-colors cursor-pointer p-1" title={`Download ${props.data.filename}`}>
+    <button onClick={(e) => { e.stopPropagation(); fn(); }} className="text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer p-1" title={`Download ${props.data.filename}`}>
       <Download size={14} />
     </button>
   );
@@ -96,9 +96,9 @@ function DownloadCell(props: { data: FileSyncRow }) {
 
 function DetailPanel({ file, onClose }: { file: FileSyncRow; onClose: () => void }) {
   const styleMap: Record<string, { border: string; bg: string; text: string }> = {
-    Success: { border: "border-[#16a34a]", bg: "bg-emerald-50", text: "text-[#16a34a]" },
-    Warning: { border: "border-[#d97706]", bg: "bg-amber-50", text: "text-[#d97706]" },
-    Failed: { border: "border-[#dc2626]", bg: "bg-red-50", text: "text-[#dc2626]" },
+    Success: { border: "border-[#16a34a]", bg: "bg-emerald-50 dark:bg-emerald-950/30", text: "text-[#16a34a]" },
+    Warning: { border: "border-[#d97706]", bg: "bg-amber-50 dark:bg-amber-950/30", text: "text-[#d97706]" },
+    Failed: { border: "border-[#dc2626]", bg: "bg-red-50 dark:bg-red-950/30", text: "text-[#dc2626]" },
   };
   const s = styleMap[file.status] || styleMap.Failed;
   const borderColor = s.border;
@@ -114,14 +114,14 @@ function DetailPanel({ file, onClose }: { file: FileSyncRow; onClose: () => void
             <span className="text-[11px] text-[#71717a]">{file.filename}</span>
           </div>
 
-          <p className="text-[12px] text-[#18181b] leading-relaxed">{file.statusDetail}</p>
+          <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{file.statusDetail}</p>
 
           {file.affectedUnits && file.affectedUnits.length > 0 && (
             <div className="mt-3">
-              <p className="text-[10px] text-[#71717a] uppercase tracking-wide font-medium mb-1">Affected Units</p>
+              <p className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide font-medium mb-1">Affected Units</p>
               <div className="flex flex-wrap gap-1">
                 {file.affectedUnits.map(u => (
-                  <span key={u} className="text-[11px] font-medium text-[#18181b] bg-white border border-[#e4e4e7] rounded px-2 py-0.5">{u}</span>
+                  <span key={u} className="text-[11px] font-medium text-[#18181b] dark:text-[#fafafa] bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded px-2 py-0.5">{u}</span>
                 ))}
               </div>
             </div>
@@ -129,12 +129,12 @@ function DetailPanel({ file, onClose }: { file: FileSyncRow; onClose: () => void
 
           {file.resolution && (
             <div className="mt-3">
-              <p className="text-[10px] text-[#71717a] uppercase tracking-wide font-medium mb-1">Recommended Action</p>
-              <p className="text-[12px] text-[#18181b] leading-relaxed">{file.resolution}</p>
+              <p className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide font-medium mb-1">Recommended Action</p>
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{file.resolution}</p>
             </div>
           )}
         </div>
-        <button onClick={onClose} className="text-[#a1a1aa] hover:text-[#18181b] cursor-pointer p-0.5 flex-shrink-0">
+        <button onClick={onClose} className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer p-0.5 flex-shrink-0">
           <X size={16} />
         </button>
       </div>
@@ -226,26 +226,26 @@ function TrainingProtocol() {
 
   return (
     <div className="mt-4 space-y-5">
-      <p className="text-[12px] text-[#71717a]">Checklist and notes to verify before posting any data update to the dashboard. Check items off as you review each sync cycle.</p>
+      <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">Checklist and notes to verify before posting any data update to the dashboard. Check items off as you review each sync cycle.</p>
 
       {/* Checklist */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[12px] font-medium text-[#18181b]">Pre-Update Checklist</p>
-          <span className="text-[10px] text-[#a1a1aa]">{doneCount}/{items.length} verified</span>
+          <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">Pre-Update Checklist</p>
+          <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{doneCount}/{items.length} verified</span>
         </div>
         <div className="space-y-0">
           {items.map(item => (
-            <div key={item.id} className="group flex items-start gap-2.5 py-2 border-b border-[#f4f4f5] last:border-0">
+            <div key={item.id} className="group flex items-start gap-2.5 py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
               <button onClick={() => toggle(item.id)}
                 className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors ${
-                  item.done ? "bg-[#16a34a] border-[#16a34a]" : "border-[#d4d4d8] hover:border-[#71717a]"
+                  item.done ? "bg-[#16a34a] border-[#16a34a]" : "border-[#d4d4d8] dark:border-[#52525b] hover:border-[#71717a]"
                 }`}>
                 {item.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>}
               </button>
-              <p className={`flex-1 text-[12px] leading-relaxed ${item.done ? "text-[#a1a1aa] line-through" : "text-[#18181b]"}`}>{item.text}</p>
+              <p className={`flex-1 text-[12px] leading-relaxed ${item.done ? "text-[#a1a1aa] dark:text-[#71717a] line-through" : "text-[#18181b] dark:text-[#fafafa]"}`}>{item.text}</p>
               <button onClick={() => remove(item.id)}
-                className="opacity-0 group-hover:opacity-100 text-[#d4d4d8] hover:text-[#dc2626] cursor-pointer transition-all">
+                className="opacity-0 group-hover:opacity-100 text-[#d4d4d8] dark:text-[#52525b] hover:text-[#dc2626] cursor-pointer transition-all">
                 <Trash2 size={12} />
               </button>
             </div>
@@ -255,9 +255,9 @@ function TrainingProtocol() {
           <input type="text" value={newText} onChange={e => setNewText(e.target.value)}
             onKeyDown={e => e.key === "Enter" && add()}
             placeholder="Add a check item..."
-            className="flex-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
+            className="flex-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
           <button onClick={add} disabled={!newText.trim()}
-            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] disabled:bg-[#e4e4e7] disabled:text-[#a1a1aa] cursor-pointer transition-colors">
+            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] disabled:bg-[#e4e4e7] dark:disabled:bg-[#3f3f46] disabled:text-[#a1a1aa] dark:disabled:text-[#71717a] cursor-pointer transition-colors">
             Add
           </button>
         </div>
@@ -266,22 +266,22 @@ function TrainingProtocol() {
       {/* Free-text notes */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[12px] font-medium text-[#18181b]">Protocol Notes</p>
+          <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">Protocol Notes</p>
           <div className="flex gap-1.5">
             <button onClick={() => { setNotes(defaultNotes); saveProtocolNotes(defaultNotes); setNotesSaved(true); }}
-              className="text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors text-[#71717a] hover:text-[#dc2626] border border-[#e4e4e7] hover:border-[#dc2626]">
+              className="text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors text-[#71717a] dark:text-[#a1a1aa] hover:text-[#dc2626] border border-[#e4e4e7] dark:border-[#3f3f46] hover:border-[#dc2626]">
               Clear Notes
             </button>
             <button onClick={saveNotes}
               className={`text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
-                notesSaved ? "text-[#a1a1aa]" : "bg-[#18181b] text-white hover:bg-[#27272a]"
+                notesSaved ? "text-[#a1a1aa] dark:text-[#71717a]" : "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7]"
               }`}>
               {notesSaved ? "Saved" : "Save"}
             </button>
           </div>
         </div>
         <textarea value={notes} onChange={e => handleNotesChange(e.target.value)}
-          className="w-full text-[12px] text-[#18181b] bg-[#fafafa] border border-[#e4e4e7] rounded p-3 leading-relaxed focus:outline-none focus:border-[#71717a] min-h-[200px] resize-y font-mono" />
+          className="w-full text-[12px] text-[#18181b] dark:text-[#fafafa] bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 leading-relaxed focus:outline-none focus:border-[#71717a] min-h-[200px] resize-y font-mono" />
       </div>
     </div>
   );
@@ -341,28 +341,28 @@ function SyncApprovalQueue() {
 
   return (
     <div className="mt-4 space-y-4">
-      <p className="text-[12px] text-[#71717a]">New data from Yardi is held here until you approve. Nothing updates the dashboard automatically — you review and confirm each change.</p>
+      <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">New data from Yardi is held here until you approve. Nothing updates the dashboard automatically — you review and confirm each change.</p>
 
       {pending.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[12px] font-medium text-[#18181b]">{pending.length} pending changes</p>
+            <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{pending.length} pending changes</p>
             <button onClick={approveAll}
               className="text-[11px] font-medium px-2.5 py-1 bg-[#16a34a] text-white rounded hover:bg-[#15803d] cursor-pointer transition-colors">
               Approve All
             </button>
           </div>
-          <div className="space-y-0 border border-[#e4e4e7] rounded overflow-hidden">
+          <div className="space-y-0 border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
             {pending.map(item => (
-              <div key={item.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-[#f4f4f5] last:border-0 bg-white hover:bg-[#fafafa]">
-                <span className="text-[12px] font-medium text-[#18181b] w-16 flex-shrink-0">{item.unit}</span>
+              <div key={item.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 bg-white dark:bg-[#18181b] hover:bg-[#fafafa] dark:hover:bg-[#27272a]">
+                <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] w-16 flex-shrink-0">{item.unit}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] text-[#18181b]">
-                    <span className="text-[#71717a]">{item.field}:</span>{" "}
-                    <span className="line-through text-[#a1a1aa]">{item.oldValue}</span>{" → "}
+                  <p className="text-[12px] text-[#18181b] dark:text-[#fafafa]">
+                    <span className="text-[#71717a] dark:text-[#a1a1aa]">{item.field}:</span>{" "}
+                    <span className="line-through text-[#a1a1aa] dark:text-[#71717a]">{item.oldValue}</span>{" → "}
                     <span className="font-medium">{item.newValue}</span>
                   </p>
-                  <p className="text-[10px] text-[#a1a1aa]">{item.source} · {item.detectedAt}</p>
+                  <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{item.source} · {item.detectedAt}</p>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
                   <button onClick={() => approve(item.id)}
@@ -370,7 +370,7 @@ function SyncApprovalQueue() {
                     Approve
                   </button>
                   <button onClick={() => reject(item.id)}
-                    className="text-[10px] font-medium px-2 py-1 border border-[#e4e4e7] text-[#71717a] rounded hover:text-[#dc2626] hover:border-[#dc2626] cursor-pointer transition-colors">
+                    className="text-[10px] font-medium px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] text-[#71717a] dark:text-[#a1a1aa] rounded hover:text-[#dc2626] hover:border-[#dc2626] cursor-pointer transition-colors">
                     Reject
                   </button>
                 </div>
@@ -381,23 +381,23 @@ function SyncApprovalQueue() {
       )}
 
       {pending.length === 0 && (
-        <div className="bg-[#fafafa] border border-[#e4e4e7] rounded p-6 text-center">
-          <p className="text-[13px] font-medium text-[#18181b]">All clear</p>
-          <p className="text-[11px] text-[#a1a1aa] mt-1">No pending changes to review.</p>
+        <div className="bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-6 text-center">
+          <p className="text-[13px] font-medium text-[#18181b] dark:text-[#fafafa]">All clear</p>
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mt-1">No pending changes to review.</p>
         </div>
       )}
 
       {resolved.length > 0 && (
         <div>
-          <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide font-medium mb-1">{resolved.length} resolved</p>
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-1">{resolved.length} resolved</p>
           <div className="space-y-0">
             {resolved.slice(0, 5).map(item => (
               <div key={item.id} className="flex items-center gap-3 py-1.5 text-[11px]">
                 <span className={`font-medium ${item.status === "approved" ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
                   {item.status === "approved" ? "✓" : "✗"}
                 </span>
-                <span className="text-[#71717a]">{item.unit}</span>
-                <span className="text-[#a1a1aa]">{item.field}: {item.oldValue} → {item.newValue}</span>
+                <span className="text-[#71717a] dark:text-[#a1a1aa]">{item.unit}</span>
+                <span className="text-[#a1a1aa] dark:text-[#71717a]">{item.field}: {item.oldValue} → {item.newValue}</span>
               </div>
             ))}
           </div>
@@ -417,21 +417,21 @@ function ScheduledTriggers() {
   ];
   return (
     <div className="mt-4 space-y-3">
-      <p className="text-[12px] text-[#71717a]">Automated sync schedules. Paused triggers will not run until re-enabled.</p>
-      <div className="space-y-0 border border-[#e4e4e7] rounded overflow-hidden">
+      <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">Automated sync schedules. Paused triggers will not run until re-enabled.</p>
+      <div className="space-y-0 border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
         {triggers.map(t => (
-          <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-[#f4f4f5] last:border-0 bg-white">
+          <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 bg-white dark:bg-[#18181b]">
             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${t.status === "Active" ? "bg-[#16a34a]" : "bg-[#a1a1aa]"}`} />
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-medium text-[#18181b]">{t.name}</p>
-              <p className="text-[10px] text-[#a1a1aa]">{t.schedule} · Source: {t.source}</p>
+              <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{t.name}</p>
+              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{t.schedule} · Source: {t.source}</p>
             </div>
             <div className="text-right flex-shrink-0 hidden sm:block">
-              <p className="text-[10px] text-[#a1a1aa]">Last: {t.lastRun}</p>
-              <p className="text-[10px] text-[#71717a]">Next: {t.nextRun}</p>
+              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">Last: {t.lastRun}</p>
+              <p className="text-[10px] text-[#71717a] dark:text-[#a1a1aa]">Next: {t.nextRun}</p>
             </div>
             <span className={`text-[10px] font-medium px-2 py-0.5 rounded flex-shrink-0 ${
-              t.status === "Active" ? "text-[#16a34a] bg-emerald-50" : "text-[#a1a1aa] bg-[#f4f4f5]"
+              t.status === "Active" ? "text-[#16a34a] bg-emerald-50 dark:bg-emerald-950/30" : "text-[#a1a1aa] dark:text-[#71717a] bg-[#f4f4f5] dark:bg-[#27272a]"
             }`}>{t.status}</span>
           </div>
         ))}
@@ -530,39 +530,39 @@ function SmartUploadModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white border border-[#e4e4e7] rounded w-full max-w-[480px] mx-4 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#e4e4e7]">
-          <p className="text-[14px] font-semibold text-[#18181b]">Upload File</p>
-          <button onClick={onClose} className="text-[#a1a1aa] hover:text-[#18181b] cursor-pointer"><X size={16} /></button>
+      <div className="absolute inset-0 bg-black/30 dark:bg-black/60" onClick={onClose} />
+      <div className="relative bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded w-full max-w-[480px] mx-4 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
+          <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">Upload File</p>
+          <button onClick={onClose} className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"><X size={16} /></button>
         </div>
 
         <div className="p-4 space-y-4">
           {/* File picker */}
           {!file && (
-            <label className="flex flex-col items-center justify-center border-2 border-dashed border-[#e4e4e7] rounded p-8 cursor-pointer hover:border-[#a1a1aa] transition-colors">
-              <p className="text-[13px] font-medium text-[#18181b]">Drop a file or click to browse</p>
-              <p className="text-[11px] text-[#a1a1aa] mt-1">.xlsx, .csv, .pdf, .mp3, .mp4, .m4a</p>
+            <label className="flex flex-col items-center justify-center border-2 border-dashed border-[#e4e4e7] dark:border-[#3f3f46] rounded p-8 cursor-pointer hover:border-[#a1a1aa] dark:hover:border-[#52525b] transition-colors">
+              <p className="text-[13px] font-medium text-[#18181b] dark:text-[#fafafa]">Drop a file or click to browse</p>
+              <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mt-1">.xlsx, .csv, .pdf, .mp3, .mp4, .m4a</p>
               <input type="file" className="hidden" accept=".xlsx,.csv,.pdf,.mp3,.mp4,.m4a,.wav,.webm,.ogg,.txt" onChange={handleFileSelect} />
             </label>
           )}
 
           {/* File selected — show name */}
           {file && (
-            <div className="flex items-center gap-2 bg-[#fafafa] border border-[#e4e4e7] rounded px-3 py-2">
-              <p className="text-[12px] font-medium text-[#18181b] flex-1 truncate">{file.name}</p>
-              <p className="text-[10px] text-[#a1a1aa]">{(file.size / 1024).toFixed(0)} KB</p>
+            <div className="flex items-center gap-2 bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded px-3 py-2">
+              <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] flex-1 truncate">{file.name}</p>
+              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{(file.size / 1024).toFixed(0)} KB</p>
             </div>
           )}
 
           {/* Classify — if auto-detect failed */}
           {step === "classify" && file && !category && (
             <div>
-              <p className="text-[12px] text-[#71717a] mb-2">What type of file is this?</p>
+              <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mb-2">What type of file is this?</p>
               <div className="grid grid-cols-2 gap-2">
                 {(Object.keys(fileCategoryLabels) as FileCategory[]).map(cat => (
                   <button key={cat} onClick={() => handleCategorySelect(cat)}
-                    className="text-left text-[12px] px-3 py-2 border border-[#e4e4e7] rounded hover:border-[#71717a] hover:bg-[#fafafa] cursor-pointer transition-colors">
+                    className="text-left text-[12px] px-3 py-2 border border-[#e4e4e7] dark:border-[#3f3f46] text-[#18181b] dark:text-[#fafafa] rounded hover:border-[#71717a] hover:bg-[#fafafa] dark:hover:bg-[#27272a] cursor-pointer transition-colors">
                     {fileCategoryLabels[cat]}
                   </button>
                 ))}
@@ -576,28 +576,28 @@ function SmartUploadModal({ onClose }: { onClose: () => void }) {
             const unansweredCount = questions.filter((_, i) => !(answers[i] || "").trim()).length;
             return (
               <div className="space-y-3">
-                <p className="text-[12px] font-medium text-[#18181b]">{fileCategoryLabels[category]} — Additional Context</p>
-                <p className="text-[10px] text-[#a1a1aa]">All fields are required before processing.</p>
+                <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{fileCategoryLabels[category]} — Additional Context</p>
+                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">All fields are required before processing.</p>
                 {questions.map((q, i) => {
                   const isEmpty = !(answers[i] || "").trim();
                   return (
                     <div key={i}>
-                      <label className={`text-[11px] font-medium ${isEmpty ? "text-[#18181b]" : "text-[#71717a]"}`}>
+                      <label className={`text-[11px] font-medium ${isEmpty ? "text-[#18181b] dark:text-[#fafafa]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
                         {q} {isEmpty && <span className="text-[#dc2626]">*</span>}
                       </label>
                       <input type="text" value={answers[i] || ""} onChange={e => setAnswers({ ...answers, [i]: e.target.value })}
-                        className={`w-full mt-1 text-[12px] px-2.5 py-1.5 border rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] ${
-                          isEmpty ? "border-[#d4d4d8]" : "border-[#16a34a]/30"
+                        className={`w-full mt-1 text-[12px] px-2.5 py-1.5 border rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] ${
+                          isEmpty ? "border-[#d4d4d8] dark:border-[#52525b]" : "border-[#16a34a]/30"
                         }`} />
                     </div>
                   );
                 })}
                 <div>
-                  <label className="text-[11px] text-[#71717a] font-medium">Additional notes (optional)</label>
+                  <label className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] font-medium">Additional notes (optional)</label>
                   <textarea value={notes} onChange={e => setNotes(e.target.value)}
                     placeholder="Any other context for processing this file..."
                     rows={2}
-                    className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] resize-none" />
+                    className="w-full mt-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] resize-none" />
                 </div>
                 <div className="flex items-center justify-between">
                   {!allAnswered && (
@@ -606,7 +606,7 @@ function SmartUploadModal({ onClose }: { onClose: () => void }) {
                   {allAnswered && <span />}
                   <button onClick={handleSubmitContext} disabled={!allAnswered}
                     className={`text-[11px] font-medium px-4 py-1.5 rounded cursor-pointer transition-colors ${
-                      allAnswered ? "bg-[#18181b] text-white hover:bg-[#27272a]" : "bg-[#e4e4e7] text-[#a1a1aa] cursor-not-allowed"
+                      allAnswered ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7]" : "bg-[#e4e4e7] dark:bg-[#3f3f46] text-[#a1a1aa] dark:text-[#71717a] cursor-not-allowed"
                     }`}>
                     Process File
                   </button>
@@ -618,20 +618,20 @@ function SmartUploadModal({ onClose }: { onClose: () => void }) {
           {/* Processing */}
           {step === "processing" && (
             <div className="text-center py-6">
-              <div className="w-5 h-5 border-2 border-[#18181b] border-t-transparent rounded-full animate-spin mx-auto" />
-              <p className="text-[12px] text-[#71717a] mt-3">Processing {file?.name}...</p>
+              <div className="w-5 h-5 border-2 border-[#18181b] dark:border-[#fafafa] border-t-transparent dark:border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-3">Processing {file?.name}...</p>
             </div>
           )}
 
           {/* Done */}
           {step === "done" && (
             <div className="text-center py-6">
-              <p className="text-[14px] font-medium text-[#18181b]">File processed</p>
-              <p className="text-[12px] text-[#a1a1aa] mt-1">
+              <p className="text-[14px] font-medium text-[#18181b] dark:text-[#fafafa]">File processed</p>
+              <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a] mt-1">
                 {file?.name} uploaded as {category ? fileCategoryLabels[category] : "file"}. Check the approval queue for any pending changes.
               </p>
               <button onClick={onClose}
-                className="mt-4 text-[11px] font-medium px-4 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer transition-colors">
+                className="mt-4 text-[11px] font-medium px-4 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] cursor-pointer transition-colors">
                 Close
               </button>
             </div>
@@ -682,8 +682,8 @@ export default function DataPipelinePage() {
         { field: "filename", headerName: "File", minWidth: 150, flex: 1,
           cellRenderer: (p: { value: string; data: FileSyncRow }) => (
             <div className="leading-tight py-1">
-              <p className="text-[12px] font-medium text-[#18181b] truncate">{p.value}</p>
-              <p className="text-[10px] text-[#a1a1aa]">{p.data.type} · {p.data.size}</p>
+              <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate">{p.value}</p>
+              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{p.data.type} · {p.data.size}</p>
             </div>
           )},
         { field: "syncedAt", headerName: "Updated", width: 100,
@@ -724,11 +724,11 @@ export default function DataPipelinePage() {
       <PageHeader title="Data Pipeline" subtitle="File sync history — click any row for details">
         <div className="flex items-center gap-2">
           <button onClick={() => setShowUpload(true)}
-            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] text-white rounded hover:bg-[#27272a] cursor-pointer transition-colors">
+            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] cursor-pointer transition-colors">
             Upload
           </button>
           <button onClick={exportFullPackage}
-            className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 border border-[#e4e4e7] text-[#71717a] hover:text-[#18181b] rounded cursor-pointer transition-colors">
+            className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] rounded cursor-pointer transition-colors">
             <Download size={13} /> Export
           </button>
         </div>
@@ -738,21 +738,21 @@ export default function DataPipelinePage() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-3">
-          <p className="text-[12px] text-[#71717a]">{syncData.length} files · Last sync Mar 12, 2026</p>
+          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">{syncData.length} files · Last sync Mar 12, 2026</p>
           <button onClick={handleUpdateNow} disabled={syncing}
-            className={`text-[10px] cursor-pointer transition-colors ${syncing ? "text-[#a1a1aa]" : "text-[#71717a] hover:text-[#18181b] underline decoration-dotted"}`}>
+            className={`text-[10px] cursor-pointer transition-colors ${syncing ? "text-[#a1a1aa] dark:text-[#71717a]" : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] underline decoration-dotted"}`}>
             {syncing ? "Updating..." : "Update now"}
           </button>
         </div>
         <input
           type="text"
           placeholder="Search files..."
-          className="px-3 py-1.5 bg-white border border-[#e4e4e7] rounded text-[12px] text-[#18181b] placeholder-[#a1a1aa] focus:outline-none focus:border-[#71717a] w-full sm:w-48"
+          className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded text-[12px] text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] focus:outline-none focus:border-[#71717a] w-full sm:w-48"
           onChange={(e) => gridRef.current?.api?.setGridOption("quickFilterText", e.target.value)}
         />
       </div>
 
-      <div className="ag-theme-alpine w-full rounded overflow-hidden border border-[#e4e4e7]" style={{ height: isMobile ? 450 : 480 }}>
+      <div className="ag-theme-alpine w-full rounded overflow-hidden border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: isMobile ? 450 : 480 }}>
         <AgGridReact
           ref={gridRef}
           rowData={syncData}
@@ -772,7 +772,7 @@ export default function DataPipelinePage() {
       )}
 
       {/* Tabs */}
-      <div className="mt-8 flex gap-1 border-b border-[#e4e4e7]">
+      <div className="mt-8 flex gap-1 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
         {([
           { key: "approval" as const, label: "Approval Queue" },
           { key: "triggers" as const, label: "Scheduled Triggers" },
@@ -781,7 +781,7 @@ export default function DataPipelinePage() {
         ]).map(tab => (
           <button key={tab.key} onClick={() => setActiveSection(tab.key)}
             className={`text-[12px] font-medium px-3 py-2 border-b-2 transition-colors cursor-pointer ${
-              activeSection === tab.key ? "border-[#18181b] text-[#18181b]" : "border-transparent text-[#a1a1aa] hover:text-[#71717a]"
+              activeSection === tab.key ? "border-[#18181b] dark:border-[#fafafa] text-[#18181b] dark:text-[#fafafa]" : "border-transparent text-[#a1a1aa] dark:text-[#71717a] hover:text-[#71717a] dark:hover:text-[#a1a1aa]"
             }`}>
             {tab.label}
           </button>
@@ -798,7 +798,7 @@ export default function DataPipelinePage() {
 
       {activeSection === "workflow" && (
         <div className="mt-4 space-y-4">
-          <p className="text-[12px] text-[#71717a]">How data flows from Yardi to the dashboard while preserving your notes and overrides.</p>
+          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">How data flows from Yardi to the dashboard while preserving your notes and overrides.</p>
 
           <div className="space-y-0">
             {[
@@ -809,21 +809,21 @@ export default function DataPipelinePage() {
               { step: "5", label: "Alert Evaluation", desc: "Training protocol rules are evaluated against new data. Alerts generated for: missing postings, late fees, lease expirations, threshold breaches.", status: "Rule engine" },
               { step: "6", label: "Push to Dashboard", desc: "Processed data replaces stale data. Charts, KPIs, site plan, and grids update. Kanban items auto-created for critical alerts if protocol says so.", status: "Live update" },
             ].map((s, i) => (
-              <div key={i} className="flex gap-3 py-3 border-b border-[#f4f4f5] last:border-0">
-                <div className="w-6 h-6 rounded bg-[#18181b] text-white text-[11px] font-semibold flex items-center justify-center flex-shrink-0 mt-0.5">{s.step}</div>
+              <div key={i} className="flex gap-3 py-3 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
+                <div className="w-6 h-6 rounded bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] text-[11px] font-semibold flex items-center justify-center flex-shrink-0 mt-0.5">{s.step}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2">
-                    <p className="text-[13px] font-medium text-[#18181b]">{s.label}</p>
-                    <span className="text-[10px] text-[#a1a1aa]">{s.status}</span>
+                    <p className="text-[13px] font-medium text-[#18181b] dark:text-[#fafafa]">{s.label}</p>
+                    <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{s.status}</span>
                   </div>
-                  <p className="text-[12px] text-[#71717a] mt-0.5 leading-relaxed">{s.desc}</p>
+                  <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5 leading-relaxed">{s.desc}</p>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="bg-[#fafafa] border border-[#e4e4e7] rounded p-3 text-[11px] text-[#71717a]">
-            Key guarantee: User notes, manual status changes, and Kanban items are <strong className="text-[#18181b]">never overwritten</strong> by data syncs.
+          <div className="bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 text-[11px] text-[#71717a] dark:text-[#a1a1aa]">
+            Key guarantee: User notes, manual status changes, and Kanban items are <strong className="text-[#18181b] dark:text-[#fafafa]">never overwritten</strong> by data syncs.
             They live in a separate override layer that merges on top of incoming Yardi data.
           </div>
         </div>
