@@ -39,8 +39,6 @@ export default function DealsPage() {
     if (typeof window === "undefined") return "pipeline";
     return (localStorage.getItem(VIEW_KEY) as "pipeline" | "table") || "pipeline";
   });
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [addForm, setAddForm] = useState({ name: "", address: "", city: "Houston", state: "TX", propertyType: "Office/Warehouse", sqft: "", units: "", askingPrice: "", source: "", assignedTo: "Max" });
   const gridRef = useRef<AgGridReact>(null);
 
   function switchView(mode: "pipeline" | "table") {
@@ -48,25 +46,24 @@ export default function DealsPage() {
     localStorage.setItem(VIEW_KEY, mode);
   }
 
-  function handleAddDeal() {
-    if (!addForm.name.trim() || !addForm.address.trim()) return;
-    createDeal({
-      name: addForm.name.trim(),
-      address: addForm.address.trim(),
-      city: addForm.city.trim(),
-      state: addForm.state.trim(),
-      propertyType: addForm.propertyType,
-      sqft: Number(addForm.sqft) || 0,
-      units: Number(addForm.units) || 0,
-      askingPrice: Number(addForm.askingPrice) || 0,
-      pricePerSF: Number(addForm.sqft) > 0 ? Math.round(Number(addForm.askingPrice) / Number(addForm.sqft)) : undefined,
+  async function handleCreateNewDeal() {
+    // Create a blank deal and open its drawer for editing
+    const id = await createDeal({
+      name: "New Deal",
+      address: "",
+      city: "Houston",
+      state: "TX",
+      propertyType: "Office/Warehouse",
+      sqft: 0,
+      units: 0,
+      askingPrice: 0,
       stage: "lead",
-      source: addForm.source.trim(),
-      assignedTo: addForm.assignedTo,
+      source: "",
+      assignedTo: "Max",
       contacts: [],
     });
-    setShowAddForm(false);
-    setAddForm({ name: "", address: "", city: "Houston", state: "TX", propertyType: "Office/Warehouse", sqft: "", units: "", askingPrice: "", source: "", assignedTo: "Max" });
+    // Open the drawer — the live deal will show once it arrives via the reactive query
+    setSelectedDeal({ _id: id, name: "New Deal", address: "", city: "Houston", state: "TX", propertyType: "Office/Warehouse", sqft: 0, units: 0, askingPrice: 0, stage: "lead", source: "", assignedTo: "Max", contacts: [], notes: [], emails: [], tasks: [], documents: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   }
 
   function handleDeleteDeal(id: any) {
@@ -79,10 +76,11 @@ export default function DealsPage() {
   }
 
   const columnDefs = useMemo<(ColDef | ColGroupDef)[]>(() => [
-    // Open-drawer icon column (pinned left)
+    // Open-drawer icon column (no group header, no expand)
     {
       headerName: "",
       groupId: "open",
+      openByDefault: true,
       children: [
         {
           headerName: "",
@@ -107,12 +105,13 @@ export default function DealsPage() {
         },
       ],
     } as ColGroupDef,
-    // Property group
+    // Property group — Name always visible; Type/Sq Ft/Units on expand
     {
       headerName: "Property",
       groupId: "property",
+      openByDefault: false,
       children: [
-        { field: "name", headerName: "Name", minWidth: 180, flex: 2, pinned: "left", editable: true,
+        { field: "name", headerName: "Name", minWidth: 180, flex: 2, editable: true,
           cellRenderer: (p: any) => (
             <div>
               <div className="font-medium text-[#18181b] dark:text-[#fafafa]">{p.data.name}</div>
@@ -120,49 +119,59 @@ export default function DealsPage() {
             </div>
           ) },
         { field: "propertyType", headerName: "Type", minWidth: 120, flex: 1, filter: true, editable: true,
+          columnGroupShow: "open",
           cellEditor: "agSelectCellEditor",
           cellEditorParams: { values: ["Office/Warehouse", "Industrial", "Flex/Office", "Retail", "Warehouse", "Mixed Use"] } },
         { field: "sqft", headerName: "Sq Ft", minWidth: 90, flex: 1, type: "numericColumn", editable: true,
+          columnGroupShow: "open",
           valueFormatter: (p: any) => p.value?.toLocaleString() || "\u2014",
           valueParser: (p: any) => Number(p.newValue) || 0 },
         { field: "units", headerName: "Units", minWidth: 80, flex: 1, type: "numericColumn", editable: true,
+          columnGroupShow: "open",
           valueParser: (p: any) => Number(p.newValue) || 0 },
-        { field: "address", headerName: "Address", minWidth: 160, flex: 1, editable: true, hide: true },
-        { field: "city", headerName: "City", minWidth: 110, flex: 1, editable: true, hide: true },
-        { field: "state", headerName: "State", minWidth: 70, flex: 1, editable: true, hide: true },
+        { field: "address", headerName: "Address", minWidth: 160, flex: 1, editable: true, columnGroupShow: "open" },
+        { field: "city", headerName: "City", minWidth: 110, flex: 1, editable: true, columnGroupShow: "open", hide: true },
+        { field: "state", headerName: "State", minWidth: 70, flex: 1, editable: true, columnGroupShow: "open", hide: true },
       ],
     } as ColGroupDef,
-    // Deal group
+    // Deal group — Stage always visible; Assigned + Source on expand
     {
       headerName: "Deal",
       groupId: "deal",
+      openByDefault: true,
       children: [
-        { field: "stage", headerName: "Stage", minWidth: 130, flex: 1, cellRenderer: StageCellRenderer, filter: true, editable: true,
+        { field: "stage", headerName: "Stage", minWidth: 130, flex: 1, pinned: "left", cellRenderer: StageCellRenderer, filter: true, editable: true,
           cellEditor: "agSelectCellEditor",
           cellEditorParams: { values: stages } },
         { field: "assignedTo", headerName: "Assigned", minWidth: 100, flex: 1, filter: true, editable: true,
+          columnGroupShow: "open",
           cellEditor: "agSelectCellEditor",
           cellEditorParams: { values: ["Ori", "Max"] } },
-        { field: "source", headerName: "Source", minWidth: 130, flex: 1, editable: true },
+        { field: "source", headerName: "Source", minWidth: 130, flex: 1, editable: true,
+          columnGroupShow: "open" },
       ],
     } as ColGroupDef,
-    // Financials group
+    // Financials group — Asking Price always visible; Cap Rate + $/SF on expand
     {
       headerName: "Financials",
       groupId: "financials",
+      openByDefault: true,
       children: [
         { field: "askingPrice", headerName: "Asking Price", minWidth: 120, flex: 1, type: "numericColumn", cellRenderer: CurrencyCellRenderer, editable: true,
           valueParser: (p: any) => Number(p.newValue) || 0 },
         { field: "capRate", headerName: "Cap Rate", minWidth: 95, flex: 1, type: "numericColumn", cellRenderer: PercentCellRenderer, editable: true,
+          columnGroupShow: "open",
           valueParser: (p: any) => Number(p.newValue) || 0 },
         { field: "pricePerSF", headerName: "$/SF", minWidth: 80, flex: 1, type: "numericColumn", editable: false,
+          columnGroupShow: "open",
           valueFormatter: (p: any) => p.value ? `$${p.value}` : "\u2014" },
       ],
     } as ColGroupDef,
-    // Actions
+    // Actions group
     {
       headerName: "",
       groupId: "actions",
+      openByDefault: true,
       children: [
         {
           headerName: "",
@@ -217,9 +226,31 @@ export default function DealsPage() {
   }, []);
 
   const onGridReady = useCallback((params: GridReadyEvent) => {
+    // Restore saved column group open/close state from localStorage (ACP pattern)
+    try {
+      const saved = localStorage.getItem("redhorn-deals-col-groups");
+      if (saved) {
+        const groups = JSON.parse(saved) as Record<string, boolean>;
+        Object.entries(groups).forEach(([groupId, open]) => {
+          try { params.api.setColumnGroupOpened(groupId, open); } catch {}
+        });
+      }
+    } catch {}
     if (window.innerWidth >= 768) {
       params.api.sizeColumnsToFit();
     }
+  }, []);
+
+  const onColumnGroupOpened = useCallback((event: any) => {
+    try {
+      const groupId = event.columnGroup?.getGroupId?.();
+      const isExpanded = event.columnGroup?.isExpanded?.();
+      if (!groupId) return;
+      const saved = localStorage.getItem("redhorn-deals-col-groups");
+      const groups = saved ? JSON.parse(saved) : {};
+      groups[groupId] = isExpanded;
+      localStorage.setItem("redhorn-deals-col-groups", JSON.stringify(groups));
+    } catch {}
   }, []);
 
   const activeDeals = deals.filter((d: any) => d.stage !== "dead" && d.stage !== "closed");
@@ -263,57 +294,11 @@ export default function DealsPage() {
             <List size={14} />
           </button>
         </div>
-        <button onClick={() => setShowAddForm(true)}
+        <button onClick={handleCreateNewDeal}
           className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded cursor-pointer hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors">
           <Plus size={13} /> New Deal
         </button>
       </div>
-
-      {/* Add Deal Form */}
-      {showAddForm && (
-        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4 mb-4">
-          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">New Deal</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <input value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })} placeholder="Property Name"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" autoFocus />
-            <input value={addForm.address} onChange={e => setAddForm({ ...addForm, address: e.target.value })} placeholder="Address"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
-            <input value={addForm.city} onChange={e => setAddForm({ ...addForm, city: e.target.value })} placeholder="City"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
-            <input value={addForm.state} onChange={e => setAddForm({ ...addForm, state: e.target.value })} placeholder="State"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
-            <input value={addForm.sqft} onChange={e => setAddForm({ ...addForm, sqft: e.target.value })} placeholder="Sq Ft" type="number"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
-            <input value={addForm.units} onChange={e => setAddForm({ ...addForm, units: e.target.value })} placeholder="Units" type="number"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
-            <input value={addForm.askingPrice} onChange={e => setAddForm({ ...addForm, askingPrice: e.target.value })} placeholder="Asking Price" type="number"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
-            <input value={addForm.source} onChange={e => setAddForm({ ...addForm, source: e.target.value })} placeholder="Source (e.g. Broker, Cold Call)"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
-            <select value={addForm.propertyType} onChange={e => setAddForm({ ...addForm, propertyType: e.target.value })}
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa]">
-              <option>Office/Warehouse</option>
-              <option>Industrial</option>
-              <option>Flex/Office</option>
-              <option>Retail</option>
-              <option>Warehouse</option>
-              <option>Mixed Use</option>
-            </select>
-            <select value={addForm.assignedTo} onChange={e => setAddForm({ ...addForm, assignedTo: e.target.value })}
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa]">
-              <option value="Ori">Assigned: Ori</option>
-              <option value="Max">Assigned: Max</option>
-            </select>
-          </div>
-          <div className="flex gap-2 mt-3">
-            <button onClick={handleAddDeal} disabled={!addForm.name.trim() || !addForm.address.trim()}
-              className="text-[11px] font-medium px-4 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors cursor-pointer disabled:opacity-40">
-              Add Deal
-            </button>
-            <button onClick={() => setShowAddForm(false)} className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] cursor-pointer px-3 py-1.5">Cancel</button>
-          </div>
-        </div>
-      )}
 
       {/* Table View (AG Grid) */}
       {viewMode === "table" && (
@@ -326,6 +311,7 @@ export default function DealsPage() {
             onGridReady={onGridReady}
             onCellClicked={onCellClicked}
             onCellValueChanged={onCellValueChanged}
+            onColumnGroupOpened={onColumnGroupOpened}
             rowHeight={52}
             headerHeight={32}
             groupHeaderHeight={28}
@@ -355,6 +341,7 @@ export default function DealsPage() {
             onClose={() => setSelectedDeal(null)}
             onStageChange={handleStageChange}
             onDelete={() => { setSelectedDeal(null); }}
+            updateField={updateField}
             addNote={addNote}
             addTask={addTask}
             updateTask={updateTask}

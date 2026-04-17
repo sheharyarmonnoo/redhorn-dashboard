@@ -68,7 +68,6 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
     <>
       <div className="px-5 pt-5 pb-3 border-b border-white/[0.06]">
         <img src="/redhorn-logo.png" alt="Redhorn Capital Partners" className="h-9 w-auto brightness-0 invert opacity-90" />
-        <p className="text-[9px] text-[#52525b] font-medium tracking-[0.12em] uppercase mt-2">Deal Manager AI</p>
       </div>
 
       {/* Portfolio Selector (read-only) */}

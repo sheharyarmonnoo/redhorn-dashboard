@@ -63,6 +63,7 @@ interface DealDetailProps {
   onClose: () => void;
   onStageChange: (dealId: string, stage: DealStage) => void;
   onDelete: () => void;
+  updateField?: (args: { id: any; field: string; value: any; user?: string }) => void;
   addNote: (args: { id: any; text: string; author: string }) => void;
   addTask: (args: { id: any; text: string; assignedTo?: string; dueDate?: string; createdBy?: string }) => void;
   updateTask: (args: { id: any; taskId: string; text?: string; assignedTo?: string; dueDate?: string }) => void;
@@ -78,6 +79,7 @@ export function DealDetail({
   onClose,
   onStageChange,
   onDelete,
+  updateField,
   addNote,
   addTask,
   updateTask,
@@ -100,6 +102,12 @@ export function DealDetail({
   const notes = deal.notes || [];
   const tasks = deal.tasks || [];
   const documents = deal.documents || [];
+
+  function saveField(field: string, value: any) {
+    if (updateField) {
+      updateField({ id: deal._id, field, value, user: currentUser });
+    }
+  }
 
   function handleDelete() {
     if (confirm(`Delete deal "${deal.name}"? This cannot be undone.`)) {
@@ -242,63 +250,54 @@ export function DealDetail({
         <div className="flex-1 overflow-y-auto p-5">
           {activeTab === "overview" && (
             <div className="space-y-5">
-              {/* Key Metrics */}
+              {/* Editable name */}
+              <EditableTextField
+                value={deal.name}
+                placeholder="Deal name..."
+                onSave={(v) => saveField("name", v)}
+                className="text-[18px] font-semibold text-[#18181b] dark:text-[#fafafa]"
+              />
+
+              {/* Key Metrics — editable */}
               <div className="grid grid-cols-3 gap-2">
-                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Asking</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{formatCurrency(deal.askingPrice || 0)}</p>
-                </div>
-                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Cap Rate</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{deal.capRate ? `${deal.capRate}%` : "\u2014"}</p>
-                </div>
-                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">$/SF</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{deal.pricePerSF ? `$${deal.pricePerSF}` : "\u2014"}</p>
-                </div>
-                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Size</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{formatNumber(deal.sqft)} SF</p>
-                </div>
-                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Units</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{deal.units || "\u2014"}</p>
-                </div>
-                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">$/Unit</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">
-                    {deal.units && deal.askingPrice ? formatCurrency(Math.round(deal.askingPrice / deal.units)) : "\u2014"}
-                  </p>
-                </div>
+                <EditableMetric label="Asking" value={deal.askingPrice} type="currency" onSave={(v) => saveField("askingPrice", v)} />
+                <EditableMetric label="Cap Rate" value={deal.capRate} type="percent" onSave={(v) => saveField("capRate", v)} />
+                <MetricCard label="$/SF" display={deal.pricePerSF ? `$${deal.pricePerSF}` : "\u2014"} />
+                <EditableMetric label="Size" value={deal.sqft} type="number" suffix=" SF" onSave={(v) => saveField("sqft", v)} />
+                <EditableMetric label="Units" value={deal.units} type="number" onSave={(v) => saveField("units", v)} />
+                <MetricCard label="$/Unit" display={deal.units && deal.askingPrice ? formatCurrency(Math.round(deal.askingPrice / deal.units)) : "\u2014"} />
                 {deal.capRate && deal.askingPrice ? (
-                  <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
-                    <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Est. NOI</p>
-                    <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">
-                      {formatCurrency(Math.round(deal.askingPrice * (deal.capRate / 100)))}
-                    </p>
-                  </div>
+                  <MetricCard label="Est. NOI" display={formatCurrency(Math.round(deal.askingPrice * (deal.capRate / 100)))} />
                 ) : null}
-                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Days in Stage</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">
-                    {deal.updatedAt ? Math.floor((Date.now() - new Date(deal.updatedAt).getTime()) / 86400000) : "\u2014"}
-                  </p>
-                </div>
-                <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
-                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Activity</p>
-                  <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">
-                    {(deal.notes?.length || 0) + (deal.tasks?.length || 0) + (deal.documents?.length || 0)}
-                  </p>
-                </div>
+                <MetricCard label="Days in Stage" display={deal.updatedAt ? String(Math.floor((Date.now() - new Date(deal.updatedAt).getTime()) / 86400000)) : "\u2014"} />
+                <MetricCard label="Activity" display={String((deal.notes?.length || 0) + (deal.tasks?.length || 0) + (deal.documents?.length || 0))} />
               </div>
 
               {/* Property */}
               <section>
                 <p className="text-[10px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wider mb-2.5">Property</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Type" value={deal.propertyType} />
-                  <Field label="Address" value={`${deal.address || ""}, ${deal.city || ""}, ${deal.state || ""}`.replace(/^, |, $/g, "")} icon={<MapPin size={11} />} />
-                  <Field label="Closing Date" value={formatDate(deal.closingDate)} />
+                  <EditableField
+                    label="Type"
+                    value={deal.propertyType}
+                    options={["Office/Warehouse", "Industrial", "Flex/Office", "Retail", "Warehouse", "Mixed Use"]}
+                    onSave={(v) => saveField("propertyType", v)}
+                  />
+                  <EditableField
+                    label="Address"
+                    value={deal.address}
+                    icon={<MapPin size={11} />}
+                    onSave={(v) => saveField("address", v)}
+                  />
+                  <EditableField label="City" value={deal.city} onSave={(v) => saveField("city", v)} />
+                  <EditableField label="State" value={deal.state} onSave={(v) => saveField("state", v)} />
+                  <EditableField
+                    label="Closing Date"
+                    value={deal.closingDate}
+                    type="date"
+                    displayValue={formatDate(deal.closingDate)}
+                    onSave={(v) => saveField("closingDate", v)}
+                  />
                   <Field label="Created" value={formatDate(deal.createdAt)} />
                 </div>
               </section>
@@ -307,8 +306,18 @@ export function DealDetail({
               <section>
                 <p className="text-[10px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wider mb-2.5">Team & Source</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Assigned To" value={deal.assignedTo} icon={<User size={11} />} />
-                  <Field label="Source" value={deal.source || "\u2014"} />
+                  <EditableField
+                    label="Assigned To"
+                    value={deal.assignedTo}
+                    icon={<User size={11} />}
+                    options={["Ori", "Max"]}
+                    onSave={(v) => saveField("assignedTo", v)}
+                  />
+                  <EditableField
+                    label="Source"
+                    value={deal.source}
+                    onSave={(v) => saveField("source", v)}
+                  />
                   <Field label="Last Updated" value={formatDateTime(deal.updatedAt)} />
                   <Field label="Stage" value={getStageLabel(deal.stage)} />
                 </div>
@@ -612,6 +621,179 @@ function TaskRow({
           <Trash2 size={12} />
         </button>
       </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, display }: { label: string; display: string }) {
+  return (
+    <div className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3">
+      <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">{label}</p>
+      <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{display}</p>
+    </div>
+  );
+}
+
+function EditableMetric({
+  label,
+  value,
+  type,
+  suffix,
+  onSave,
+}: {
+  label: string;
+  value: number | undefined;
+  type: "currency" | "percent" | "number";
+  suffix?: string;
+  onSave: (value: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value ?? ""));
+
+  function display(): string {
+    if (value == null) return "\u2014";
+    if (type === "currency") return formatCurrency(value);
+    if (type === "percent") return value ? `${value}%` : "\u2014";
+    return `${formatNumber(value)}${suffix || ""}`;
+  }
+
+  function commit() {
+    const n = Number(draft);
+    if (!isNaN(n) && n !== value) onSave(n);
+    setEditing(false);
+  }
+
+  return (
+    <div
+      className="bg-gradient-to-br from-[#fafafa] to-white dark:from-[#27272a] dark:to-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3 cursor-pointer hover:border-[#a1a1aa] dark:hover:border-[#52525b] transition-colors"
+      onClick={() => !editing && (setDraft(String(value ?? "")), setEditing(true))}
+    >
+      <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">{label}</p>
+      {editing ? (
+        <input
+          type="number"
+          value={draft}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+          onClick={(e) => e.stopPropagation()}
+          className="mt-1 w-full text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] bg-white dark:bg-[#18181b] border border-[#18181b] dark:border-[#fafafa] rounded px-1 py-0.5 focus:outline-none"
+        />
+      ) : (
+        <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] mt-1">{display()}</p>
+      )}
+    </div>
+  );
+}
+
+function EditableTextField({
+  value,
+  placeholder,
+  onSave,
+  className,
+}: {
+  value: string | undefined;
+  placeholder?: string;
+  onSave: (value: string) => void;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || "");
+
+  function commit() {
+    if (draft !== (value || "")) onSave(draft);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        value={draft}
+        autoFocus
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+        placeholder={placeholder}
+        className={cn(
+          "w-full bg-white dark:bg-[#18181b] border border-[#18181b] dark:border-[#fafafa] rounded px-2 py-1 focus:outline-none",
+          className
+        )}
+      />
+    );
+  }
+
+  return (
+    <p
+      className={cn(className, "cursor-text hover:bg-[#fafafa] dark:hover:bg-[#27272a] rounded px-1 -mx-1 transition-colors")}
+      onClick={() => { setDraft(value || ""); setEditing(true); }}
+    >
+      {value || placeholder || "\u2014"}
+    </p>
+  );
+}
+
+function EditableField({
+  label,
+  value,
+  icon,
+  options,
+  type,
+  displayValue,
+  onSave,
+}: {
+  label: string;
+  value: string | undefined;
+  icon?: React.ReactNode;
+  options?: string[];
+  type?: "text" | "date";
+  displayValue?: string;
+  onSave: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || "");
+
+  function commit() {
+    if (draft !== (value || "")) onSave(draft);
+    setEditing(false);
+  }
+
+  return (
+    <div>
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide mb-1 flex items-center gap-1">
+        {icon}
+        {label}
+      </p>
+      {editing ? (
+        options ? (
+          <select
+            value={draft}
+            autoFocus
+            onChange={(e) => { setDraft(e.target.value); onSave(e.target.value); setEditing(false); }}
+            onBlur={() => setEditing(false)}
+            className="w-full text-[12px] text-[#18181b] dark:text-[#fafafa] bg-white dark:bg-[#18181b] border border-[#18181b] dark:border-[#fafafa] rounded px-2 py-1 focus:outline-none"
+          >
+            {options.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        ) : (
+          <input
+            type={type || "text"}
+            value={draft}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+            className="w-full text-[12px] text-[#18181b] dark:text-[#fafafa] bg-white dark:bg-[#18181b] border border-[#18181b] dark:border-[#fafafa] rounded px-2 py-1 focus:outline-none"
+          />
+        )
+      ) : (
+        <p
+          className="text-[12px] text-[#18181b] dark:text-[#fafafa] cursor-text hover:bg-[#fafafa] dark:hover:bg-[#27272a] rounded px-1 -mx-1 py-0.5 transition-colors"
+          onClick={() => { setDraft(value || ""); setEditing(true); }}
+        >
+          {displayValue || value || "\u2014"}
+        </p>
+      )}
     </div>
   );
 }
