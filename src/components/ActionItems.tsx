@@ -23,11 +23,13 @@ const columnBorder: Record<KanbanColumn, string> = {
   done: "border-t-[#16a34a]",
 };
 
-function KanbanCard({ item, onMove, onRemove, onEdit }: {
+function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging }: {
   item: any;
-  onMove: (id: string, col: KanbanColumn) => void;
   onRemove: (id: string) => void;
   onEdit: (id: string, updates: { text?: string; priority?: string; assignedTo?: string }) => void;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+  isDragging: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
@@ -42,9 +44,16 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
   }
 
   return (
-    <div className="group bg-white border border-[#e4e4e7] rounded p-2.5 hover:border-[#a1a1aa] transition-colors">
+    <div
+      draggable={!editing}
+      onDragStart={() => onDragStart(item._id)}
+      onDragEnd={onDragEnd}
+      className={`group bg-white border border-[#e4e4e7] rounded p-2.5 hover:border-[#a1a1aa] transition-all ${
+        isDragging ? "opacity-40 scale-[0.98]" : ""
+      } ${!editing ? "cursor-grab active:cursor-grabbing" : ""}`}
+    >
       <div className="flex items-start gap-2">
-        <GripVertical size={12} className="text-[#d4d4d8] mt-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+        <GripVertical size={12} className="text-[#d4d4d8] mt-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
         <div className="flex-1 min-w-0">
           {editing ? (
             <div className="space-y-1.5">
@@ -80,60 +89,29 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
                 <span className="text-[9px] text-[#a1a1aa] capitalize">{item.priority}</span>
                 {item.assignedTo && (
                   <>
-                    <span className="text-[9px] text-[#d4d4d8]">·</span>
+                    <span className="text-[9px] text-[#d4d4d8]">\u00B7</span>
                     <span className="text-[9px] text-[#2563eb] font-medium">{item.assignedTo}</span>
                   </>
                 )}
                 {item.unit && (
                   <>
-                    <span className="text-[9px] text-[#d4d4d8]">·</span>
+                    <span className="text-[9px] text-[#d4d4d8]">\u00B7</span>
                     <span className="text-[9px] text-[#71717a] font-medium">{item.unit}</span>
                   </>
                 )}
-                <span className="text-[9px] text-[#d4d4d8]">·</span>
+                <span className="text-[9px] text-[#d4d4d8]">\u00B7</span>
                 <span className="text-[9px] text-[#a1a1aa]">{item.createdAt?.slice(0, 10)}</span>
               </div>
             </>
           )}
         </div>
         {!editing && (
-          <button onClick={() => onRemove(item._id)}
+          <button onClick={(e) => { e.stopPropagation(); onRemove(item._id); }}
             className="opacity-0 group-hover:opacity-100 text-[#a1a1aa] hover:text-[#dc2626] transition-all cursor-pointer">
             <X size={13} />
           </button>
         )}
       </div>
-      {/* Move buttons */}
-      {item.column !== "done" && (
-        <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          {item.column === "todo" && (
-            <button onClick={() => onMove(item._id, "in_progress")}
-              className="text-[9px] text-[#71717a] hover:text-[#18181b] px-1.5 py-0.5 border border-[#e4e4e7] rounded cursor-pointer transition-colors">
-              → In Progress
-            </button>
-          )}
-          {item.column === "in_progress" && (
-            <>
-              <button onClick={() => onMove(item._id, "todo")}
-                className="text-[9px] text-[#71717a] hover:text-[#18181b] px-1.5 py-0.5 border border-[#e4e4e7] rounded cursor-pointer transition-colors">
-                ← To Do
-              </button>
-              <button onClick={() => onMove(item._id, "done")}
-                className="text-[9px] text-[#71717a] hover:text-[#18181b] px-1.5 py-0.5 border border-[#e4e4e7] rounded cursor-pointer transition-colors">
-                → Done
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      {item.column === "done" && (
-        <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => onMove(item._id, "todo")}
-            className="text-[9px] text-[#71717a] hover:text-[#18181b] px-1.5 py-0.5 border border-[#e4e4e7] rounded cursor-pointer transition-colors">
-            ← Reopen
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -144,10 +122,8 @@ export default function ActionItems() {
   const [newText, setNewText] = useState("");
   const [newPriority, setNewPriority] = useState("medium");
   const [newAssignee, setNewAssignee] = useState("");
-
-  function handleMove(id: string, col: KanbanColumn) {
-    moveItem({ id: id as any, column: col });
-  }
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<KanbanColumn | null>(null);
 
   function handleRemove(id: string) {
     removeItem({ id: id as any });
@@ -163,6 +139,32 @@ export default function ActionItems() {
     setNewText("");
     setNewAssignee("");
     setShowAdd(false);
+  }
+
+  function handleDragStart(id: string) {
+    setDraggingId(id);
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null);
+    setDragOverCol(null);
+  }
+
+  function handleDragOver(e: React.DragEvent, col: KanbanColumn) {
+    e.preventDefault();
+    setDragOverCol(col);
+  }
+
+  function handleDrop(e: React.DragEvent, col: KanbanColumn) {
+    e.preventDefault();
+    if (draggingId) {
+      const item = items.find(i => i._id === draggingId);
+      if (item && item.column !== col) {
+        moveItem({ id: draggingId as any, column: col });
+      }
+    }
+    setDraggingId(null);
+    setDragOverCol(null);
   }
 
   return (
@@ -204,18 +206,37 @@ export default function ActionItems() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {columns.map(col => {
           const colItems = items.filter(i => i.column === col.key);
+          const isDropTarget = dragOverCol === col.key && draggingId !== null;
           return (
-            <div key={col.key} className={`bg-[#fafafa] border border-[#e4e4e7] border-t-2 ${columnBorder[col.key]} rounded p-2.5 min-h-[120px]`}>
+            <div
+              key={col.key}
+              onDragOver={(e) => handleDragOver(e, col.key)}
+              onDragLeave={() => setDragOverCol(null)}
+              onDrop={(e) => handleDrop(e, col.key)}
+              className={`bg-[#fafafa] border-2 border-t-2 ${columnBorder[col.key]} rounded p-2.5 min-h-[140px] transition-colors ${
+                isDropTarget ? "border-[#18181b] bg-[#f4f4f5]" : "border-[#e4e4e7]"
+              }`}
+            >
               <div className="flex items-center justify-between mb-2.5">
                 <p className="text-[11px] font-semibold text-[#18181b] uppercase tracking-wide">{col.label}</p>
                 <span className="text-[10px] text-[#a1a1aa] font-medium">{colItems.length}</span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 min-h-[80px]">
                 {colItems.map(item => (
-                  <KanbanCard key={item._id} item={item} onMove={handleMove} onRemove={handleRemove} onEdit={handleEdit} />
+                  <KanbanCard
+                    key={item._id}
+                    item={item}
+                    onRemove={handleRemove}
+                    onEdit={handleEdit}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    isDragging={draggingId === item._id}
+                  />
                 ))}
                 {colItems.length === 0 && (
-                  <p className="text-[10px] text-[#d4d4d8] text-center py-4">No items</p>
+                  <p className="text-[10px] text-[#d4d4d8] text-center py-4">
+                    {isDropTarget ? "Drop here" : "No items"}
+                  </p>
                 )}
               </div>
             </div>

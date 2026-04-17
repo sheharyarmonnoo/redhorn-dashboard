@@ -74,9 +74,24 @@ export function useDeals() {
   const createDeal = useMutation(api.deals.create);
   const updateStage = useMutation(api.deals.updateStage);
   const addNote = useMutation(api.deals.addNote);
-  const addEmail = useMutation(api.deals.addEmail);
+  const addTask = useMutation(api.deals.addTask);
+  const toggleTask = useMutation(api.deals.toggleTask);
+  const removeTask = useMutation(api.deals.removeTask);
+  const addDocument = useMutation(api.deals.addDocument);
+  const removeDocument = useMutation(api.deals.removeDocument);
   const removeDeal = useMutation(api.deals.remove);
-  return { deals: deals ?? [], createDeal, updateStage, addNote, addEmail, removeDeal };
+  return {
+    deals: deals ?? [],
+    createDeal,
+    updateStage,
+    addNote,
+    addTask,
+    toggleTask,
+    removeTask,
+    addDocument,
+    removeDocument,
+    removeDeal,
+  };
 }
 
 // ===== ACTION ITEMS =====
