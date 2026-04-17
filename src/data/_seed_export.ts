@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { tenants, ledgerA102, monthlyRevenue, getAlerts, formatCurrency } from "./tenants";
+import { tenants, ledgerA102, monthlyRevenue, getAlerts, formatCurrency } from "./_seed_tenants";
 
 function downloadWorkbook(wb: XLSX.WorkBook, filename: string) {
   XLSX.writeFile(wb, filename);

@@ -1,7 +1,7 @@
 // Client-side store for tenant overrides and action items.
 // Persists to localStorage — in production this would be a database.
 
-import { Tenant, tenants as seedTenants } from "./tenants";
+import { Tenant, tenants as seedTenants } from "./_seed_tenants";
 
 // --- Tenant Overrides ---
 
