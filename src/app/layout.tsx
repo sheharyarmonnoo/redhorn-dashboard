@@ -4,6 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import MainContent from "@/components/MainContent";
 import DataChat from "@/components/DataChat";
 import CommandPalette from "@/components/CommandPalette";
+import ConvexClientProvider from "@/components/ConvexClientProvider";
 
 export const metadata: Metadata = {
   title: "Redhorn Capital — Deal Manager AI",
@@ -19,10 +20,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="flex min-h-screen bg-[#f7f7f8]">
-        <Sidebar />
-        <MainContent>{children}</MainContent>
-        <DataChat />
-        <CommandPalette />
+        <ConvexClientProvider>
+          <Sidebar />
+          <MainContent>{children}</MainContent>
+          <DataChat />
+          <CommandPalette />
+        </ConvexClientProvider>
       </body>
     </html>
   );
