@@ -7,11 +7,10 @@ import PageHeader from "@/components/PageHeader";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-const now = new Date("2026-03-15");
-
 type UrgencyFilter = "all" | "Expired" | "Critical (<90d)" | "Warning (90-180d)" | "OK (180d+)";
 
 function getUrgency(leaseTo: string) {
+  const now = new Date();
   const end = new Date(leaseTo);
   if (end <= now) return "Expired";
   const days = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -21,18 +20,23 @@ function getUrgency(leaseTo: string) {
 }
 
 function daysUntil(date: string) {
-  return Math.ceil((new Date(date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.ceil((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
 function DaysRenderer(props: { value: number }) {
   const d = props.value;
-  const color = d <= 0 ? "text-[#dc2626]" : d <= 90 ? "text-[#dc2626]" : d <= 180 ? "text-[#d97706]" : "text-[#16a34a]";
-  return <span className={`font-semibold text-[12px] ${color}`}>{d <= 0 ? "EXPIRED" : `${d}d`}</span>;
+  // M3: Expired gets a distinct orange-red-on-tint badge so it's visibly different from Critical
+  if (d <= 0) {
+    return <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white">EXPIRED</span>;
+  }
+  const color = d <= 90 ? "text-[#dc2626]" : d <= 180 ? "text-[#d97706]" : "text-[#16a34a]";
+  return <span className={`font-semibold text-[12px] ${color}`}>{d}d</span>;
 }
 
 function UrgencyRenderer(props: { value: string }) {
+  // M3: Expired uses a distinct dark red so it reads differently from "Critical (<90d)"
   const dots: Record<string, string> = {
-    "Expired": "bg-[#dc2626]",
+    "Expired": "bg-[#7f1d1d]",
     "Critical (<90d)": "bg-[#dc2626]",
     "Warning (90-180d)": "bg-[#d97706]",
     "OK (180d+)": "bg-[#16a34a]",
@@ -79,7 +83,7 @@ export default function LeasesPage() {
 
   const filters: { key: UrgencyFilter; label: string; count: number; dot: string }[] = [
     { key: "all", label: "All", count: leaseData.length, dot: "bg-[#18181b] dark:bg-[#fafafa]" },
-    { key: "Expired", label: "Expired", count: counts.expired, dot: "bg-[#dc2626]" },
+    { key: "Expired", label: "Expired", count: counts.expired, dot: "bg-[#7f1d1d]" },
     { key: "Critical (<90d)", label: "Critical", count: counts.critical, dot: "bg-[#dc2626]" },
     { key: "Warning (90-180d)", label: "Warning", count: counts.warning, dot: "bg-[#d97706]" },
     { key: "OK (180d+)", label: "OK", count: counts.ok, dot: "bg-[#16a34a]" },

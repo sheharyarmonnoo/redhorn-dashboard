@@ -134,20 +134,32 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
       </nav>
 
       {/* User */}
-      <div className="px-4 py-3 border-t border-white/[0.06] flex items-center gap-2.5">
-        <UserButton appearance={{ elements: { avatarBox: "w-7 h-7" } }} />
-        <div className="leading-none min-w-0 flex-1">
-          <p className="text-[12px] text-white/80 font-medium truncate">{user?.fullName || firstName || "User"}</p>
-          <p className="text-[10px] text-white/30 truncate leading-relaxed pb-0.5">{user?.primaryEmailAddress?.emailAddress}</p>
+      {user ? (
+        <div className="px-4 py-3 border-t border-white/[0.06] flex items-center gap-2.5">
+          <UserButton appearance={{ elements: { avatarBox: "w-7 h-7" } }} />
+          <div className="leading-none min-w-0 flex-1">
+            <p className="text-[12px] text-white/80 font-medium truncate">{user.fullName || firstName}</p>
+            <p className="text-[10px] text-white/30 truncate leading-relaxed pb-0.5">{user.primaryEmailAddress?.emailAddress}</p>
+          </div>
+          <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="flex items-center justify-center w-7 h-7 rounded text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04] transition-colors cursor-pointer flex-shrink-0"
+          >
+            {theme === "dark" ? <Sun size={14} strokeWidth={1.5} /> : <Moon size={14} strokeWidth={1.5} />}
+          </button>
         </div>
-        <button
-          onClick={toggleTheme}
-          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          className="flex items-center justify-center w-7 h-7 rounded text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04] transition-colors cursor-pointer flex-shrink-0"
-        >
-          {theme === "dark" ? <Sun size={14} strokeWidth={1.5} /> : <Moon size={14} strokeWidth={1.5} />}
-        </button>
-      </div>
+      ) : (
+        <div className="px-4 py-3 border-t border-white/[0.06] flex items-center justify-end">
+          <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="flex items-center justify-center w-7 h-7 rounded text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04] transition-colors cursor-pointer flex-shrink-0"
+          >
+            {theme === "dark" ? <Sun size={14} strokeWidth={1.5} /> : <Moon size={14} strokeWidth={1.5} />}
+          </button>
+        </div>
+      )}
 
       <div className="px-4 py-2 pb-3 border-t border-white/[0.04] text-center">
         <p className="text-[9px] text-white/25 leading-relaxed">Powered by Deal Manager AI</p>

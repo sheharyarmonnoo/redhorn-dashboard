@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { tenants, Tenant } from "@/data/_seed_tenants";
+import { useActiveProperty, useTenants } from "@/hooks/useConvexData";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import SitePlan3D from "@/components/SitePlan3D";
@@ -8,12 +8,17 @@ import SitePlan3D from "@/components/SitePlan3D";
 type ViewMode = "layout" | "map";
 
 export default function SitePlanPage() {
-  const [selected, setSelected] = useState<Tenant | null>(null);
+  const property = useActiveProperty();
+  const tenantsList = useTenants(property?._id) as any[];
+  const [selected, setSelected] = useState<any | null>(null);
   const [view, setView] = useState<ViewMode>("layout");
 
-  const occupied = tenants.filter(t => t.status !== "vacant");
-  const pastDue = tenants.filter(t => t.status === "past_due");
-  const vacant = tenants.filter(t => t.status === "vacant");
+  const occupied = tenantsList.filter((t: any) => t.status !== "vacant");
+  const pastDue = tenantsList.filter((t: any) => t.status === "past_due");
+  const vacant = tenantsList.filter((t: any) => t.status === "vacant");
+
+  const propertyName = property?.name || "";
+  const propertyLocation = property?.location || "";
 
   return (
     <div>
@@ -44,25 +49,27 @@ export default function SitePlanPage() {
         <div className="w-full bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
           <div className="bg-[#18181b] dark:bg-[#09090b] text-white px-4 sm:px-5 py-3 flex items-center justify-between">
             <div>
-              <h2 className="text-[13px] font-semibold tracking-tight">Hollister Business Park</h2>
-              <p className="text-[10px] text-[#a1a1aa] mt-0.5">16261 Hollister St, Houston, TX 77066</p>
+              <h2 className="text-[13px] font-semibold tracking-tight">{propertyName || "Property"}</h2>
+              <p className="text-[10px] text-[#a1a1aa] mt-0.5">{propertyLocation || "—"}</p>
             </div>
-            <a
-              href="https://www.google.com/maps/place/16261+Hollister+St,+Houston,+TX+77066"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[10px] text-[#71717a] hover:text-white transition-colors cursor-pointer"
-            >
-              Open in Google Maps →
-            </a>
+            {propertyLocation && (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(propertyLocation)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-[#71717a] hover:text-white transition-colors cursor-pointer"
+              >
+                Open in Google Maps →
+              </a>
+            )}
           </div>
           <iframe
-            src="https://www.openstreetmap.org/export/embed.html?bbox=-95.5050%2C29.9490%2C-95.4910%2C29.9570&layer=mapnik&marker=29.9530%2C-95.4980"
+            src={`https://www.google.com/maps?q=${encodeURIComponent(propertyLocation || propertyName)}&output=embed`}
             width="100%"
             height="500"
             style={{ border: 0 }}
             loading="lazy"
-            title="Hollister Business Park — Houston, TX"
+            title={`${propertyName} — Map`}
           />
         </div>
       )}
@@ -70,7 +77,7 @@ export default function SitePlanPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-4">
         {[
-          { label: "Total Units", value: tenants.length, color: "text-[#18181b] dark:text-[#fafafa]" },
+          { label: "Total Units", value: tenantsList.length, color: "text-[#18181b] dark:text-[#fafafa]" },
           { label: "Occupied", value: occupied.length, color: "text-[#16a34a]" },
           { label: "Past Due", value: pastDue.length, color: "text-[#dc2626]" },
           { label: "Vacant", value: vacant.length, color: "text-[#71717a] dark:text-[#a1a1aa]" },
@@ -86,7 +93,7 @@ export default function SitePlanPage() {
       <div className="mt-4 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
         <p className="text-[12px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">All Units</p>
         <div className="flex flex-wrap gap-1">
-          {tenants.map(t => (
+          {tenantsList.map((t: any) => (
             <button
               key={t.unit}
               onClick={() => setSelected(t)}

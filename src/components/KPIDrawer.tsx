@@ -1,6 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
-import { tenants, monthlyRevenue, formatCurrency } from "@/data/_seed_tenants";
+import { useActiveProperty, useTenants, useMonthlyRevenue, formatCurrency } from "@/hooks/useConvexData";
+
+function useKpiData() {
+  const property = useActiveProperty();
+  const tenants = useTenants(property?._id) as any[];
+  const monthlyRevenue = useMonthlyRevenue(property?._id) as any[];
+  return { tenants, monthlyRevenue };
+}
 
 interface KPIDrawerProps {
   open: boolean;
@@ -18,10 +25,11 @@ function Field({ label, value, color }: { label: string; value: string; color?: 
 }
 
 function RevenueDetail() {
-  const occupied = tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner"));
-  const totalRent = occupied.reduce((s, t) => s + t.monthlyRent, 0);
-  const totalElectric = occupied.reduce((s, t) => s + t.monthlyElectric, 0);
-  const top5 = [...occupied].sort((a, b) => b.monthlyRent - a.monthlyRent).slice(0, 5);
+  const { tenants, monthlyRevenue } = useKpiData();
+  const occupied = tenants.filter((t: any) => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant?.includes("Owner"));
+  const totalRent = occupied.reduce((s: number, t: any) => s + t.monthlyRent, 0);
+  const totalElectric = occupied.reduce((s: number, t: any) => s + t.monthlyElectric, 0);
+  const top5 = [...occupied].sort((a: any, b: any) => b.monthlyRent - a.monthlyRent).slice(0, 5);
   const latest = monthlyRevenue[monthlyRevenue.length - 1];
   return (
     <div className="space-y-5">
@@ -50,30 +58,35 @@ function RevenueDetail() {
 }
 
 function OccupancyDetail() {
-  const occupied = tenants.filter(t => t.status !== "vacant");
-  const vacant = tenants.filter(t => t.status === "vacant");
-  const totalSqft = tenants.reduce((s, t) => s + t.sqft, 0);
-  const occSqft = occupied.reduce((s, t) => s + t.sqft, 0);
-  const buildings = ["A", "C", "D"] as const;
+  const { tenants } = useKpiData();
+  const occupied = tenants.filter((t: any) => t.status !== "vacant");
+  const vacant = tenants.filter((t: any) => t.status === "vacant");
+  const totalSqft = tenants.reduce((s: number, t: any) => s + t.sqft, 0);
+  const occSqft = occupied.reduce((s: number, t: any) => s + t.sqft, 0);
+  const buildings = Array.from(new Set(tenants.map((t: any) => t.building).filter(Boolean))).sort() as string[];
   return (
     <div className="space-y-5">
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Occupancy Summary</p>
         <Field label="Occupied Units" value={`${occupied.length} of ${tenants.length}`} />
         <Field label="Occupied SF" value={`${occSqft.toLocaleString()} of ${totalSqft.toLocaleString()}`} />
-        <Field label="Occupancy Rate" value={`${Math.round((occSqft / totalSqft) * 100)}%`} color="text-[#16a34a]" />
+        <Field label="Occupancy Rate" value={totalSqft > 0 ? `${Math.round((occSqft / totalSqft) * 100)}%` : "—"} color="text-[#16a34a]" />
       </div>
-      <div>
-        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">By Building</p>
-        {buildings.map(b => {
-          const all = tenants.filter(t => t.building === b);
-          const occ = all.filter(t => t.status !== "vacant");
-          return <Field key={b} label={`Building ${b}`} value={`${occ.length}/${all.length} units`} />;
-        })}
-      </div>
+      {buildings.length > 0 && (
+        <div>
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">By Building</p>
+          {buildings.map(b => {
+            const all = tenants.filter((t: any) => t.building === b);
+            const occ = all.filter((t: any) => t.status !== "vacant");
+            return <Field key={b} label={`Building ${b}`} value={`${occ.length}/${all.length} units`} />;
+          })}
+        </div>
+      )}
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Vacant Units</p>
-        {vacant.map(t => (
+        {vacant.length === 0 ? (
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No vacant units.</p>
+        ) : vacant.map((t: any) => (
           <Field key={t.unit} label={t.unit} value={`${t.sqft.toLocaleString()} SF${t.notes ? ` — ${t.notes}` : ""}`} />
         ))}
       </div>
@@ -82,8 +95,9 @@ function OccupancyDetail() {
 }
 
 function PastDueDetail() {
-  const pastDue = tenants.filter(t => t.pastDueAmount > 0);
-  const total = pastDue.reduce((s, t) => s + t.pastDueAmount, 0);
+  const { tenants } = useKpiData();
+  const pastDue = tenants.filter((t: any) => t.pastDueAmount > 0);
+  const total = pastDue.reduce((s: number, t: any) => s + t.pastDueAmount, 0);
   return (
     <div className="space-y-5">
       <div>
@@ -93,7 +107,9 @@ function PastDueDetail() {
       </div>
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Delinquent Tenants</p>
-        {pastDue.map(t => (
+        {pastDue.length === 0 ? (
+          <p className="text-[11px] text-[#16a34a]">No delinquent tenants.</p>
+        ) : pastDue.map((t: any) => (
           <div key={t.unit} className="py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
             <div className="flex items-center justify-between">
               <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} — {t.tenant}</span>
@@ -109,8 +125,9 @@ function PastDueDetail() {
 }
 
 function VacantDetail() {
-  const vacant = tenants.filter(t => t.status === "vacant");
-  const totalSF = vacant.reduce((s, t) => s + t.sqft, 0);
+  const { tenants } = useKpiData();
+  const vacant = tenants.filter((t: any) => t.status === "vacant");
+  const totalSF = vacant.reduce((s: number, t: any) => s + t.sqft, 0);
   return (
     <div className="space-y-5">
       <div>
@@ -120,7 +137,9 @@ function VacantDetail() {
       </div>
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Unit Details</p>
-        {vacant.map(t => (
+        {vacant.length === 0 ? (
+          <p className="text-[11px] text-[#16a34a]">Fully occupied.</p>
+        ) : vacant.map((t: any) => (
           <div key={t.unit} className="py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
             <div className="flex items-center justify-between">
               <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} (Bldg {t.building})</span>
@@ -137,9 +156,10 @@ function VacantDetail() {
 }
 
 function ElectricDetail() {
-  const netLease = tenants.filter(t => t.leaseType === "Office Net Lease" && t.tenant && !t.tenant.includes("Owner"));
-  const missing = netLease.filter(t => !t.electricPosted);
-  const posted = netLease.filter(t => t.electricPosted);
+  const { tenants } = useKpiData();
+  const netLease = tenants.filter((t: any) => t.leaseType === "Office Net Lease" && t.tenant && !t.tenant.includes("Owner"));
+  const missing = netLease.filter((t: any) => !t.electricPosted);
+  const posted = netLease.filter((t: any) => t.electricPosted);
   return (
     <div className="space-y-5">
       <div>
@@ -151,14 +171,16 @@ function ElectricDetail() {
       {missing.length > 0 && (
         <div>
           <p className="text-[10px] text-[#dc2626] uppercase tracking-wide font-medium mb-2">Not Posted</p>
-          {missing.map(t => (
+          {missing.map((t: any) => (
             <Field key={t.unit} label={`${t.unit} — ${t.tenant}`} value={`~${formatCurrency(t.monthlyElectric)}/mo`} color="text-[#dc2626]" />
           ))}
         </div>
       )}
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">All Net Lease</p>
-        {netLease.map(t => (
+        {netLease.length === 0 ? (
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No net-lease tenants.</p>
+        ) : netLease.map((t: any) => (
           <Field key={t.unit} label={`${t.unit} — ${t.tenant}`} value={t.electricPosted ? "Posted" : "NOT POSTED"} color={t.electricPosted ? "text-[#16a34a]" : "text-[#dc2626]"} />
         ))}
       </div>
@@ -167,8 +189,9 @@ function ElectricDetail() {
 }
 
 function ExpiringDetail() {
-  const expiring = tenants.filter(t => t.status === "expiring_soon");
-  const totalRent = expiring.reduce((s, t) => s + t.monthlyRent, 0);
+  const { tenants } = useKpiData();
+  const expiring = tenants.filter((t: any) => t.status === "expiring_soon");
+  const totalRent = expiring.reduce((s: number, t: any) => s + t.monthlyRent, 0);
   return (
     <div className="space-y-5">
       <div>
@@ -178,7 +201,9 @@ function ExpiringDetail() {
       </div>
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Lease Details</p>
-        {expiring.map(t => (
+        {expiring.length === 0 ? (
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No leases expiring in the next 90 days.</p>
+        ) : expiring.map((t: any) => (
           <div key={t.unit} className="py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
             <div className="flex items-center justify-between">
               <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} — {t.tenant}</span>

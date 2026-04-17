@@ -1,5 +1,8 @@
 "use client";
-import { tenants, Tenant, TenantStatus } from "@/data/_seed_tenants";
+import { useActiveProperty, useTenants } from "@/hooks/useConvexData";
+
+type TenantStatus = "current" | "past_due" | "locked_out" | "vacant" | "expiring_soon";
+type Tenant = any;
 
 function statusColor(status: TenantStatus) {
   switch (status) {
@@ -66,18 +69,31 @@ function BuildingHeader({ label, sub, occ, vac }: { label: string; sub: string; 
 }
 
 export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: Tenant) => void; selectedUnit: string | null }) {
-  const buildingA = tenants.filter(t => t.building === "A");
-  const buildingC_lower = tenants.filter(t => t.building === "C" && !t.unit.startsWith("C-3"));
-  const buildingC_upper = tenants.filter(t => t.building === "C" && t.unit.startsWith("C-3"));
-  const buildingD = tenants.filter(t => t.building === "D");
+  const property = useActiveProperty();
+  const tenants = useTenants(property?._id) as Tenant[];
+
+  // Group units dynamically by the `building` field on each unit, so this works
+  // for any property — not just Hollister's A / C (lower) / C (upper) / D layout.
+  const byBuilding: Record<string, Tenant[]> = {};
+  for (const t of tenants) {
+    const key = t.building || "—";
+    if (!byBuilding[key]) byBuilding[key] = [];
+    byBuilding[key].push(t);
+  }
+  const buildingGroups = Object.entries(byBuilding).sort(([a], [b]) => a.localeCompare(b));
+
+  const totalSqft = tenants.reduce((s, t) => s + (t.sqft || 0), 0);
+  const sqftLabel = totalSqft > 0 ? `~${Math.round(totalSqft / 1000)}K SF` : "";
 
   return (
     <div className="w-full bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
       {/* Header */}
       <div className="bg-[#18181b] dark:bg-[#09090b] text-white px-4 sm:px-5 py-3 flex items-center justify-between">
         <div>
-          <h2 className="text-[13px] font-semibold tracking-tight">Hollister Business Park</h2>
-          <p className="text-[10px] text-[#a1a1aa] mt-0.5">Houston, TX — ~325,000 SF</p>
+          <h2 className="text-[13px] font-semibold tracking-tight">{property?.name || "Property"}</h2>
+          <p className="text-[10px] text-[#a1a1aa] mt-0.5">
+            {[property?.location, sqftLabel].filter(Boolean).join(" — ") || "—"}
+          </p>
         </div>
         <div className="flex items-center gap-3 text-[9px] text-[#a1a1aa]">
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#16a34a]" /> Current</span>
@@ -88,68 +104,31 @@ export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: T
       </div>
 
       <div className="p-3 sm:p-4 space-y-3 bg-[#fafafa] dark:bg-[#27272a]">
-        {/* Building A + Building D */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-          <div className="lg:col-span-8 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4">
-            <BuildingHeader label="Building A" sub="Industrial / Warehouse"
-              occ={buildingA.filter(u => u.status !== "vacant").length}
-              vac={buildingA.filter(u => u.status === "vacant").length} />
-            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-1.5">
-              {buildingA.map(t => (
-                <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
-              ))}
+        {buildingGroups.length === 0 ? (
+          <div className="bg-white dark:bg-[#18181b] border border-dashed border-[#e4e4e7] dark:border-[#3f3f46] rounded p-8 text-center">
+            <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">No units loaded for this property yet.</p>
+          </div>
+        ) : (
+          buildingGroups.map(([building, units]) => (
+            <div key={building} className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4">
+              <BuildingHeader
+                label={building === "—" ? "Unassigned" : `Building ${building}`}
+                sub={`${units.length} unit${units.length === 1 ? "" : "s"}`}
+                occ={units.filter(u => u.status !== "vacant").length}
+                vac={units.filter(u => u.status === "vacant").length}
+              />
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-1.5">
+                {units.map(t => (
+                  <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="lg:col-span-4 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4">
-            <BuildingHeader label="Building D" sub="Warehouse / Industrial"
-              occ={buildingD.filter(u => u.status !== "vacant").length}
-              vac={buildingD.filter(u => u.status === "vacant").length} />
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
-              {buildingD.map(t => (
-                <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Road */}
-        <div className="flex items-center gap-2">
-          <div className="flex-1 h-5 bg-[#3f3f46] dark:bg-[#18181b] rounded flex items-center justify-center">
-            <span className="text-[8px] text-[#a1a1aa] tracking-[0.15em] font-medium">HOLLISTER RD</span>
-          </div>
-          <div className="flex-1 h-5 bg-[#e4e4e7] dark:bg-[#3f3f46] rounded flex items-center justify-center">
-            <span className="text-[8px] text-[#71717a] dark:text-[#a1a1aa] tracking-wider font-medium">PARKING</span>
-          </div>
-        </div>
-
-        {/* Building C — Floors 1 & 2 */}
-        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4">
-          <BuildingHeader label="Building C — Floors 1 & 2" sub="Office Suites"
-            occ={buildingC_lower.filter(u => u.status !== "vacant").length}
-            vac={buildingC_lower.filter(u => u.status === "vacant").length} />
-          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-9 gap-1.5">
-            {buildingC_lower.map(t => (
-              <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
-            ))}
-          </div>
-        </div>
-
-        {/* Building C — Floor 3 */}
-        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4">
-          <BuildingHeader label="Building C — Floor 3" sub="Office Suites (Upper)"
-            occ={buildingC_upper.filter(u => u.status !== "vacant").length}
-            vac={buildingC_upper.filter(u => u.status === "vacant").length} />
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-8 gap-1.5">
-            {buildingC_upper.map(t => (
-              <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
-            ))}
-          </div>
-        </div>
+          ))
+        )}
       </div>
 
       {/* Footer */}
       <div className="px-4 py-2 border-t border-[#e4e4e7] dark:border-[#3f3f46] flex items-center gap-4 text-[9px] text-[#a1a1aa] dark:text-[#71717a]">
-        <span>Last updated: Mar 15, 2026 2:30 PM</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#dc2626]" /> Past due</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#d97706]" /> Electric missing</span>
       </div>

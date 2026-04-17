@@ -166,6 +166,9 @@ export default function AlertsPage() {
 
   const alertData = useMemo<AlertRow[]>(() => {
     const alerts: AlertRow[] = [];
+    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const currentMonth = now.toLocaleString("en-US", { month: "long", year: "numeric" });
 
     // Electric not posted
     tenants.filter((t: any) => t.leaseType === "Office Net Lease" && !t.electricPosted && t.tenant && !t.tenant.includes("Owner"))
@@ -173,8 +176,8 @@ export default function AlertsPage() {
         alerts.push({
           id: `elec-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,
           category: "Electric Not Posted", severity: "Critical",
-          detail: `Expected ~${formatCurrency(t.monthlyElectric)}/mo — not posted for March 2026`,
-          amount: t.monthlyElectric, date: "2026-03-12",
+          detail: `Expected ~${formatCurrency(t.monthlyElectric)}/mo — not posted for ${currentMonth}`,
+          amount: t.monthlyElectric, date: today,
         });
       });
 
@@ -185,7 +188,7 @@ export default function AlertsPage() {
           id: `pd-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,
           category: "Past Due", severity: "Critical",
           detail: `${formatCurrency(t.pastDueAmount)} outstanding — last paid ${t.lastPaymentDate}`,
-          amount: t.pastDueAmount, date: "2026-03-12",
+          amount: t.pastDueAmount, date: today,
         });
       });
 
@@ -201,7 +204,7 @@ export default function AlertsPage() {
       });
 
     // Holdovers
-    tenants.filter((t: any) => t.leaseTo && new Date(t.leaseTo) < new Date("2026-03-15") && t.status !== "vacant" && !t.tenant.includes("Owner"))
+    tenants.filter((t: any) => t.leaseTo && new Date(t.leaseTo) < now && t.status !== "vacant" && !t.tenant.includes("Owner"))
       .forEach((t: any) => {
         alerts.push({
           id: `hold-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,

@@ -62,8 +62,40 @@ export default function DealsPage() {
       assignedTo: "Max",
       contacts: [],
     });
-    // Open the drawer — the live deal will show once it arrives via the reactive query
+    // Mark this id as a draft so we can auto-delete it on close if the user didn't edit anything
+    draftDealIdRef.current = id as any;
     setSelectedDeal({ _id: id, name: "New Deal", address: "", city: "Houston", state: "TX", propertyType: "Office/Warehouse", sqft: 0, units: 0, askingPrice: 0, stage: "lead", source: "", assignedTo: "Max", contacts: [], notes: [], emails: [], tasks: [], documents: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  }
+
+  // M9: track the most recently created "New Deal" so we can clean it up if the user closes the drawer without editing
+  const draftDealIdRef = useRef<any>(null);
+
+  function isUntouchedDraft(d: any) {
+    if (!d) return false;
+    return (
+      d.name === "New Deal" &&
+      !d.address &&
+      (d.askingPrice ?? 0) === 0 &&
+      (d.sqft ?? 0) === 0 &&
+      (d.units ?? 0) === 0 &&
+      !d.source &&
+      (!d.notes || d.notes.length === 0) &&
+      (!d.tasks || d.tasks.length === 0) &&
+      (!d.documents || d.documents.length === 0) &&
+      d.stage === "lead"
+    );
+  }
+
+  function handleCloseDrawer() {
+    const draftId = draftDealIdRef.current;
+    if (draftId) {
+      const live = deals.find((d: any) => d._id === draftId);
+      if (live && isUntouchedDraft(live)) {
+        removeDeal({ id: draftId });
+      }
+    }
+    draftDealIdRef.current = null;
+    setSelectedDeal(null);
   }
 
   function handleDeleteDeal(id: any) {
@@ -335,9 +367,9 @@ export default function DealsPage() {
         return (
           <DealDetail
             deal={liveDeal}
-            onClose={() => setSelectedDeal(null)}
+            onClose={handleCloseDrawer}
             onStageChange={handleStageChange}
-            onDelete={() => { setSelectedDeal(null); }}
+            onDelete={() => { draftDealIdRef.current = null; setSelectedDeal(null); }}
             updateField={updateField}
             addNote={addNote}
             addTask={addTask}

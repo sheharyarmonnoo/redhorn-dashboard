@@ -648,33 +648,32 @@ export default function DataPipelinePage() {
   const syncJobs = useSyncJobs();
   const [selectedFile, setSelectedFile] = useState<FileSyncRow | null>(null);
   const [activeSection, setActiveSection] = useState<"approval" | "workflow" | "protocol" | "triggers">("approval");
-  const [syncing, setSyncing] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
 
-  // Use Convex sync jobs if available, otherwise fall back to hardcoded data
+  // Only show real sync jobs from Convex — no more hardcoded fallback that pretends to be real data.
   const syncData = useMemo(() => {
-    if (syncJobs.length > 0) {
-      return syncJobs.map((job: any, idx: number) => ({
-        id: job._id || idx + 1,
-        filename: job.filename,
-        source: job.source,
-        type: job.type,
-        records: job.records ?? 0,
-        size: job.size ?? "",
-        status: job.status,
-        syncedAt: job.syncedAt,
-        statusDetail: job.statusDetail,
-        affectedUnits: job.affectedUnits,
-        resolution: job.resolution,
-      }));
-    }
-    return fileSyncHistory;
+    return syncJobs.map((job: any, idx: number) => ({
+      id: job._id || idx + 1,
+      filename: job.filename,
+      source: job.source,
+      type: job.type,
+      records: job.records ?? 0,
+      size: job.size ?? "",
+      status: job.status,
+      syncedAt: job.syncedAt,
+      statusDetail: job.statusDetail,
+      affectedUnits: job.affectedUnits,
+      resolution: job.resolution,
+    }));
   }, [syncJobs]);
 
-  function handleUpdateNow() {
-    setSyncing(true);
-    setTimeout(() => setSyncing(false), 3000);
-  }
+  const lastSyncLabel = useMemo(() => {
+    if (syncData.length === 0) return "No syncs yet";
+    const latest = [...syncData].sort((a: any, b: any) =>
+      (b.syncedAt || "").localeCompare(a.syncedAt || "")
+    )[0];
+    return latest?.syncedAt ? `Last sync ${latest.syncedAt}` : "";
+  }, [syncData]);
 
   const columnDefs = useMemo<ColDef[]>(() => {
     if (isMobile) {
@@ -738,11 +737,9 @@ export default function DataPipelinePage() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-3">
-          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">{syncData.length} files · Last sync Mar 12, 2026</p>
-          <button onClick={handleUpdateNow} disabled={syncing}
-            className={`text-[10px] cursor-pointer transition-colors ${syncing ? "text-[#a1a1aa] dark:text-[#71717a]" : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] underline decoration-dotted"}`}>
-            {syncing ? "Updating..." : "Update now"}
-          </button>
+          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">
+            {syncData.length} file{syncData.length === 1 ? "" : "s"} · {lastSyncLabel}
+          </p>
         </div>
         <input
           type="text"
@@ -752,7 +749,16 @@ export default function DataPipelinePage() {
         />
       </div>
 
-      <div className="ag-theme-alpine w-full rounded overflow-hidden border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: isMobile ? 450 : 480 }}>
+      {syncData.length === 0 && (
+        <div className="w-full border border-dashed border-[#e4e4e7] dark:border-[#3f3f46] rounded p-8 text-center mb-3 bg-white dark:bg-[#18181b]">
+          <p className="text-[13px] text-[#71717a] dark:text-[#a1a1aa] mb-1">No syncs yet</p>
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">
+            Sync history will appear here automatically once the Yardi integration runs.
+            You can also use the <span className="font-medium">Upload</span> button above to ingest a file manually.
+          </p>
+        </div>
+      )}
+      <div className="ag-theme-alpine w-full rounded overflow-hidden border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: isMobile ? 450 : 480, display: syncData.length === 0 ? "none" : "block" }}>
         <AgGridReact
           ref={gridRef}
           rowData={syncData}
@@ -787,6 +793,15 @@ export default function DataPipelinePage() {
           </button>
         ))}
       </div>
+
+      {(activeSection === "approval" || activeSection === "triggers") && (
+        <div className="mt-3 mb-3 flex items-start gap-2 text-[11px] text-[#d97706] dark:text-[#fbbf24] bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded px-3 py-2">
+          <span className="font-semibold">Preview</span>
+          <span className="text-[#71717a] dark:text-[#a1a1aa]">
+            This section shows how {activeSection === "approval" ? "the pending-changes approval queue" : "scheduled sync triggers"} will look. It is not yet wired to live data.
+          </span>
+        </div>
+      )}
 
       {activeSection === "approval" && (
         <SyncApprovalQueue />

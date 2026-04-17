@@ -64,17 +64,22 @@ export default function DashboardPage() {
   const expiringCount = tenants.filter(t => t.status === "expiring_soon").length;
 
   // Generate alerts from tenant data
+  const today = new Date().toISOString().slice(0, 10);
+  const urgentLeaseCutoff = new Date();
+  urgentLeaseCutoff.setDate(urgentLeaseCutoff.getDate() + 30);
+  const urgentLeaseCutoffISO = urgentLeaseCutoff.toISOString().slice(0, 10);
+
   const alerts: { type: string; message: string; unit: string; date: string }[] = [];
   for (const t of tenants) {
     if (t.status === "vacant") continue;
     if (t.leaseType === "Office Net Lease" && !t.electricPosted && t.tenant) {
-      alerts.push({ type: "critical", message: "Electric not posted", unit: t.unit, date: "2026-03-01" });
+      alerts.push({ type: "critical", message: "Electric not posted", unit: t.unit, date: today });
     }
     if (t.pastDueAmount > 0) {
-      alerts.push({ type: "critical", message: `Past due: ${formatCurrency(t.pastDueAmount)}`, unit: t.unit, date: "2026-03-01" });
+      alerts.push({ type: "critical", message: `Past due: ${formatCurrency(t.pastDueAmount)}`, unit: t.unit, date: today });
     }
     if (t.status === "expiring_soon") {
-      const isUrgent = t.leaseTo <= "2026-03-31";
+      const isUrgent = t.leaseTo <= urgentLeaseCutoffISO;
       alerts.push({ type: isUrgent ? "critical" : "warning", message: `Lease expires ${t.leaseTo}`, unit: t.unit, date: t.leaseTo });
     }
   }
@@ -88,7 +93,8 @@ export default function DashboardPage() {
     chart: { type: "bar", toolbar: { show: false }, fontFamily: chartFont, background: "transparent" },
     theme: { mode: isDark ? "dark" : "light" },
     plotOptions: { bar: { borderRadius: 2, columnWidth: "55%" } },
-    colors: isDark ? ["#fafafa", "#a1a1aa", "#52525b"] : ["#18181b", "#71717a", "#d4d4d8"],
+    // M1: warmer accent for dark mode so bars don't look like snow on white; clear hierarchy between series
+    colors: isDark ? ["#e4e4e7", "#a1a1aa", "#52525b"] : ["#18181b", "#71717a", "#d4d4d8"],
     xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: axisColor, fontSize: "11px" } } },
     yaxis: { labels: { style: { colors: axisColor, fontSize: "11px" }, formatter: (v: number) => `$${(v / 1000).toFixed(0)}k` } },
     grid: { borderColor: gridColor, strokeDashArray: 0 },
@@ -196,7 +202,7 @@ export default function DashboardPage() {
       </div>
 
       {/* PM Call Prep */}
-      <div className="bg-white border border-[#e4e4e7] rounded p-4">
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
         <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-4">Weekly PM Call Prep</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>

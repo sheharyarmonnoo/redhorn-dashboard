@@ -119,7 +119,7 @@ export default function RentRollPage() {
 
   return (
     <div>
-      <PageHeader title="Rent Roll" subtitle="All units as of March 2026 — Tap any row for details">
+      <PageHeader title="Rent Roll" subtitle={`All units as of ${new Date().toLocaleString("en-US", { month: "long", year: "numeric" })} — Tap any row for details`}>
         <button onClick={exportRentRoll} className="flex items-center gap-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] hover:border-[#4f6ef7] text-[#5a5e73] dark:text-[#a1a1aa] hover:text-[#4f6ef7] text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
           <Download size={13} /> Export .xlsx
         </button>
