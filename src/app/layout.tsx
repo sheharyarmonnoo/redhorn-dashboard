@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import MainContent from "@/components/MainContent";
-import DataChat from "@/components/DataChat";
-import CommandPalette from "@/components/CommandPalette";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 
 export const metadata: Metadata = {
@@ -23,8 +21,6 @@ export default function RootLayout({
         <ConvexClientProvider>
           <Sidebar />
           <MainContent>{children}</MainContent>
-          <DataChat />
-          <CommandPalette />
         </ConvexClientProvider>
       </body>
     </html>

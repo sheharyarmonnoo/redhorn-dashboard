@@ -1,7 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
+import { AgGridReact } from "ag-grid-react";
+import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
 import { useActivityLog } from "@/hooks/useConvexData";
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 
 type ActivityType = "task_added" | "task_completed" | "task_assigned" | "status_change" | "note_added" | "deal_update" | "alert_created" | "alert_resolved" | "email_sent" | "sync" | "login";
 
@@ -30,23 +34,6 @@ const typeLabels: Record<ActivityType, string> = {
   login: "Login",
 };
 
-function getActivityIcon(type: ActivityType): string {
-  const map: Record<ActivityType, string> = {
-    task_added: "+",
-    task_completed: "\u2713",
-    task_assigned: "\u2192",
-    status_change: "\u2191",
-    note_added: "\u270E",
-    deal_update: "$",
-    alert_created: "!",
-    alert_resolved: "\u2713",
-    email_sent: "\u2709",
-    sync: "\u21BB",
-    login: "\u25CF",
-  };
-  return map[type];
-}
-
 function getActivityColor(type: ActivityType): string {
   const map: Record<ActivityType, string> = {
     task_added: "bg-[#2563eb]",
@@ -64,20 +51,55 @@ function getActivityColor(type: ActivityType): string {
   return map[type];
 }
 
+function TypeCellRenderer(props: { value: ActivityType }) {
+  return (
+    <span className={`text-[9px] font-medium px-2 py-0.5 rounded text-white whitespace-nowrap ${getActivityColor(props.value)}`}>
+      {typeLabels[props.value]}
+    </span>
+  );
+}
+
+function TimestampCellRenderer(props: { value: string }) {
+  if (!props.value) return <span>\u2014</span>;
+  const d = new Date(props.value);
+  return (
+    <div className="text-[11px]">
+      <div className="text-[#18181b]">{d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+      <div className="text-[10px] text-[#a1a1aa]">{d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
+    </div>
+  );
+}
+
 export default function ActivityPage() {
   const entries = useActivityLog() as ActivityEntry[];
   const [filter, setFilter] = useState<string>("all");
+  const gridRef = useRef<AgGridReact>(null);
 
   const types: ActivityType[] = Array.from(new Set(entries.map(e => e.type)));
   const filtered = filter === "all" ? entries : entries.filter(e => e.type === filter);
 
-  // Group by date
-  const grouped: Record<string, ActivityEntry[]> = {};
-  for (const entry of filtered) {
-    const date = new Date(entry.createdAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
-    if (!grouped[date]) grouped[date] = [];
-    grouped[date].push(entry);
-  }
+  const columnDefs = useMemo<ColDef[]>(() => [
+    { field: "createdAt", headerName: "When", width: 170, cellRenderer: TimestampCellRenderer,
+      sort: "desc",
+      comparator: (a: string, b: string) => new Date(a).getTime() - new Date(b).getTime() },
+    { field: "type", headerName: "Type", width: 150, cellRenderer: TypeCellRenderer, filter: true },
+    { field: "description", headerName: "Description", minWidth: 300, flex: 2, wrapText: true, autoHeight: true },
+    { field: "user", headerName: "User", width: 110, filter: true },
+    { field: "unit", headerName: "Unit", width: 100, filter: true,
+      valueFormatter: (p: any) => p.value || "\u2014" },
+  ], []);
+
+  const defaultColDef = useMemo<ColDef>(() => ({
+    sortable: true,
+    resizable: true,
+    filter: true,
+  }), []);
+
+  const onGridReady = useCallback((params: GridReadyEvent) => {
+    if (window.innerWidth >= 768) {
+      params.api.sizeColumnsToFit();
+    }
+  }, []);
 
   return (
     <div>
@@ -121,56 +143,19 @@ export default function ActivityPage() {
         ))}
       </div>
 
-      {/* Timeline */}
-      <div className="space-y-6">
-        {Object.entries(grouped).map(([date, dayEntries]) => (
-          <div key={date}>
-            <p className="text-[11px] font-semibold text-[#71717a] uppercase tracking-wide mb-3 sticky top-0 bg-[#fafafa] py-1 z-10">{date}</p>
-            <div className="space-y-0">
-              {dayEntries.map((entry, idx) => (
-                <div key={entry._id ?? entry.id} className="flex gap-3 group">
-                  {/* Timeline line + dot */}
-                  <div className="flex flex-col items-center">
-                    <div className={`w-6 h-6 rounded-full ${getActivityColor(entry.type)} flex items-center justify-center flex-shrink-0`}>
-                      <span className="text-[10px] text-white font-bold">{getActivityIcon(entry.type)}</span>
-                    </div>
-                    {idx < dayEntries.length - 1 && <div className="w-px flex-1 bg-[#e4e4e7] min-h-[16px]" />}
-                  </div>
-
-                  {/* Content */}
-                  <div className="pb-4 flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[12px] text-[#18181b] leading-relaxed">{entry.description}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-[#a1a1aa]">{entry.user}</span>
-                          {entry.unit && (
-                            <>
-                              <span className="text-[10px] text-[#d4d4d8]">·</span>
-                              <span className="text-[10px] text-[#71717a] font-medium">{entry.unit}</span>
-                            </>
-                          )}
-                          <span className="text-[10px] text-[#d4d4d8]">·</span>
-                          <span className="text-[10px] text-[#a1a1aa]">
-                            {new Date(entry.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                          </span>
-                        </div>
-                      </div>
-                      <span className={`text-[9px] font-medium px-2 py-0.5 rounded text-white whitespace-nowrap ${getActivityColor(entry.type)}`}>
-                        {typeLabels[entry.type]}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+      {/* Activity Grid */}
+      <div className="ag-theme-quartz" style={{ height: 620, width: "100%" }}>
+        <AgGridReact
+          ref={gridRef}
+          rowData={filtered}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          onGridReady={onGridReady}
+          headerHeight={36}
+          rowHeight={56}
+          suppressCellFocus={true}
+        />
       </div>
-
-      {filtered.length === 0 && (
-        <p className="text-[12px] text-[#a1a1aa] text-center py-10">No activity to show</p>
-      )}
     </div>
   );
 }

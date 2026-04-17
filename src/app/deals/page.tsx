@@ -1,11 +1,32 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
+import { AgGridReact } from "ag-grid-react";
+import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
 import { DealStage, getStageLabel, getStageColor, emailTemplates } from "@/data/_seed_deals";
 import { useDeals, formatCurrency } from "@/hooks/useConvexData";
-import { Plus, X, ChevronDown, Send, MessageSquare, Mail, Trash2, ExternalLink } from "lucide-react";
+import { Plus, X, Send, Trash2 } from "lucide-react";
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 
 const stages: DealStage[] = ["lead", "outreach", "underwriting", "loi", "due_diligence", "closing", "closed", "dead"];
+
+function StageCellRenderer(props: { value: string }) {
+  const stage = props.value as DealStage;
+  return (
+    <span className={`text-[10px] font-medium px-2 py-0.5 rounded text-white ${getStageColor(stage)}`}>
+      {getStageLabel(stage)}
+    </span>
+  );
+}
+
+function CurrencyCellRenderer(props: { value: number }) {
+  return <span>{props.value > 0 ? formatCurrency(props.value) : "\u2014"}</span>;
+}
+
+function PercentCellRenderer(props: { value: number }) {
+  return <span>{props.value ? `${props.value}%` : "\u2014"}</span>;
+}
 
 function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }: {
   deal: any;
@@ -59,7 +80,6 @@ function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }:
     setSelectedTemplate(String(idx));
   }
 
-  // Use real-time data from Convex (deal auto-updates via reactive query)
   const currentDeal = allDeals.find((d: any) => d._id === deal._id) || deal;
   const notes = currentDeal.notes || [];
   const emails = currentDeal.emails || [];
@@ -68,7 +88,6 @@ function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }:
     <>
       <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
       <div className="fixed right-0 top-0 h-screen w-full max-w-[560px] bg-white z-50 flex flex-col shadow-lg overflow-hidden">
-        {/* Header */}
         <div className="px-5 py-4 border-b border-[#e4e4e7] flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <p className="text-[15px] font-semibold text-[#18181b] truncate">{currentDeal.name}</p>
@@ -79,7 +98,6 @@ function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }:
           </button>
         </div>
 
-        {/* Stage selector */}
         <div className="px-5 py-3 border-b border-[#e4e4e7] flex items-center gap-2 overflow-x-auto">
           {stages.map(s => (
             <button key={s} onClick={() => handleStageChange(s)}
@@ -91,7 +109,6 @@ function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }:
           ))}
         </div>
 
-        {/* Tabs */}
         <div className="px-5 border-b border-[#e4e4e7] flex gap-4">
           {(["overview", "notes", "emails"] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
@@ -103,7 +120,6 @@ function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }:
           ))}
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
           {activeTab === "overview" && (
             <div className="space-y-4">
@@ -144,7 +160,6 @@ function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }:
                 </div>
               </div>
 
-              {/* Contacts */}
               <div>
                 <p className="text-[11px] font-semibold text-[#18181b] uppercase tracking-wide mb-2">Contacts</p>
                 <div className="space-y-2">
@@ -184,7 +199,7 @@ function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }:
                 {notes.map((note: any, idx: number) => (
                   <div key={note.id || idx} className="border-l-2 border-[#e4e4e7] pl-3">
                     <p className="text-[12px] text-[#18181b] leading-relaxed">{note.text}</p>
-                    <p className="text-[10px] text-[#a1a1aa] mt-1">{note.author} · {new Date(note.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+                    <p className="text-[10px] text-[#a1a1aa] mt-1">{note.author} \u00B7 {new Date(note.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
                   </div>
                 ))}
                 {notes.length === 0 && <p className="text-[12px] text-[#a1a1aa] text-center py-6">No notes yet</p>}
@@ -242,7 +257,7 @@ function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }:
                       <p className="text-[11px] font-medium text-[#18181b]">{email.subject}</p>
                       <span className="text-[9px] text-[#a1a1aa]">{new Date(email.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
                     </div>
-                    <p className="text-[10px] text-[#71717a] mb-1.5">To: {email.to} · From: {email.sentBy}</p>
+                    <p className="text-[10px] text-[#71717a] mb-1.5">To: {email.to} \u00B7 From: {email.sentBy}</p>
                     <p className="text-[11px] text-[#52525b] leading-relaxed whitespace-pre-line line-clamp-4">{email.body}</p>
                   </div>
                 ))}
@@ -259,9 +274,10 @@ function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }:
 export default function DealsPage() {
   const { deals, createDeal, updateStage, addNote, addEmail, removeDeal } = useDeals();
   const [selectedDeal, setSelectedDeal] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<"pipeline" | "table">("pipeline");
+  const [viewMode, setViewMode] = useState<"pipeline" | "table">("table");
   const [showAddForm, setShowAddForm] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", address: "", city: "Houston", state: "TX", propertyType: "Office/Warehouse", sqft: "", units: "", askingPrice: "", source: "", assignedTo: "Max" });
+  const gridRef = useRef<AgGridReact>(null);
 
   function handleAddDeal() {
     if (!addForm.name.trim() || !addForm.address.trim()) return;
@@ -288,6 +304,59 @@ export default function DealsPage() {
     removeDeal({ id });
     if (selectedDeal?._id === id) setSelectedDeal(null);
   }
+
+  const columnDefs = useMemo<ColDef[]>(() => [
+    { field: "name", headerName: "Property", minWidth: 200, flex: 1, pinned: "left",
+      cellRenderer: (p: any) => (
+        <div>
+          <div className="font-medium text-[#18181b]">{p.data.name}</div>
+          <div className="text-[10px] text-[#a1a1aa]">{p.data.city}, {p.data.state}</div>
+        </div>
+      ) },
+    { field: "stage", headerName: "Stage", width: 140, cellRenderer: StageCellRenderer, filter: true },
+    { field: "askingPrice", headerName: "Asking Price", width: 130, type: "numericColumn", cellRenderer: CurrencyCellRenderer },
+    { field: "capRate", headerName: "Cap Rate", width: 100, type: "numericColumn", cellRenderer: PercentCellRenderer },
+    { field: "pricePerSF", headerName: "$/SF", width: 90, type: "numericColumn",
+      valueFormatter: (p: any) => p.value ? `$${p.value}` : "\u2014" },
+    { field: "sqft", headerName: "Sq Ft", width: 100, type: "numericColumn",
+      valueFormatter: (p: any) => p.value?.toLocaleString() || "\u2014" },
+    { field: "units", headerName: "Units", width: 80, type: "numericColumn" },
+    { field: "propertyType", headerName: "Type", width: 140, filter: true },
+    { field: "assignedTo", headerName: "Assigned", width: 110, filter: true },
+    { field: "source", headerName: "Source", minWidth: 150, flex: 1 },
+    {
+      headerName: "",
+      width: 60,
+      sortable: false,
+      filter: false,
+      cellRenderer: (p: any) => (
+        <button
+          onClick={(e) => { e.stopPropagation(); handleDeleteDeal(p.data._id); }}
+          className="text-[#d4d4d8] hover:text-[#dc2626] cursor-pointer transition-colors"
+          title="Delete deal"
+        >
+          <Trash2 size={13} />
+        </button>
+      ),
+    },
+  ], []);
+
+  const defaultColDef = useMemo<ColDef>(() => ({
+    sortable: true,
+    resizable: true,
+    filter: true,
+    suppressMovable: false,
+  }), []);
+
+  const onGridReady = useCallback((params: GridReadyEvent) => {
+    if (window.innerWidth >= 768) {
+      params.api.sizeColumnsToFit();
+    }
+  }, []);
+
+  const onRowClicked = useCallback((event: RowClickedEvent) => {
+    setSelectedDeal(event.data);
+  }, []);
 
   const activeDeals = deals.filter((d: any) => d.stage !== "dead" && d.stage !== "closed");
   const totalPipeline = activeDeals.reduce((s: number, d: any) => s + d.askingPrice, 0);
@@ -319,13 +388,13 @@ export default function DealsPage() {
       {/* Controls */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex gap-1">
-          <button onClick={() => setViewMode("pipeline")}
-            className={`text-[11px] font-medium px-3 py-1.5 rounded cursor-pointer transition-colors ${viewMode === "pipeline" ? "bg-[#18181b] text-white" : "text-[#71717a] hover:bg-[#f4f4f5]"}`}>
-            Pipeline
-          </button>
           <button onClick={() => setViewMode("table")}
             className={`text-[11px] font-medium px-3 py-1.5 rounded cursor-pointer transition-colors ${viewMode === "table" ? "bg-[#18181b] text-white" : "text-[#71717a] hover:bg-[#f4f4f5]"}`}>
             Table
+          </button>
+          <button onClick={() => setViewMode("pipeline")}
+            className={`text-[11px] font-medium px-3 py-1.5 rounded cursor-pointer transition-colors ${viewMode === "pipeline" ? "bg-[#18181b] text-white" : "text-[#71717a] hover:bg-[#f4f4f5]"}`}>
+            Pipeline
           </button>
         </div>
         <button onClick={() => setShowAddForm(true)}
@@ -380,6 +449,24 @@ export default function DealsPage() {
         </div>
       )}
 
+      {/* Table View (AG Grid) */}
+      {viewMode === "table" && (
+        <div className="ag-theme-quartz" style={{ height: 600, width: "100%" }}>
+          <AgGridReact
+            ref={gridRef}
+            rowData={deals}
+            columnDefs={columnDefs}
+            defaultColDef={defaultColDef}
+            onGridReady={onGridReady}
+            onRowClicked={onRowClicked}
+            rowHeight={52}
+            headerHeight={36}
+            suppressCellFocus={true}
+            rowClass="cursor-pointer"
+          />
+        </div>
+      )}
+
       {/* Pipeline View */}
       {viewMode === "pipeline" && (
         <div className="flex gap-3 overflow-x-auto pb-4">
@@ -396,12 +483,12 @@ export default function DealsPage() {
                     <div key={deal._id} onClick={() => setSelectedDeal(deal)}
                       className="group bg-white border border-[#e4e4e7] rounded p-3 hover:border-[#a1a1aa] transition-colors cursor-pointer">
                       <p className="text-[12px] font-medium text-[#18181b] truncate">{deal.name}</p>
-                      <p className="text-[10px] text-[#71717a] mt-0.5">{deal.city}, {deal.state} · {deal.sqft.toLocaleString()} SF</p>
+                      <p className="text-[10px] text-[#71717a] mt-0.5">{deal.city}, {deal.state} \u00B7 {deal.sqft.toLocaleString()} SF</p>
                       <div className="flex items-center justify-between mt-2">
                         <p className="text-[12px] font-semibold text-[#18181b]">{formatCurrency(deal.askingPrice)}</p>
                         <span className="text-[9px] text-[#a1a1aa]">{deal.assignedTo}</span>
                       </div>
-                      {deal.capRate && <p className="text-[10px] text-[#71717a] mt-0.5">{deal.capRate}% cap · ${deal.pricePerSF}/SF</p>}
+                      {deal.capRate && <p className="text-[10px] text-[#71717a] mt-0.5">{deal.capRate}% cap \u00B7 ${deal.pricePerSF}/SF</p>}
                     </div>
                   ))}
                   {stageDeals.length === 0 && <p className="text-[10px] text-[#d4d4d8] text-center py-4">No deals</p>}
@@ -409,75 +496,6 @@ export default function DealsPage() {
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Table View */}
-      {viewMode === "table" && (
-        <div className="bg-white border border-[#e4e4e7] rounded overflow-x-auto">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="border-b border-[#e4e4e7] bg-[#fafafa]">
-                <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-[#71717a] uppercase tracking-wide">Property</th>
-                <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-[#71717a] uppercase tracking-wide">Stage</th>
-                <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-[#71717a] uppercase tracking-wide">Price</th>
-                <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-[#71717a] uppercase tracking-wide hidden sm:table-cell">Cap Rate</th>
-                <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-[#71717a] uppercase tracking-wide hidden sm:table-cell">SF</th>
-                <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-[#71717a] uppercase tracking-wide">Assigned</th>
-                <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-[#71717a] uppercase tracking-wide hidden md:table-cell">Source</th>
-                <th className="px-3 py-2.5"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {deals.map((deal: any) => (
-                <tr key={deal._id} onClick={() => setSelectedDeal(deal)}
-                  className="border-b border-[#f4f4f5] hover:bg-[#fafafa] cursor-pointer transition-colors">
-                  <td className="px-3 py-2.5">
-                    <p className="font-medium text-[#18181b]">{deal.name}</p>
-                    <p className="text-[10px] text-[#a1a1aa]">{deal.city}, {deal.state}</p>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded text-white ${getStageColor(deal.stage)}`}>
-                      {getStageLabel(deal.stage)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 font-medium text-[#18181b]">{formatCurrency(deal.askingPrice)}</td>
-                  <td className="px-3 py-2.5 text-[#71717a] hidden sm:table-cell">{deal.capRate ? `${deal.capRate}%` : "\u2014"}</td>
-                  <td className="px-3 py-2.5 text-[#71717a] hidden sm:table-cell">{deal.sqft.toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-[#71717a]">{deal.assignedTo}</td>
-                  <td className="px-3 py-2.5 text-[#71717a] hidden md:table-cell">{deal.source}</td>
-                  <td className="px-3 py-2.5">
-                    <button onClick={(e) => { e.stopPropagation(); handleDeleteDeal(deal._id); }}
-                      className="text-[#d4d4d8] hover:text-[#dc2626] cursor-pointer transition-colors">
-                      <Trash2 size={13} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Dead Deals (if pipeline view) */}
-      {viewMode === "pipeline" && deals.filter((d: any) => d.stage === "dead").length > 0 && (
-        <div className="mt-6">
-          <p className="text-[11px] font-semibold text-[#71717a] uppercase tracking-wide mb-2">Dead Deals</p>
-          <div className="space-y-1">
-            {deals.filter((d: any) => d.stage === "dead").map((deal: any) => (
-              <div key={deal._id} onClick={() => setSelectedDeal(deal)}
-                className="flex items-center justify-between bg-[#fafafa] border border-[#e4e4e7] rounded px-3 py-2 cursor-pointer hover:border-[#a1a1aa] transition-colors">
-                <div>
-                  <p className="text-[12px] text-[#71717a] line-through">{deal.name}</p>
-                  <p className="text-[10px] text-[#a1a1aa]">{deal.city}, {deal.state} · {formatCurrency(deal.askingPrice)}</p>
-                </div>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteDeal(deal._id); }}
-                  className="text-[#d4d4d8] hover:text-[#dc2626] cursor-pointer transition-colors">
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
