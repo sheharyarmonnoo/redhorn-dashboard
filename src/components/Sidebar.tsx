@@ -3,24 +3,25 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Trash2, Pencil, Briefcase, Activity } from "lucide-react";
-import { getProperties, getActiveProperty, setActiveProperty, addProperty, deleteProperty, editProperty, Property } from "@/data/portfolio";
+import { useProperties, useActivePropertyId } from "@/hooks/useConvexData";
+import type { Doc } from "../../convex/_generated/dataModel";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
   { href: "/site-plan", label: "Site Plan", icon: Map, badge: null },
-  { href: "/rent-roll", label: "Rent Roll", icon: Table, badge: "52" },
-  { href: "/leases", label: "Lease Expirations", icon: CalendarClock, badge: "7" },
-  { href: "/alerts", label: "Alerts", icon: AlertTriangle, badge: "6" },
-  { href: "/deals", label: "Deal Pipeline", icon: Briefcase, badge: "5" },
+  { href: "/rent-roll", label: "Rent Roll", icon: Table, badge: null },
+  { href: "/leases", label: "Lease Expirations", icon: CalendarClock, badge: null },
+  { href: "/alerts", label: "Alerts", icon: AlertTriangle, badge: null },
+  { href: "/deals", label: "Deal Pipeline", icon: Briefcase, badge: null },
   { href: "/activity", label: "Activity", icon: Activity, badge: null },
   { href: "/data-pipeline", label: "Data Pipeline", icon: Database, badge: null },
 ];
 
 function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const pathname = usePathname();
+  const { properties, createProperty, updateProperty, removeProperty } = useProperties();
+  const { propId, setActiveProperty } = useActivePropertyId();
   const [portfolioOpen, setPortfolioOpen] = useState(false);
-  const [activeProp, setActiveProp] = useState("hollister");
-  const [propList, setPropList] = useState<Property[]>(getProperties());
   const [showAddForm, setShowAddForm] = useState(false);
   const [addName, setAddName] = useState("");
   const [addLocation, setAddLocation] = useState("");
@@ -30,49 +31,54 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
   const [editName, setEditName] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [editSqft, setEditSqft] = useState("");
-  const current = propList.find(p => p.id === activeProp) || propList[0];
 
-  useEffect(() => {
-    setActiveProp(getActiveProperty());
-    setPropList(getProperties());
-    function handleListChange() { setPropList(getProperties()); }
-    window.addEventListener("portfolio-list-changed", handleListChange);
-    return () => window.removeEventListener("portfolio-list-changed", handleListChange);
-  }, []);
+  const current = properties.find(p => p.code === propId) || properties[0];
 
-  function switchProperty(id: string) {
-    setActiveProp(id);
-    setActiveProperty(id);
+  function switchProperty(code: string) {
+    setActiveProperty(code);
     setPortfolioOpen(false);
   }
 
-  function handleAddProperty() {
+  async function handleAddProperty() {
     if (!addName.trim()) return;
-    const prop = addProperty(addName.trim(), addLocation.trim(), addSqft.trim());
-    setPropList(getProperties());
+    const code = addName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "");
+    await createProperty({
+      code: code || Date.now().toString(),
+      name: addName.trim(),
+      location: addLocation.trim(),
+      sqft: addSqft.trim() || undefined,
+      hasData: false,
+    });
     setAddName(""); setAddLocation(""); setAddSqft("");
     setShowAddForm(false);
-    switchProperty(prop.id);
+    switchProperty(code);
   }
 
-  function handleDeleteProperty(id: string) {
-    deleteProperty(id);
-    setPropList(getProperties());
+  async function handleDeleteProperty(id: string) {
+    const prop = properties.find(p => p._id === id);
+    await removeProperty({ id: id as any });
     setConfirmDelete(null);
-    setActiveProp(getActiveProperty());
+    if (prop?.code === propId && properties.length > 1) {
+      const next = properties.find(p => p._id !== id);
+      if (next) setActiveProperty(next.code);
+    }
   }
 
-  function startEditProperty(prop: Property) {
-    setEditingProp(prop.id);
+  function startEditProperty(prop: Doc<"properties">) {
+    setEditingProp(prop._id);
     setEditName(prop.name);
     setEditLocation(prop.location);
-    setEditSqft(prop.sqft);
+    setEditSqft(prop.sqft || "");
   }
 
-  function handleEditProperty() {
+  async function handleEditProperty() {
     if (!editingProp || !editName.trim()) return;
-    editProperty(editingProp, { name: editName.trim(), location: editLocation.trim(), sqft: editSqft.trim() });
-    setPropList(getProperties());
+    await updateProperty({
+      id: editingProp as any,
+      name: editName.trim(),
+      location: editLocation.trim(),
+      sqft: editSqft.trim() || undefined,
+    });
     setEditingProp(null);
   }
 
@@ -110,22 +116,24 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
       {/* Portfolio Selector */}
       <div className="mx-3 mt-3 mb-2">
         <p className="text-[9px] text-[#52525b] font-medium uppercase tracking-[0.12em] mb-1 px-2">Portfolio</p>
-        <button
-          onClick={() => setPortfolioOpen(!portfolioOpen)}
-          className="w-full flex items-center justify-between px-2.5 py-2 rounded bg-white/[0.04] hover:bg-white/[0.08] transition-colors cursor-pointer"
-        >
-          <div className="text-left">
-            <p className="text-[12px] font-medium text-[#d4d4d8]">{current.name}</p>
-            <p className="text-[10px] text-[#52525b]">{current.location} · {current.sqft}</p>
-          </div>
-          <ChevronDown size={14} className={`text-[#52525b] transition-transform ${portfolioOpen ? "rotate-180" : ""}`} />
-        </button>
+        {current && (
+          <button
+            onClick={() => setPortfolioOpen(!portfolioOpen)}
+            className="w-full flex items-center justify-between px-2.5 py-2 rounded bg-white/[0.04] hover:bg-white/[0.08] transition-colors cursor-pointer"
+          >
+            <div className="text-left">
+              <p className="text-[12px] font-medium text-[#d4d4d8]">{current.name}</p>
+              <p className="text-[10px] text-[#52525b]">{current.location}{current.sqft ? ` · ${current.sqft}` : ""}</p>
+            </div>
+            <ChevronDown size={14} className={`text-[#52525b] transition-transform ${portfolioOpen ? "rotate-180" : ""}`} />
+          </button>
+        )}
 
         {portfolioOpen && (
           <div className="mt-1 bg-[#27272a] rounded border border-white/[0.06] overflow-hidden">
-            {propList.map(prop => (
-              <div key={prop.id} className="group relative">
-                {editingProp === prop.id ? (
+            {properties.map(prop => (
+              <div key={prop._id} className="group relative">
+                {editingProp === prop._id ? (
                   <div className="p-2.5 space-y-1.5 border-b border-white/[0.06]">
                     <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
                       placeholder="Property name"
@@ -151,9 +159,9 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
                 ) : (
                   <>
                     <button
-                      onClick={() => switchProperty(prop.id)}
+                      onClick={() => switchProperty(prop.code)}
                       className={`w-full text-left px-3 py-2 text-[11px] transition-colors cursor-pointer ${
-                        prop.id === activeProp
+                        prop.code === propId
                           ? "bg-white/[0.08] text-white"
                           : "text-[#a1a1aa] hover:bg-white/[0.04] hover:text-[#d4d4d8]"
                       }`}
@@ -172,9 +180,9 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
                       >
                         <Pencil size={11} />
                       </button>
-                      {propList.length > 1 && (
+                      {properties.length > 1 && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(prop.id); }}
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(prop._id); }}
                           className="text-[#52525b] hover:text-[#dc2626] cursor-pointer p-0.5"
                           title="Delete property"
                         >
@@ -227,7 +235,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
             <div className="relative bg-white rounded p-5 w-[340px] mx-4">
               <p className="text-[14px] font-semibold text-[#18181b]">Delete Property</p>
               <p className="text-[12px] text-[#71717a] mt-2 leading-relaxed">
-                Are you sure you want to delete <strong className="text-[#18181b]">{propList.find(p => p.id === confirmDelete)?.name}</strong>? This will remove it from your portfolio list. This action cannot be undone.
+                Are you sure you want to delete <strong className="text-[#18181b]">{properties.find(p => p._id === confirmDelete)?.name}</strong>? This action cannot be undone.
               </p>
               <div className="flex justify-end gap-2 mt-4">
                 <button onClick={() => setConfirmDelete(null)}
@@ -264,7 +272,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
       </nav>
 
       <div className="px-5 py-3 border-t border-white/[0.06]">
-        <p className="text-[10px] text-[#52525b]">Updated Mar 15, 2026 2:30 PM</p>
+        <p className="text-[10px] text-[#52525b]">Powered by Deal Manager AI</p>
       </div>
     </>
   );
@@ -288,7 +296,6 @@ export default function Sidebar() {
     window.dispatchEvent(new CustomEvent("sidebar-toggle", { detail: { collapsed: next } }));
   }
 
-  // Emit initial state
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("sidebar-toggle", { detail: { collapsed } }));
   }, [collapsed]);

@@ -1,6 +1,10 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
+async function logActivity(ctx: any, entry: { type: string; description: string; user: string; dealId?: string; unit?: string }) {
+  await ctx.db.insert("activity_log", { ...entry, createdAt: new Date().toISOString() });
+}
+
 export const list = query({
   handler: async (ctx) => {
     const deals = await ctx.db.query("deals").collect();
@@ -45,22 +49,36 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const now = new Date().toISOString();
-    return await ctx.db.insert("deals", {
+    const id = await ctx.db.insert("deals", {
       ...args,
       notes: [],
       emails: [],
       createdAt: now,
       updatedAt: now,
     });
+    await logActivity(ctx, {
+      type: "deal_update",
+      description: `New deal added: ${args.name} — $${(args.askingPrice / 1000000).toFixed(1)}M`,
+      user: args.assignedTo,
+      dealId: id,
+    });
+    return id;
   },
 });
 
 export const updateStage = mutation({
-  args: { id: v.id("deals"), stage: v.string() },
+  args: { id: v.id("deals"), stage: v.string(), user: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    const deal = await ctx.db.get(args.id);
     await ctx.db.patch(args.id, {
       stage: args.stage,
       updatedAt: new Date().toISOString(),
+    });
+    await logActivity(ctx, {
+      type: "deal_update",
+      description: `${deal?.name || "Deal"} moved to ${args.stage}`,
+      user: args.user || deal?.assignedTo || "System",
+      dealId: args.id,
     });
   },
 });
@@ -86,6 +104,12 @@ export const addNote = mutation({
     await ctx.db.patch(args.id, {
       notes,
       updatedAt: new Date().toISOString(),
+    });
+    await logActivity(ctx, {
+      type: "note_added",
+      description: `Note added to ${deal.name}`,
+      user: args.author,
+      dealId: args.id,
     });
   },
 });
@@ -116,12 +140,24 @@ export const addEmail = mutation({
       emails,
       updatedAt: new Date().toISOString(),
     });
+    await logActivity(ctx, {
+      type: "email_sent",
+      description: `Email sent to ${args.to} — ${args.subject}`,
+      user: args.sentBy,
+      dealId: args.id,
+    });
   },
 });
 
 export const remove = mutation({
-  args: { id: v.id("deals") },
+  args: { id: v.id("deals"), user: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    const deal = await ctx.db.get(args.id);
     await ctx.db.delete(args.id);
+    await logActivity(ctx, {
+      type: "deal_update",
+      description: `Deal deleted: ${deal?.name || "Unknown"}`,
+      user: args.user || "System",
+    });
   },
 });

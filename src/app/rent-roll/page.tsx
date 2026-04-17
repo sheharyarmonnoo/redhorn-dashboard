@@ -2,11 +2,23 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
-import { tenants, formatCurrency, getStatusLabel, Tenant } from "@/data/tenants";
+import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
 import { exportRentRoll } from "@/data/export";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import { Download } from "lucide-react";
+
+type TenantStatus = "current" | "past_due" | "locked_out" | "vacant" | "expiring_soon";
+
+function getStatusLabel(status: TenantStatus): string {
+  switch (status) {
+    case "current": return "Current";
+    case "past_due": return "Past Due";
+    case "locked_out": return "Locked Out";
+    case "vacant": return "Vacant";
+    case "expiring_soon": return "Expiring Soon";
+  }
+}
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -22,7 +34,7 @@ function StatusCellRenderer(props: { value: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b]">
       <span className={`w-1.5 h-1.5 rounded-full ${dotColors[status] || "bg-[#a1a1aa]"}`} />
-      {getStatusLabel(status as Tenant["status"])}
+      {getStatusLabel(status as TenantStatus)}
     </span>
   );
 }
@@ -43,9 +55,11 @@ function useIsMobile() {
 }
 
 export default function RentRollPage() {
-  const [selected, setSelected] = useState<Tenant | null>(null);
+  const [selected, setSelected] = useState<any>(null);
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
+  const activeProperty = useActiveProperty();
+  const tenants = useTenants(activeProperty?._id);
 
   const columnDefs = useMemo<ColDef[]>(() => {
     const unitWidth = isMobile ? 90 : 120;
@@ -87,11 +101,11 @@ export default function RentRollPage() {
   }, []);
 
   const onRowClicked = useCallback((event: RowClickedEvent) => {
-    setSelected(event.data as Tenant);
+    setSelected(event.data);
   }, []);
 
-  const totalRent = tenants.filter(t => t.status !== "vacant").reduce((s, t) => s + t.monthlyRent, 0);
-  const totalSqft = tenants.reduce((s, t) => s + t.sqft, 0);
+  const totalRent = tenants.filter((t: any) => t.status !== "vacant").reduce((s: number, t: any) => s + t.monthlyRent, 0);
+  const totalSqft = tenants.reduce((s: number, t: any) => s + t.sqft, 0);
 
   return (
     <div>

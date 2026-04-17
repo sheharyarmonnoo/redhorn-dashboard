@@ -1,9 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Plus, X, GripVertical } from "lucide-react";
-import { KanbanItem, KanbanColumn, loadKanban, saveKanban, addKanbanItem, moveKanbanItem, removeKanbanItem, updateKanbanItem } from "@/data/store";
+import { useActionItems } from "@/hooks/useConvexData";
 
-const columns: { key: KanbanColumn; label: string; count?: number }[] = [
+type KanbanColumn = "todo" | "in_progress" | "done";
+
+const columns: { key: KanbanColumn; label: string }[] = [
   { key: "todo", label: "To Do" },
   { key: "in_progress", label: "In Progress" },
   { key: "done", label: "Done" },
@@ -22,10 +24,10 @@ const columnBorder: Record<KanbanColumn, string> = {
 };
 
 function KanbanCard({ item, onMove, onRemove, onEdit }: {
-  item: KanbanItem;
+  item: any;
   onMove: (id: string, col: KanbanColumn) => void;
   onRemove: (id: string) => void;
-  onEdit: (id: string, updates: Partial<Pick<KanbanItem, "text" | "priority" | "unit" | "assignedTo">>) => void;
+  onEdit: (id: string, updates: { text?: string; priority?: string; assignedTo?: string }) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
@@ -34,7 +36,7 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
 
   function save() {
     if (editText.trim() && (editText.trim() !== item.text || editPriority !== item.priority || editAssignee !== (item.assignedTo || ""))) {
-      onEdit(item.id, { text: editText.trim(), priority: editPriority, assignedTo: editAssignee || undefined });
+      onEdit(item._id, { text: editText.trim(), priority: editPriority, assignedTo: editAssignee || undefined });
     }
     setEditing(false);
   }
@@ -50,7 +52,7 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
                 className="w-full text-[12px] text-[#18181b] bg-[#fafafa] border border-[#e4e4e7] rounded p-1.5 leading-relaxed focus:outline-none focus:border-[#71717a] resize-none min-h-[40px]"
                 autoFocus onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); } if (e.key === "Escape") setEditing(false); }} />
               <div className="flex items-center gap-2">
-                <select value={editPriority} onChange={e => setEditPriority(e.target.value as KanbanItem["priority"])}
+                <select value={editPriority} onChange={e => setEditPriority(e.target.value)}
                   className="text-[10px] px-1.5 py-0.5 border border-[#e4e4e7] rounded bg-[#fafafa] text-[#71717a]">
                   <option value="high">High</option>
                   <option value="medium">Medium</option>
@@ -74,7 +76,7 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
                 {item.text}
               </p>
               <div className="flex items-center gap-2 mt-1.5">
-                <span className={`w-1.5 h-1.5 rounded-full ${priorityDot[item.priority]}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${priorityDot[item.priority] || priorityDot.medium}`} />
                 <span className="text-[9px] text-[#a1a1aa] capitalize">{item.priority}</span>
                 {item.assignedTo && (
                   <>
@@ -89,13 +91,13 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
                   </>
                 )}
                 <span className="text-[9px] text-[#d4d4d8]">·</span>
-                <span className="text-[9px] text-[#a1a1aa]">{item.createdAt}</span>
+                <span className="text-[9px] text-[#a1a1aa]">{item.createdAt?.slice(0, 10)}</span>
               </div>
             </>
           )}
         </div>
         {!editing && (
-          <button onClick={() => onRemove(item.id)}
+          <button onClick={() => onRemove(item._id)}
             className="opacity-0 group-hover:opacity-100 text-[#a1a1aa] hover:text-[#dc2626] transition-all cursor-pointer">
             <X size={13} />
           </button>
@@ -105,18 +107,18 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
       {item.column !== "done" && (
         <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
           {item.column === "todo" && (
-            <button onClick={() => onMove(item.id, "in_progress")}
+            <button onClick={() => onMove(item._id, "in_progress")}
               className="text-[9px] text-[#71717a] hover:text-[#18181b] px-1.5 py-0.5 border border-[#e4e4e7] rounded cursor-pointer transition-colors">
               → In Progress
             </button>
           )}
           {item.column === "in_progress" && (
             <>
-              <button onClick={() => onMove(item.id, "todo")}
+              <button onClick={() => onMove(item._id, "todo")}
                 className="text-[9px] text-[#71717a] hover:text-[#18181b] px-1.5 py-0.5 border border-[#e4e4e7] rounded cursor-pointer transition-colors">
                 ← To Do
               </button>
-              <button onClick={() => onMove(item.id, "done")}
+              <button onClick={() => onMove(item._id, "done")}
                 className="text-[9px] text-[#71717a] hover:text-[#18181b] px-1.5 py-0.5 border border-[#e4e4e7] rounded cursor-pointer transition-colors">
                 → Done
               </button>
@@ -126,7 +128,7 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
       )}
       {item.column === "done" && (
         <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => onMove(item.id, "todo")}
+          <button onClick={() => onMove(item._id, "todo")}
             className="text-[9px] text-[#71717a] hover:text-[#18181b] px-1.5 py-0.5 border border-[#e4e4e7] rounded cursor-pointer transition-colors">
             ← Reopen
           </button>
@@ -137,40 +139,27 @@ function KanbanCard({ item, onMove, onRemove, onEdit }: {
 }
 
 export default function ActionItems() {
-  const [items, setItems] = useState<KanbanItem[]>([]);
+  const { items, createItem, moveItem, updateItem, removeItem } = useActionItems();
   const [showAdd, setShowAdd] = useState(false);
   const [newText, setNewText] = useState("");
-  const [newPriority, setNewPriority] = useState<KanbanItem["priority"]>("medium");
+  const [newPriority, setNewPriority] = useState("medium");
   const [newAssignee, setNewAssignee] = useState("");
 
-  useEffect(() => { setItems(loadKanban()); }, []);
-
-  // Listen for custom events from the chat
-  useEffect(() => {
-    function handleUpdate() { setItems(loadKanban()); }
-    window.addEventListener("kanban-updated", handleUpdate);
-    return () => window.removeEventListener("kanban-updated", handleUpdate);
-  }, []);
-
   function handleMove(id: string, col: KanbanColumn) {
-    moveKanbanItem(id, col);
-    setItems(loadKanban());
+    moveItem({ id: id as any, column: col });
   }
 
   function handleRemove(id: string) {
-    removeKanbanItem(id);
-    setItems(loadKanban());
+    removeItem({ id: id as any });
   }
 
-  function handleEdit(id: string, updates: Partial<Pick<KanbanItem, "text" | "priority" | "unit" | "assignedTo">>) {
-    updateKanbanItem(id, updates);
-    setItems(loadKanban());
+  function handleEdit(id: string, updates: { text?: string; priority?: string; assignedTo?: string }) {
+    updateItem({ id: id as any, ...updates });
   }
 
   function handleAdd() {
     if (!newText.trim()) return;
-    addKanbanItem(newText.trim(), newPriority, undefined, newAssignee || undefined);
-    setItems(loadKanban());
+    createItem({ text: newText.trim(), priority: newPriority, assignedTo: newAssignee || undefined });
     setNewText("");
     setNewAssignee("");
     setShowAdd(false);
@@ -186,7 +175,6 @@ export default function ActionItems() {
         </button>
       </div>
 
-      {/* Add form */}
       {showAdd && (
         <div className="flex flex-col sm:flex-row gap-2 mb-3 p-3 bg-white border border-[#e4e4e7] rounded">
           <input type="text" value={newText} onChange={e => setNewText(e.target.value)}
@@ -194,7 +182,7 @@ export default function ActionItems() {
             placeholder="Type an action item..."
             className="flex-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]"
             autoFocus />
-          <select value={newPriority} onChange={e => setNewPriority(e.target.value as KanbanItem["priority"])}
+          <select value={newPriority} onChange={e => setNewPriority(e.target.value)}
             className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] rounded bg-[#fafafa] text-[#71717a]">
             <option value="high">High</option>
             <option value="medium">Medium</option>
@@ -213,7 +201,6 @@ export default function ActionItems() {
         </div>
       )}
 
-      {/* Kanban Board */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {columns.map(col => {
           const colItems = items.filter(i => i.column === col.key);
@@ -225,7 +212,7 @@ export default function ActionItems() {
               </div>
               <div className="space-y-2">
                 {colItems.map(item => (
-                  <KanbanCard key={item.id} item={item} onMove={handleMove} onRemove={handleRemove} onEdit={handleEdit} />
+                  <KanbanCard key={item._id} item={item} onMove={handleMove} onRemove={handleRemove} onEdit={handleEdit} />
                 ))}
                 {colItems.length === 0 && (
                   <p className="text-[10px] text-[#d4d4d8] text-center py-4">No items</p>

@@ -1,9 +1,22 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import PageHeader from "@/components/PageHeader";
-import { ActivityEntry, loadActivity, getActivityIcon, getActivityColor } from "@/data/activity";
+import { useActivityLog } from "@/hooks/useConvexData";
 
-const typeLabels: Record<ActivityEntry["type"], string> = {
+type ActivityType = "task_added" | "task_completed" | "task_assigned" | "status_change" | "note_added" | "deal_update" | "alert_created" | "alert_resolved" | "email_sent" | "sync" | "login";
+
+interface ActivityEntry {
+  _id?: string;
+  id?: string;
+  type: ActivityType;
+  description: string;
+  user: string;
+  unit?: string;
+  dealId?: string;
+  createdAt: string;
+}
+
+const typeLabels: Record<ActivityType, string> = {
   task_added: "Task Added",
   task_completed: "Task Completed",
   task_assigned: "Task Assigned",
@@ -17,18 +30,45 @@ const typeLabels: Record<ActivityEntry["type"], string> = {
   login: "Login",
 };
 
+function getActivityIcon(type: ActivityType): string {
+  const map: Record<ActivityType, string> = {
+    task_added: "+",
+    task_completed: "\u2713",
+    task_assigned: "\u2192",
+    status_change: "\u2191",
+    note_added: "\u270E",
+    deal_update: "$",
+    alert_created: "!",
+    alert_resolved: "\u2713",
+    email_sent: "\u2709",
+    sync: "\u21BB",
+    login: "\u25CF",
+  };
+  return map[type];
+}
+
+function getActivityColor(type: ActivityType): string {
+  const map: Record<ActivityType, string> = {
+    task_added: "bg-[#2563eb]",
+    task_completed: "bg-[#16a34a]",
+    task_assigned: "bg-[#7c3aed]",
+    status_change: "bg-[#d97706]",
+    note_added: "bg-[#71717a]",
+    deal_update: "bg-[#0891b2]",
+    alert_created: "bg-[#dc2626]",
+    alert_resolved: "bg-[#16a34a]",
+    email_sent: "bg-[#2563eb]",
+    sync: "bg-[#71717a]",
+    login: "bg-[#a1a1aa]",
+  };
+  return map[type];
+}
+
 export default function ActivityPage() {
-  const [entries, setEntries] = useState<ActivityEntry[]>([]);
+  const entries = useActivityLog() as ActivityEntry[];
   const [filter, setFilter] = useState<string>("all");
 
-  useEffect(() => {
-    setEntries(loadActivity());
-    function handleUpdate() { setEntries(loadActivity()); }
-    window.addEventListener("activity-updated", handleUpdate);
-    return () => window.removeEventListener("activity-updated", handleUpdate);
-  }, []);
-
-  const types = Array.from(new Set(entries.map(e => e.type)));
+  const types: ActivityType[] = Array.from(new Set(entries.map(e => e.type)));
   const filtered = filter === "all" ? entries : entries.filter(e => e.type === filter);
 
   // Group by date
@@ -88,7 +128,7 @@ export default function ActivityPage() {
             <p className="text-[11px] font-semibold text-[#71717a] uppercase tracking-wide mb-3 sticky top-0 bg-[#fafafa] py-1 z-10">{date}</p>
             <div className="space-y-0">
               {dayEntries.map((entry, idx) => (
-                <div key={entry.id} className="flex gap-3 group">
+                <div key={entry._id ?? entry.id} className="flex gap-3 group">
                   {/* Timeline line + dot */}
                   <div className="flex flex-col items-center">
                     <div className={`w-6 h-6 rounded-full ${getActivityColor(entry.type)} flex items-center justify-center flex-shrink-0`}>

@@ -1,14 +1,20 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import PageHeader from "@/components/PageHeader";
-import { Deal, DealStage, loadDeals, saveDeals, updateDealStage, addDealNote, addDealEmail, deleteDeal, getStageLabel, getStageColor, emailTemplates } from "@/data/deals";
-import { logActivity } from "@/data/activity";
+import { DealStage, getStageLabel, getStageColor, emailTemplates } from "@/data/deals";
+import { useDeals, formatCurrency } from "@/hooks/useConvexData";
 import { Plus, X, ChevronDown, Send, MessageSquare, Mail, Trash2, ExternalLink } from "lucide-react";
-import { formatCurrency } from "@/data/tenants";
 
 const stages: DealStage[] = ["lead", "outreach", "underwriting", "loi", "due_diligence", "closing", "closed", "dead"];
 
-function DealDrawer({ deal, onClose, onUpdate }: { deal: Deal; onClose: () => void; onUpdate: () => void }) {
+function DealDrawer({ deal, allDeals, onClose, updateStage, addNote, addEmail }: {
+  deal: any;
+  allDeals: any[];
+  onClose: () => void;
+  updateStage: (args: { id: any; stage: string }) => void;
+  addNote: (args: { id: any; text: string; author: string }) => void;
+  addEmail: (args: { id: any; to: string; subject: string; body: string; sentBy: string }) => void;
+}) {
   const [activeTab, setActiveTab] = useState<"overview" | "notes" | "emails">("overview");
   const [newNote, setNewNote] = useState("");
   const [noteAuthor, setNoteAuthor] = useState("Ori");
@@ -19,32 +25,26 @@ function DealDrawer({ deal, onClose, onUpdate }: { deal: Deal; onClose: () => vo
   const [selectedTemplate, setSelectedTemplate] = useState("");
 
   function handleStageChange(stage: DealStage) {
-    updateDealStage(deal.id, stage);
-    logActivity({ type: "deal_update", description: `Deal "${deal.name}" moved to ${getStageLabel(stage)}`, user: "Ori", dealId: deal.id });
-    onUpdate();
+    updateStage({ id: deal._id, stage });
   }
 
   function handleAddNote() {
     if (!newNote.trim()) return;
-    addDealNote(deal.id, newNote.trim(), noteAuthor);
-    logActivity({ type: "note_added", description: `Note added to deal: ${deal.name}`, user: noteAuthor, dealId: deal.id });
+    addNote({ id: deal._id, text: newNote.trim(), author: noteAuthor });
     setNewNote("");
-    onUpdate();
   }
 
   function handleSendEmail() {
     if (!emailTo.trim() || !emailSubject.trim()) return;
-    addDealEmail(deal.id, { to: emailTo, subject: emailSubject, body: emailBody, sentAt: new Date().toISOString(), sentBy: noteAuthor });
-    logActivity({ type: "email_sent", description: `Email sent to ${emailTo} — ${emailSubject}`, user: noteAuthor, dealId: deal.id });
+    addEmail({ id: deal._id, to: emailTo, subject: emailSubject, body: emailBody, sentBy: noteAuthor });
     setShowEmailCompose(false);
     setEmailTo(""); setEmailSubject(""); setEmailBody("");
-    onUpdate();
   }
 
   function applyTemplate(idx: number) {
     const tpl = emailTemplates[idx];
     if (!tpl) return;
-    const contact = deal.contacts[0];
+    const contact = deal.contacts?.[0];
     let subject = tpl.subject.replace(/\{\{property_name\}\}/g, deal.name).replace(/\{\{address\}\}/g, deal.address);
     let body = tpl.body
       .replace(/\{\{property_name\}\}/g, deal.name)
@@ -59,8 +59,10 @@ function DealDrawer({ deal, onClose, onUpdate }: { deal: Deal; onClose: () => vo
     setSelectedTemplate(String(idx));
   }
 
-  // Reload deal data
-  const currentDeal = loadDeals().find(d => d.id === deal.id) || deal;
+  // Use real-time data from Convex (deal auto-updates via reactive query)
+  const currentDeal = allDeals.find((d: any) => d._id === deal._id) || deal;
+  const notes = currentDeal.notes || [];
+  const emails = currentDeal.emails || [];
 
   return (
     <>
@@ -96,7 +98,7 @@ function DealDrawer({ deal, onClose, onUpdate }: { deal: Deal; onClose: () => vo
               className={`text-[12px] font-medium py-2.5 border-b-2 cursor-pointer transition-colors capitalize ${
                 activeTab === tab ? "border-[#18181b] text-[#18181b]" : "border-transparent text-[#a1a1aa] hover:text-[#71717a]"
               }`}>
-              {tab} {tab === "notes" && currentDeal.notes.length > 0 ? `(${currentDeal.notes.length})` : ""}{tab === "emails" && currentDeal.emails.length > 0 ? `(${currentDeal.emails.length})` : ""}
+              {tab} {tab === "notes" && notes.length > 0 ? `(${notes.length})` : ""}{tab === "emails" && emails.length > 0 ? `(${emails.length})` : ""}
             </button>
           ))}
         </div>
@@ -112,11 +114,11 @@ function DealDrawer({ deal, onClose, onUpdate }: { deal: Deal; onClose: () => vo
                 </div>
                 <div className="bg-[#fafafa] border border-[#e4e4e7] rounded p-3">
                   <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Price / SF</p>
-                  <p className="text-[14px] font-semibold text-[#18181b] mt-0.5">${currentDeal.pricePerSF || "—"}</p>
+                  <p className="text-[14px] font-semibold text-[#18181b] mt-0.5">${currentDeal.pricePerSF || "\u2014"}</p>
                 </div>
                 <div className="bg-[#fafafa] border border-[#e4e4e7] rounded p-3">
                   <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Cap Rate</p>
-                  <p className="text-[14px] font-semibold text-[#18181b] mt-0.5">{currentDeal.capRate ? `${currentDeal.capRate}%` : "—"}</p>
+                  <p className="text-[14px] font-semibold text-[#18181b] mt-0.5">{currentDeal.capRate ? `${currentDeal.capRate}%` : "\u2014"}</p>
                 </div>
                 <div className="bg-[#fafafa] border border-[#e4e4e7] rounded p-3">
                   <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Size</p>
@@ -146,7 +148,7 @@ function DealDrawer({ deal, onClose, onUpdate }: { deal: Deal; onClose: () => vo
               <div>
                 <p className="text-[11px] font-semibold text-[#18181b] uppercase tracking-wide mb-2">Contacts</p>
                 <div className="space-y-2">
-                  {currentDeal.contacts.map((c, i) => (
+                  {(currentDeal.contacts || []).map((c: any, i: number) => (
                     <div key={i} className="bg-[#fafafa] border border-[#e4e4e7] rounded p-2.5">
                       <div className="flex items-center justify-between">
                         <p className="text-[12px] font-medium text-[#18181b]">{c.name}</p>
@@ -179,13 +181,13 @@ function DealDrawer({ deal, onClose, onUpdate }: { deal: Deal; onClose: () => vo
                 </button>
               </div>
               <div className="space-y-3">
-                {currentDeal.notes.map(note => (
-                  <div key={note.id} className="border-l-2 border-[#e4e4e7] pl-3">
+                {notes.map((note: any, idx: number) => (
+                  <div key={note.id || idx} className="border-l-2 border-[#e4e4e7] pl-3">
                     <p className="text-[12px] text-[#18181b] leading-relaxed">{note.text}</p>
                     <p className="text-[10px] text-[#a1a1aa] mt-1">{note.author} · {new Date(note.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
                   </div>
                 ))}
-                {currentDeal.notes.length === 0 && <p className="text-[12px] text-[#a1a1aa] text-center py-6">No notes yet</p>}
+                {notes.length === 0 && <p className="text-[12px] text-[#a1a1aa] text-center py-6">No notes yet</p>}
               </div>
             </div>
           )}
@@ -234,8 +236,8 @@ function DealDrawer({ deal, onClose, onUpdate }: { deal: Deal; onClose: () => vo
               )}
 
               <div className="space-y-3">
-                {currentDeal.emails.map(email => (
-                  <div key={email.id} className="border border-[#e4e4e7] rounded p-3">
+                {emails.map((email: any, idx: number) => (
+                  <div key={email.id || idx} className="border border-[#e4e4e7] rounded p-3">
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-[11px] font-medium text-[#18181b]">{email.subject}</p>
                       <span className="text-[9px] text-[#a1a1aa]">{new Date(email.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
@@ -244,7 +246,7 @@ function DealDrawer({ deal, onClose, onUpdate }: { deal: Deal; onClose: () => vo
                     <p className="text-[11px] text-[#52525b] leading-relaxed whitespace-pre-line line-clamp-4">{email.body}</p>
                   </div>
                 ))}
-                {currentDeal.emails.length === 0 && !showEmailCompose && <p className="text-[12px] text-[#a1a1aa] text-center py-6">No emails sent</p>}
+                {emails.length === 0 && !showEmailCompose && <p className="text-[12px] text-[#a1a1aa] text-center py-6">No emails sent</p>}
               </div>
             </div>
           )}
@@ -255,19 +257,15 @@ function DealDrawer({ deal, onClose, onUpdate }: { deal: Deal; onClose: () => vo
 }
 
 export default function DealsPage() {
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  const { deals, createDeal, updateStage, addNote, addEmail, removeDeal } = useDeals();
+  const [selectedDeal, setSelectedDeal] = useState<any>(null);
   const [viewMode, setViewMode] = useState<"pipeline" | "table">("pipeline");
   const [showAddForm, setShowAddForm] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", address: "", city: "Houston", state: "TX", propertyType: "Office/Warehouse", sqft: "", units: "", askingPrice: "", source: "", assignedTo: "Max" });
 
-  useEffect(() => { setDeals(loadDeals()); }, []);
-
-  function refresh() { setDeals(loadDeals()); }
-
   function handleAddDeal() {
     if (!addForm.name.trim() || !addForm.address.trim()) return;
-    const deal = {
+    createDeal({
       name: addForm.name.trim(),
       address: addForm.address.trim(),
       city: addForm.city.trim(),
@@ -277,29 +275,24 @@ export default function DealsPage() {
       units: Number(addForm.units) || 0,
       askingPrice: Number(addForm.askingPrice) || 0,
       pricePerSF: Number(addForm.sqft) > 0 ? Math.round(Number(addForm.askingPrice) / Number(addForm.sqft)) : undefined,
-      stage: "lead" as DealStage,
+      stage: "lead",
       source: addForm.source.trim(),
       assignedTo: addForm.assignedTo,
       contacts: [],
-    };
-    const d = loadDeals();
-    const newDeal: Deal = { ...deal, id: `deal-${Date.now()}`, notes: [], emails: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    saveDeals([newDeal, ...d]);
-    logActivity({ type: "deal_update", description: `New deal added: ${addForm.name} — ${formatCurrency(Number(addForm.askingPrice) || 0)}`, user: addForm.assignedTo });
+      notes: [],
+      emails: [],
+    });
     setShowAddForm(false);
     setAddForm({ name: "", address: "", city: "Houston", state: "TX", propertyType: "Office/Warehouse", sqft: "", units: "", askingPrice: "", source: "", assignedTo: "Max" });
-    refresh();
   }
 
-  function handleDeleteDeal(id: string) {
-    deleteDeal(id);
-    logActivity({ type: "deal_update", description: `Deal deleted`, user: "Ori", dealId: id });
-    if (selectedDeal?.id === id) setSelectedDeal(null);
-    refresh();
+  function handleDeleteDeal(id: any) {
+    removeDeal({ id });
+    if (selectedDeal?._id === id) setSelectedDeal(null);
   }
 
-  const activeDeals = deals.filter(d => d.stage !== "dead" && d.stage !== "closed");
-  const totalPipeline = activeDeals.reduce((s, d) => s + d.askingPrice, 0);
+  const activeDeals = deals.filter((d: any) => d.stage !== "dead" && d.stage !== "closed");
+  const totalPipeline = activeDeals.reduce((s: number, d: any) => s + d.askingPrice, 0);
 
   return (
     <div>
@@ -317,11 +310,11 @@ export default function DealsPage() {
         </div>
         <div className="bg-white border border-[#e4e4e7] rounded p-3">
           <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">In LOI+</p>
-          <p className="text-[18px] font-semibold text-[#18181b] mt-0.5">{deals.filter(d => ["loi","due_diligence","closing"].includes(d.stage)).length}</p>
+          <p className="text-[18px] font-semibold text-[#18181b] mt-0.5">{deals.filter((d: any) => ["loi","due_diligence","closing"].includes(d.stage)).length}</p>
         </div>
         <div className="bg-white border border-[#e4e4e7] rounded p-3">
           <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wide">Dead Deals</p>
-          <p className="text-[18px] font-semibold text-[#71717a] mt-0.5">{deals.filter(d => d.stage === "dead").length}</p>
+          <p className="text-[18px] font-semibold text-[#71717a] mt-0.5">{deals.filter((d: any) => d.stage === "dead").length}</p>
         </div>
       </div>
 
@@ -393,7 +386,7 @@ export default function DealsPage() {
       {viewMode === "pipeline" && (
         <div className="flex gap-3 overflow-x-auto pb-4">
           {stages.filter(s => s !== "dead").map(stage => {
-            const stageDeals = deals.filter(d => d.stage === stage);
+            const stageDeals = deals.filter((d: any) => d.stage === stage);
             return (
               <div key={stage} className="min-w-[220px] flex-shrink-0">
                 <div className={`flex items-center justify-between mb-2 px-2 py-1.5 rounded border-t-2 ${getStageColor(stage).replace("bg-", "border-t-")}`}>
@@ -401,8 +394,8 @@ export default function DealsPage() {
                   <span className="text-[10px] text-[#a1a1aa] font-medium">{stageDeals.length}</span>
                 </div>
                 <div className="space-y-2">
-                  {stageDeals.map(deal => (
-                    <div key={deal.id} onClick={() => setSelectedDeal(deal)}
+                  {stageDeals.map((deal: any) => (
+                    <div key={deal._id} onClick={() => setSelectedDeal(deal)}
                       className="group bg-white border border-[#e4e4e7] rounded p-3 hover:border-[#a1a1aa] transition-colors cursor-pointer">
                       <p className="text-[12px] font-medium text-[#18181b] truncate">{deal.name}</p>
                       <p className="text-[10px] text-[#71717a] mt-0.5">{deal.city}, {deal.state} · {deal.sqft.toLocaleString()} SF</p>
@@ -438,8 +431,8 @@ export default function DealsPage() {
               </tr>
             </thead>
             <tbody>
-              {deals.map(deal => (
-                <tr key={deal.id} onClick={() => setSelectedDeal(deal)}
+              {deals.map((deal: any) => (
+                <tr key={deal._id} onClick={() => setSelectedDeal(deal)}
                   className="border-b border-[#f4f4f5] hover:bg-[#fafafa] cursor-pointer transition-colors">
                   <td className="px-3 py-2.5">
                     <p className="font-medium text-[#18181b]">{deal.name}</p>
@@ -451,12 +444,12 @@ export default function DealsPage() {
                     </span>
                   </td>
                   <td className="px-3 py-2.5 font-medium text-[#18181b]">{formatCurrency(deal.askingPrice)}</td>
-                  <td className="px-3 py-2.5 text-[#71717a] hidden sm:table-cell">{deal.capRate ? `${deal.capRate}%` : "—"}</td>
+                  <td className="px-3 py-2.5 text-[#71717a] hidden sm:table-cell">{deal.capRate ? `${deal.capRate}%` : "\u2014"}</td>
                   <td className="px-3 py-2.5 text-[#71717a] hidden sm:table-cell">{deal.sqft.toLocaleString()}</td>
                   <td className="px-3 py-2.5 text-[#71717a]">{deal.assignedTo}</td>
                   <td className="px-3 py-2.5 text-[#71717a] hidden md:table-cell">{deal.source}</td>
                   <td className="px-3 py-2.5">
-                    <button onClick={(e) => { e.stopPropagation(); handleDeleteDeal(deal.id); }}
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteDeal(deal._id); }}
                       className="text-[#d4d4d8] hover:text-[#dc2626] cursor-pointer transition-colors">
                       <Trash2 size={13} />
                     </button>
@@ -469,18 +462,18 @@ export default function DealsPage() {
       )}
 
       {/* Dead Deals (if pipeline view) */}
-      {viewMode === "pipeline" && deals.filter(d => d.stage === "dead").length > 0 && (
+      {viewMode === "pipeline" && deals.filter((d: any) => d.stage === "dead").length > 0 && (
         <div className="mt-6">
           <p className="text-[11px] font-semibold text-[#71717a] uppercase tracking-wide mb-2">Dead Deals</p>
           <div className="space-y-1">
-            {deals.filter(d => d.stage === "dead").map(deal => (
-              <div key={deal.id} onClick={() => setSelectedDeal(deal)}
+            {deals.filter((d: any) => d.stage === "dead").map((deal: any) => (
+              <div key={deal._id} onClick={() => setSelectedDeal(deal)}
                 className="flex items-center justify-between bg-[#fafafa] border border-[#e4e4e7] rounded px-3 py-2 cursor-pointer hover:border-[#a1a1aa] transition-colors">
                 <div>
                   <p className="text-[12px] text-[#71717a] line-through">{deal.name}</p>
                   <p className="text-[10px] text-[#a1a1aa]">{deal.city}, {deal.state} · {formatCurrency(deal.askingPrice)}</p>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteDeal(deal.id); }}
+                <button onClick={(e) => { e.stopPropagation(); handleDeleteDeal(deal._id); }}
                   className="text-[#d4d4d8] hover:text-[#dc2626] cursor-pointer transition-colors">
                   <Trash2 size={13} />
                 </button>
@@ -490,7 +483,7 @@ export default function DealsPage() {
         </div>
       )}
 
-      {selectedDeal && <DealDrawer deal={selectedDeal} onClose={() => setSelectedDeal(null)} onUpdate={() => { refresh(); setSelectedDeal(prev => prev ? loadDeals().find(d => d.id === prev.id) || null : null); }} />}
+      {selectedDeal && <DealDrawer deal={selectedDeal} allDeals={deals} onClose={() => setSelectedDeal(null)} updateStage={updateStage} addNote={addNote} addEmail={addEmail} />}
     </div>
   );
 }

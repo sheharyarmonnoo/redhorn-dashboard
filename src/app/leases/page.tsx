@@ -2,7 +2,7 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
-import { tenants, formatCurrency } from "@/data/tenants";
+import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
 import PageHeader from "@/components/PageHeader";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -55,24 +55,26 @@ export default function LeasesPage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const [activeFilter, setActiveFilter] = useState<UrgencyFilter>("all");
+  const activeProperty = useActiveProperty();
+  const tenants = useTenants(activeProperty?._id);
 
   const leaseData = useMemo(() => {
     return tenants
-      .filter(t => t.leaseTo && t.tenant && !t.tenant.includes("Owner"))
-      .map(t => ({ ...t, urgency: getUrgency(t.leaseTo), daysLeft: daysUntil(t.leaseTo) }))
-      .sort((a, b) => a.daysLeft - b.daysLeft);
-  }, []);
+      .filter((t: any) => t.leaseTo && t.tenant && !t.tenant.includes("Owner"))
+      .map((t: any) => ({ ...t, urgency: getUrgency(t.leaseTo), daysLeft: daysUntil(t.leaseTo) }))
+      .sort((a: any, b: any) => a.daysLeft - b.daysLeft);
+  }, [tenants]);
 
   const filteredData = useMemo(() => {
     if (activeFilter === "all") return leaseData;
-    return leaseData.filter(t => t.urgency === activeFilter);
+    return leaseData.filter((t: any) => t.urgency === activeFilter);
   }, [leaseData, activeFilter]);
 
   const counts = useMemo(() => ({
-    expired: leaseData.filter(t => t.urgency === "Expired").length,
-    critical: leaseData.filter(t => t.urgency === "Critical (<90d)").length,
-    warning: leaseData.filter(t => t.urgency === "Warning (90-180d)").length,
-    ok: leaseData.filter(t => t.urgency === "OK (180d+)").length,
+    expired: leaseData.filter((t: any) => t.urgency === "Expired").length,
+    critical: leaseData.filter((t: any) => t.urgency === "Critical (<90d)").length,
+    warning: leaseData.filter((t: any) => t.urgency === "Warning (90-180d)").length,
+    ok: leaseData.filter((t: any) => t.urgency === "OK (180d+)").length,
   }), [leaseData]);
 
   const filters: { key: UrgencyFilter; label: string; count: number; dot: string }[] = [
@@ -114,8 +116,8 @@ export default function LeasesPage() {
   }, []);
 
   const atRiskRent = leaseData
-    .filter(t => t.urgency === "Expired" || t.urgency === "Critical (<90d)")
-    .reduce((s, t) => s + t.monthlyRent, 0);
+    .filter((t: any) => t.urgency === "Expired" || t.urgency === "Critical (<90d)")
+    .reduce((s: number, t: any) => s + t.monthlyRent, 0);
 
   return (
     <div>

@@ -1,6 +1,10 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
+async function logActivity(ctx: any, entry: { type: string; description: string; user: string; unit?: string }) {
+  await ctx.db.insert("activity_log", { ...entry, createdAt: new Date().toISOString() });
+}
+
 export const list = query({
   args: { status: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -28,7 +32,14 @@ export const create = mutation({
     date: v.string(),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("alerts", args);
+    const id = await ctx.db.insert("alerts", args);
+    await logActivity(ctx, {
+      type: "alert_created",
+      description: `Alert: ${args.title}`,
+      user: "System",
+      unit: args.unit,
+    });
+    return id;
   },
 });
 
@@ -39,11 +50,18 @@ export const updateStatus = mutation({
     resolvedBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const alert = await ctx.db.get(args.id);
     const updates: Record<string, string> = { status: args.status };
     if (args.status === "resolved" || args.status === "dismissed") {
       updates.resolvedAt = new Date().toISOString();
       if (args.resolvedBy) updates.resolvedBy = args.resolvedBy;
     }
     await ctx.db.patch(args.id, updates);
+    await logActivity(ctx, {
+      type: "alert_resolved",
+      description: `Alert ${args.status}: ${alert?.title || ""}`,
+      user: args.resolvedBy || "System",
+      unit: alert?.unit,
+    });
   },
 });

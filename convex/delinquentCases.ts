@@ -1,6 +1,10 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
+async function logActivity(ctx: any, entry: { type: string; description: string; user: string; unit?: string }) {
+  await ctx.db.insert("activity_log", { ...entry, createdAt: new Date().toISOString() });
+}
+
 export const listActive = query({
   handler: async (ctx) => {
     return await ctx.db
@@ -20,19 +24,23 @@ export const create = mutation({
     stage: v.string(),
     deadline: v.optional(v.string()),
     notes: v.optional(v.string()),
+    user: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("delinquent_cases", {
-      ...args,
+    const { user, ...data } = args;
+    const id = await ctx.db.insert("delinquent_cases", {
+      ...data,
       isActive: true,
       stageEnteredAt: new Date().toISOString(),
-      history: [
-        {
-          toStage: args.stage,
-          at: new Date().toISOString(),
-        },
-      ],
+      history: [{ toStage: args.stage, at: new Date().toISOString() }],
     });
+    await logActivity(ctx, {
+      type: "status_change",
+      description: `Delinquent case created: ${args.tenantName} (${args.unit}) — ${args.stage}`,
+      user: user || "System",
+      unit: args.unit,
+    });
+    return id;
   },
 });
 
@@ -61,6 +69,12 @@ export const advanceStage = mutation({
       deadline: args.deadline,
       history,
       isActive: args.stage !== "resolved",
+    });
+    await logActivity(ctx, {
+      type: "status_change",
+      description: `${c.tenantName} (${c.unit}): ${c.stage} → ${args.stage}`,
+      user: args.changedBy || "System",
+      unit: c.unit,
     });
   },
 });

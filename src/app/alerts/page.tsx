@@ -2,7 +2,7 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
-import { tenants, formatCurrency } from "@/data/tenants";
+import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
 import PageHeader from "@/components/PageHeader";
 import { Zap, DollarSign, CalendarClock, AlertTriangle, Clock } from "lucide-react";
 
@@ -90,6 +90,8 @@ export default function AlertsPage() {
   const gridRef = useRef<AgGridReact>(null);
   const historyGridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
+  const activeProperty = useActiveProperty();
+  const tenants = useTenants(activeProperty?._id);
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
   const [customAlerts, setCustomAlerts] = useState<AlertRow[]>([]);
   const [showAddAlert, setShowAddAlert] = useState(false);
@@ -103,8 +105,8 @@ export default function AlertsPage() {
     const alert: AlertRow = {
       id: `custom-${Date.now()}`,
       unit: newAlert.unit.trim() || "—",
-      tenant: tenants.find(t => t.unit === newAlert.unit.trim())?.tenant || "",
-      building: tenants.find(t => t.unit === newAlert.unit.trim())?.building || "",
+      tenant: tenants.find((t: any) => t.unit === newAlert.unit.trim())?.tenant || "",
+      building: tenants.find((t: any) => t.unit === newAlert.unit.trim())?.building || "",
       category: newAlert.category,
       severity: newAlert.severity,
       detail: newAlert.detail.trim(),
@@ -135,8 +137,8 @@ export default function AlertsPage() {
     const updated = customAlerts.map(a => a.id === editingAlertId ? {
       ...a,
       unit: newAlert.unit.trim() || "—",
-      tenant: tenants.find(t => t.unit === newAlert.unit.trim())?.tenant || "",
-      building: tenants.find(t => t.unit === newAlert.unit.trim())?.building || "",
+      tenant: tenants.find((t: any) => t.unit === newAlert.unit.trim())?.tenant || "",
+      building: tenants.find((t: any) => t.unit === newAlert.unit.trim())?.building || "",
       category: newAlert.category,
       severity: newAlert.severity,
       detail: newAlert.detail.trim(),
@@ -166,8 +168,8 @@ export default function AlertsPage() {
     const alerts: AlertRow[] = [];
 
     // Electric not posted
-    tenants.filter(t => t.leaseType === "Office Net Lease" && !t.electricPosted && t.tenant && !t.tenant.includes("Owner"))
-      .forEach(t => {
+    tenants.filter((t: any) => t.leaseType === "Office Net Lease" && !t.electricPosted && t.tenant && !t.tenant.includes("Owner"))
+      .forEach((t: any) => {
         alerts.push({
           id: `elec-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,
           category: "Electric Not Posted", severity: "Critical",
@@ -177,8 +179,8 @@ export default function AlertsPage() {
       });
 
     // Past due
-    tenants.filter(t => t.pastDueAmount > 0)
-      .forEach(t => {
+    tenants.filter((t: any) => t.pastDueAmount > 0)
+      .forEach((t: any) => {
         alerts.push({
           id: `pd-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,
           category: "Past Due", severity: "Critical",
@@ -188,8 +190,8 @@ export default function AlertsPage() {
       });
 
     // Expiring leases
-    tenants.filter(t => t.status === "expiring_soon")
-      .forEach(t => {
+    tenants.filter((t: any) => t.status === "expiring_soon")
+      .forEach((t: any) => {
         alerts.push({
           id: `exp-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,
           category: "Lease Expiring", severity: "Warning",
@@ -199,8 +201,8 @@ export default function AlertsPage() {
       });
 
     // Holdovers
-    tenants.filter(t => t.leaseTo && new Date(t.leaseTo) < new Date("2026-03-15") && t.status !== "vacant" && !t.tenant.includes("Owner"))
-      .forEach(t => {
+    tenants.filter((t: any) => t.leaseTo && new Date(t.leaseTo) < new Date("2026-03-15") && t.status !== "vacant" && !t.tenant.includes("Owner"))
+      .forEach((t: any) => {
         alerts.push({
           id: `hold-${t.unit}`, unit: t.unit, tenant: t.tenant, building: t.building,
           category: "Holdover", severity: "Critical",
@@ -210,7 +212,7 @@ export default function AlertsPage() {
       });
 
     return alerts;
-  }, []);
+  }, [tenants]);
 
   const allAlerts = [...customAlerts, ...alertData];
   const activeAlerts = allAlerts.filter(a => !archivedIds.has(a.id));

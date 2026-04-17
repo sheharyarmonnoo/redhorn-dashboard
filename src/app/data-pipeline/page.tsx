@@ -3,6 +3,7 @@ import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
 import { exportRentRoll, exportLeaseLedger, exportIncomeStatement, exportFullPackage } from "@/data/export";
+import { useSyncJobs } from "@/hooks/useConvexData";
 import PageHeader from "@/components/PageHeader";
 import { Download, X, Plus, Trash2, Save } from "lucide-react";
 
@@ -644,10 +645,31 @@ function SmartUploadModal({ onClose }: { onClose: () => void }) {
 export default function DataPipelinePage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
+  const syncJobs = useSyncJobs();
   const [selectedFile, setSelectedFile] = useState<FileSyncRow | null>(null);
   const [activeSection, setActiveSection] = useState<"approval" | "workflow" | "protocol" | "triggers">("approval");
   const [syncing, setSyncing] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+
+  // Use Convex sync jobs if available, otherwise fall back to hardcoded data
+  const syncData = useMemo(() => {
+    if (syncJobs.length > 0) {
+      return syncJobs.map((job: any, idx: number) => ({
+        id: job._id || idx + 1,
+        filename: job.filename,
+        source: job.source,
+        type: job.type,
+        records: job.records ?? 0,
+        size: job.size ?? "",
+        status: job.status,
+        syncedAt: job.syncedAt,
+        statusDetail: job.statusDetail,
+        affectedUnits: job.affectedUnits,
+        resolution: job.resolution,
+      }));
+    }
+    return fileSyncHistory;
+  }, [syncJobs]);
 
   function handleUpdateNow() {
     setSyncing(true);
@@ -716,7 +738,7 @@ export default function DataPipelinePage() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-3">
-          <p className="text-[12px] text-[#71717a]">{fileSyncHistory.length} files · Last sync Mar 12, 2026</p>
+          <p className="text-[12px] text-[#71717a]">{syncData.length} files · Last sync Mar 12, 2026</p>
           <button onClick={handleUpdateNow} disabled={syncing}
             className={`text-[10px] cursor-pointer transition-colors ${syncing ? "text-[#a1a1aa]" : "text-[#71717a] hover:text-[#18181b] underline decoration-dotted"}`}>
             {syncing ? "Updating..." : "Update now"}
@@ -733,7 +755,7 @@ export default function DataPipelinePage() {
       <div className="ag-theme-alpine w-full rounded overflow-hidden border border-[#e4e4e7]" style={{ height: isMobile ? 450 : 480 }}>
         <AgGridReact
           ref={gridRef}
-          rowData={fileSyncHistory}
+          rowData={syncData}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           onGridReady={onGridReady}

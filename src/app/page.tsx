@@ -5,46 +5,76 @@ import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
 import ActionItems from "@/components/ActionItems";
 import RevenueFilter from "@/components/RevenueFilter";
-import { tenants, monthlyRevenue, formatCurrency, getAlerts } from "@/data/tenants";
+import { useActiveProperty, useTenants, useMonthlyRevenue, formatCurrency } from "@/hooks/useConvexData";
 import { Filter } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 export default function DashboardPage() {
+  const property = useActiveProperty();
+  const tenants = useTenants(property?._id);
+  const monthlyRevenue = useMonthlyRevenue(property?._id);
+
   const allOccupiedUnits = useMemo(() =>
     new Set(tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")).map(t => t.unit)),
-  []);
+  [tenants]);
   const [kpiDrawer, setKpiDrawer] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filteredUnits, setFilteredUnits] = useState<Set<string>>(allOccupiedUnits);
-  const isFiltered = filteredUnits.size !== allOccupiedUnits.size;
+  const [filteredUnits, setFilteredUnits] = useState<Set<string>>(new Set());
+  const [filterInitialized, setFilterInitialized] = useState(false);
 
-  // Persist filter to localStorage
+  // Initialize filter from localStorage after tenants load
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("redhorn_revenue_filter");
-      if (saved) {
-        const arr = JSON.parse(saved) as string[];
-        if (arr.length > 0) setFilteredUnits(new Set(arr));
-      }
-    } catch {}
-  }, []);
+    if (allOccupiedUnits.size > 0 && !filterInitialized) {
+      try {
+        const saved = localStorage.getItem("redhorn_revenue_filter");
+        if (saved) {
+          const arr = JSON.parse(saved) as string[];
+          if (arr.length > 0) { setFilteredUnits(new Set(arr)); setFilterInitialized(true); return; }
+        }
+      } catch {}
+      setFilteredUnits(allOccupiedUnits);
+      setFilterInitialized(true);
+    }
+  }, [allOccupiedUnits, filterInitialized]);
+
+  const isFiltered = filterInitialized && filteredUnits.size !== allOccupiedUnits.size;
 
   const handleFilterApply = useCallback((units: Set<string>) => {
     setFilteredUnits(units);
     localStorage.setItem("redhorn_revenue_filter", JSON.stringify(Array.from(units)));
   }, []);
+
+  if (!property || tenants.length === 0) {
+    return <div className="text-[13px] text-[#a1a1aa] py-12 text-center">Loading dashboard data...</div>;
+  }
+
   const occupied = tenants.filter(t => t.status !== "vacant");
   const vacant = tenants.filter(t => t.status === "vacant");
   const totalSqft = tenants.reduce((sum, t) => sum + t.sqft, 0);
   const occupiedSqft = occupied.reduce((sum, t) => sum + t.sqft, 0);
-  const occupancyPct = Math.round((occupiedSqft / totalSqft) * 100);
+  const occupancyPct = totalSqft > 0 ? Math.round((occupiedSqft / totalSqft) * 100) : 0;
   const totalMonthlyRent = occupied.reduce((sum, t) => sum + t.monthlyRent, 0);
   const totalPastDue = tenants.reduce((sum, t) => sum + t.pastDueAmount, 0);
   const electricMissing = tenants.filter(t => !t.electricPosted && t.leaseType === "Office Net Lease" && t.tenant && !t.tenant.includes("Owner"));
-  const alerts = getAlerts();
   const expiringCount = tenants.filter(t => t.status === "expiring_soon").length;
+
+  // Generate alerts from tenant data
+  const alerts: { type: string; message: string; unit: string; date: string }[] = [];
+  for (const t of tenants) {
+    if (t.status === "vacant") continue;
+    if (t.leaseType === "Office Net Lease" && !t.electricPosted && t.tenant) {
+      alerts.push({ type: "critical", message: "Electric not posted", unit: t.unit, date: "2026-03-01" });
+    }
+    if (t.pastDueAmount > 0) {
+      alerts.push({ type: "critical", message: `Past due: ${formatCurrency(t.pastDueAmount)}`, unit: t.unit, date: "2026-03-01" });
+    }
+    if (t.status === "expiring_soon") {
+      const isUrgent = t.leaseTo <= "2026-03-31";
+      alerts.push({ type: isUrgent ? "critical" : "warning", message: `Lease expires ${t.leaseTo}`, unit: t.unit, date: t.leaseTo });
+    }
+  }
 
   const chartFont = "'Inter', -apple-system, system-ui, sans-serif";
 
@@ -61,18 +91,19 @@ export default function DashboardPage() {
   };
 
   // Scale chart data based on filtered units
-  const filteredRent = tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyRent, 0);
-  const filteredElectric = tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyElectric, 0);
+  const activeFilterUnits = filterInitialized ? filteredUnits : allOccupiedUnits;
+  const filteredRent = tenants.filter(t => activeFilterUnits.has(t.unit)).reduce((s, t) => s + t.monthlyRent, 0);
+  const filteredElectric = tenants.filter(t => activeFilterUnits.has(t.unit)).reduce((s, t) => s + t.monthlyElectric, 0);
   const totalRentAll = tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")).reduce((s, t) => s + t.monthlyRent, 0);
   const totalElectricAll = tenants.filter(t => t.status !== "vacant" && t.monthlyElectric > 0 && !t.tenant.includes("Owner")).reduce((s, t) => s + t.monthlyElectric, 0);
   const rentRatio = totalRentAll > 0 ? filteredRent / totalRentAll : 1;
   const electricRatio = totalElectricAll > 0 ? filteredElectric / totalElectricAll : 1;
 
-  const revenueSeries = useMemo(() => [
+  const revenueSeries = [
     { name: "Rent", data: monthlyRevenue.map(m => Math.round(m.rent * rentRatio)) },
     { name: "Electric", data: monthlyRevenue.map(m => Math.round(m.electric * electricRatio)) },
     { name: "CAM", data: monthlyRevenue.map(m => Math.round(m.cam * rentRatio)) },
-  ], [rentRatio, electricRatio]);
+  ];
 
   const occupancyChartOptions: ApexCharts.ApexOptions = {
     chart: { type: "area", toolbar: { show: false }, fontFamily: chartFont },
@@ -91,7 +122,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Monthly KPI Dashboard" subtitle="Hollister Business Park — March 2026" />
+      <PageHeader title="Monthly KPI Dashboard" subtitle={`${property.name} — ${monthlyRevenue.length > 0 ? monthlyRevenue[monthlyRevenue.length - 1].month : ""}`} />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3 mb-6">
@@ -103,7 +134,6 @@ export default function DashboardPage() {
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
       </div>
 
-      {/* Notion-style Action Items */}
       <ActionItems />
 
       {/* Charts */}
@@ -134,17 +164,17 @@ export default function DashboardPage() {
           <p className="text-[11px] text-[#a1a1aa] mb-3">
             {isFiltered
               ? `Showing ${filteredUnits.size} of ${allOccupiedUnits.size} units — ${formatCurrency(tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyRent, 0))}/mo`
-              : "Last 9 months by category"}
+              : `Last ${monthlyRevenue.length} months by category`}
           </p>
-          <Chart options={revenueChartOptions} series={revenueSeries} type="bar" height={260} />
+          {monthlyRevenue.length > 0 && <Chart options={revenueChartOptions} series={revenueSeries} type="bar" height={260} />}
         </div>
 
-      <RevenueFilter
-        open={filterOpen}
-        onClose={() => setFilterOpen(false)}
-        selectedUnits={filteredUnits}
-        onApply={handleFilterApply}
-      />
+        <RevenueFilter
+          open={filterOpen}
+          onClose={() => setFilterOpen(false)}
+          selectedUnits={activeFilterUnits}
+          onApply={handleFilterApply}
+        />
         <div className="bg-white border border-[#e4e4e7] rounded p-4">
           <div className="flex items-baseline justify-between mb-3">
             <div>
@@ -153,7 +183,7 @@ export default function DashboardPage() {
             </div>
             <p className="text-[12px] font-medium text-[#16a34a]">{occupancyPct}%</p>
           </div>
-          <Chart options={occupancyChartOptions} series={occupancySeries} type="area" height={260} />
+          {monthlyRevenue.length > 0 && <Chart options={occupancyChartOptions} series={occupancySeries} type="area" height={260} />}
         </div>
       </div>
 
@@ -165,33 +195,42 @@ export default function DashboardPage() {
             <p className="text-[11px] font-medium text-[#dc2626] uppercase tracking-wide mb-2">Past Due</p>
             <div className="space-y-2">
               {tenants.filter(t => t.pastDueAmount > 0).map(t => (
-                <div key={t.unit} className="text-[12px]">
+                <div key={t._id} className="text-[12px]">
                   <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
                   <p className="text-[#dc2626]">{formatCurrency(t.pastDueAmount)}</p>
                 </div>
               ))}
+              {tenants.filter(t => t.pastDueAmount > 0).length === 0 && (
+                <p className="text-[11px] text-[#a1a1aa]">No past due tenants</p>
+              )}
             </div>
           </div>
           <div>
             <p className="text-[11px] font-medium text-[#d97706] uppercase tracking-wide mb-2">Electric Not Posted</p>
             <div className="space-y-2">
               {electricMissing.map(t => (
-                <div key={t.unit} className="text-[12px]">
+                <div key={t._id} className="text-[12px]">
                   <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
                   <p className="text-[#71717a]">~{formatCurrency(t.monthlyElectric)}/mo expected</p>
                 </div>
               ))}
+              {electricMissing.length === 0 && (
+                <p className="text-[11px] text-[#16a34a]">All electric charges posted</p>
+              )}
             </div>
           </div>
           <div>
             <p className="text-[11px] font-medium text-[#2563eb] uppercase tracking-wide mb-2">Expiring Soon</p>
             <div className="space-y-2">
               {tenants.filter(t => t.status === "expiring_soon").slice(0, 5).map(t => (
-                <div key={t.unit} className="text-[12px]">
+                <div key={t._id} className="text-[12px]">
                   <p className="font-medium text-[#18181b]">{t.unit} — {t.tenant}</p>
                   <p className="text-[#71717a]">Expires {t.leaseTo}</p>
                 </div>
               ))}
+              {tenants.filter(t => t.status === "expiring_soon").length === 0 && (
+                <p className="text-[11px] text-[#a1a1aa]">No leases expiring within 90 days</p>
+              )}
             </div>
           </div>
         </div>
