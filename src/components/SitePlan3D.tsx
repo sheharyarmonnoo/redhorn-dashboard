@@ -1,5 +1,5 @@
 "use client";
-import { tenants, Tenant, TenantStatus } from "@/data/tenants";
+import { tenants, Tenant, TenantStatus } from "@/data/_seed_tenants";
 
 function statusColor(status: TenantStatus) {
   switch (status) {

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { tenants, monthlyRevenue, formatCurrency } from "@/data/tenants";
+import { tenants, monthlyRevenue, formatCurrency } from "@/data/_seed_tenants";
 
 interface KPIDrawerProps {
   open: boolean;

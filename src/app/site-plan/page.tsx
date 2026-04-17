@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { tenants, Tenant } from "@/data/tenants";
+import { tenants, Tenant } from "@/data/_seed_tenants";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import SitePlan3D from "@/components/SitePlan3D";

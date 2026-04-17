@@ -3,7 +3,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
 import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
-import { exportRentRoll } from "@/data/export";
+import { exportRentRoll } from "@/data/_seed_export";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import { Download } from "lucide-react";

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { tenants, monthlyRevenue, formatCurrency, getAlerts, Tenant } from "@/data/tenants";
-import { addKanbanItem, loadKanban, addUnitNote } from "@/data/store";
+import { tenants, monthlyRevenue, formatCurrency, getAlerts, Tenant } from "@/data/_seed_tenants";
+import { addKanbanItem, loadKanban, addUnitNote } from "@/data/_seed_store";
 
 interface Message {
   role: "user" | "assistant";

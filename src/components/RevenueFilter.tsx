@@ -1,6 +1,6 @@
 "use client";
 import { useState, useMemo } from "react";
-import { tenants, formatCurrency } from "@/data/tenants";
+import { tenants, formatCurrency } from "@/data/_seed_tenants";
 import { X } from "lucide-react";
 
 interface Props {

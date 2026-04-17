@@ -2,7 +2,7 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
-import { exportRentRoll, exportLeaseLedger, exportIncomeStatement, exportFullPackage } from "@/data/export";
+import { exportRentRoll, exportLeaseLedger, exportIncomeStatement, exportFullPackage } from "@/data/_seed_export";
 import { useSyncJobs } from "@/hooks/useConvexData";
 import PageHeader from "@/components/PageHeader";
 import { Download, X, Plus, Trash2, Save } from "lucide-react";

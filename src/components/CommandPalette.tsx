@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { tenants, formatCurrency } from "@/data/tenants";
-import { loadKanban, addKanbanItem } from "@/data/store";
+import { tenants, formatCurrency } from "@/data/_seed_tenants";
+import { loadKanban, addKanbanItem } from "@/data/_seed_store";
 
 interface CommandItem {
   id: string;

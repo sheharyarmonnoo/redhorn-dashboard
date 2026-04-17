@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { X, Save, Edit3, ChevronRight } from "lucide-react";
-import { Tenant, DelinquencyStage, ledgerA102, formatCurrency, getStatusLabel } from "@/data/tenants";
-import { updateTenantNote, getOverrideForUnit, updateDelinquencyStage, updateChargePosting, getChargePostings, getUnitNotes, addUnitNote, editUnitNote, deleteUnitNote, NoteEntry } from "@/data/store";
+import { Tenant, DelinquencyStage, ledgerA102, formatCurrency, getStatusLabel } from "@/data/_seed_tenants";
+import { updateTenantNote, getOverrideForUnit, updateDelinquencyStage, updateChargePosting, getChargePostings, getUnitNotes, addUnitNote, editUnitNote, deleteUnitNote, NoteEntry } from "@/data/_seed_store";
 
 interface Props {
   tenant: Tenant | null;

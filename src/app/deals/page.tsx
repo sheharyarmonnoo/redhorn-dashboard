@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import PageHeader from "@/components/PageHeader";
-import { DealStage, getStageLabel, getStageColor, emailTemplates } from "@/data/deals";
+import { DealStage, getStageLabel, getStageColor, emailTemplates } from "@/data/_seed_deals";
 import { useDeals, formatCurrency } from "@/hooks/useConvexData";
 import { Plus, X, ChevronDown, Send, MessageSquare, Mail, Trash2, ExternalLink } from "lucide-react";
 

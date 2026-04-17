@@ -29,42 +29,46 @@ import type {
   FunctionReference,
 } from "convex/server";
 
+declare const fullApi: ApiFromModules<{
+  actionItems: typeof actionItems;
+  activityLog: typeof activityLog;
+  agingRecords: typeof agingRecords;
+  alerts: typeof alerts;
+  deals: typeof deals;
+  delinquentCases: typeof delinquentCases;
+  files: typeof files;
+  http: typeof http;
+  monthlyRevenue: typeof monthlyRevenue;
+  properties: typeof properties;
+  seed: typeof seed;
+  syncJobs: typeof syncJobs;
+  tenants: typeof tenants;
+  unitNotes: typeof unitNotes;
+}>;
+
+/**
+ * A utility for referencing Convex functions in your app's public API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
 export declare const api: FilterApi<
-  ApiFromModules<{
-    actionItems: typeof actionItems;
-    activityLog: typeof activityLog;
-    agingRecords: typeof agingRecords;
-    alerts: typeof alerts;
-    deals: typeof deals;
-    delinquentCases: typeof delinquentCases;
-    files: typeof files;
-    http: typeof http;
-    monthlyRevenue: typeof monthlyRevenue;
-    properties: typeof properties;
-    seed: typeof seed;
-    syncJobs: typeof syncJobs;
-    tenants: typeof tenants;
-    unitNotes: typeof unitNotes;
-  }>,
+  typeof fullApi,
   FunctionReference<any, "public">
 >;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
 export declare const internal: FilterApi<
-  ApiFromModules<{
-    actionItems: typeof actionItems;
-    activityLog: typeof activityLog;
-    agingRecords: typeof agingRecords;
-    alerts: typeof alerts;
-    deals: typeof deals;
-    delinquentCases: typeof delinquentCases;
-    files: typeof files;
-    http: typeof http;
-    monthlyRevenue: typeof monthlyRevenue;
-    properties: typeof properties;
-    seed: typeof seed;
-    syncJobs: typeof syncJobs;
-    tenants: typeof tenants;
-    unitNotes: typeof unitNotes;
-  }>,
+  typeof fullApi,
   FunctionReference<any, "internal">
 >;
 
