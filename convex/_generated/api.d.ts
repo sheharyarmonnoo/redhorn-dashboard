@@ -16,6 +16,7 @@ import type * as deals from "../deals.js";
 import type * as delinquentCases from "../delinquentCases.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
+import type * as incomeLines from "../incomeLines.js";
 import type * as monthlyRevenue from "../monthlyRevenue.js";
 import type * as properties from "../properties.js";
 import type * as seed from "../seed.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   delinquentCases: typeof delinquentCases;
   files: typeof files;
   http: typeof http;
+  incomeLines: typeof incomeLines;
   monthlyRevenue: typeof monthlyRevenue;
   properties: typeof properties;
   seed: typeof seed;
