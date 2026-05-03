@@ -61,7 +61,13 @@ export default function DashboardPage() {
   const totalSqft = tenants.reduce((sum, t) => sum + t.sqft, 0);
   const occupiedSqft = occupied.reduce((sum, t) => sum + t.sqft, 0);
   const occupancyPct = totalSqft > 0 ? Math.round((occupiedSqft / totalSqft) * 100) : 0;
-  const totalMonthlyRent = occupied.reduce((sum, t) => sum + t.monthlyRent, 0);
+  // Prefer the monthly_revenue rollup (derived from the income statement) when
+  // present — Yardi's dashboard rent-roll panel doesn't carry rent figures, so
+  // summing tenant.monthlyRent yields $0 on real data. Fall back to the tenant
+  // sum only when no rollup row exists yet.
+  const tenantRentSum = occupied.reduce((sum, t) => sum + t.monthlyRent, 0);
+  const latestRollup = monthlyRevenue.length > 0 ? monthlyRevenue[monthlyRevenue.length - 1] : null;
+  const totalMonthlyRent = latestRollup && latestRollup.total > 0 ? latestRollup.total : tenantRentSum;
   const totalPastDue = tenants.reduce((sum, t) => sum + t.pastDueAmount, 0);
   const electricMissing = tenants.filter(t => !t.electricPosted && t.leaseType === "Office Net Lease" && t.tenant && !t.tenant.includes("Owner"));
   const expiringCount = tenants.filter(t => t.status === "expiring_soon").length;
