@@ -415,16 +415,23 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
   const addComment = useMutation(api.alerts.addComment);
   const [showSuppressed, setShowSuppressed] = useState(false);
 
-  const { active, suppressed, latestSummary } = useMemo(() => {
+  const { active, suppressed, latestSummary, hasAnyHistory } = useMemo(() => {
     const all = (alerts as any[])
       .filter(a => a.alertType === "income_insight" && a.propertyId === propertyId)
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     const active = all.filter(a => a.status !== "false_flag" && a.status !== "resolved" && a.status !== "dismissed").slice(0, 6);
     const suppressed = all.filter(a => a.status === "false_flag");
-    return { active, suppressed, latestSummary: active[0]?.aiAnalysis ?? all[0]?.aiAnalysis };
+    return {
+      active,
+      suppressed,
+      latestSummary: active[0]?.aiAnalysis ?? all[0]?.aiAnalysis,
+      hasAnyHistory: all.length > 0,
+    };
   }, [alerts, propertyId]);
 
-  if (active.length === 0 && suppressed.length === 0) return null;
+  // No insights ever generated for this property — hide entirely so the
+  // empty state doesn't dominate before the first sync runs.
+  if (!hasAnyHistory) return null;
 
   const sevDot: Record<string, string> = {
     critical: "bg-[#dc2626]",
@@ -455,11 +462,18 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
           <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{latestSummary}</p>
         </div>
       )}
-      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46]">
-        {active.map(ins => (
-          <InsightRow key={ins._id} insight={ins} dotClass={sevDot[ins.severity] || sevDot.info} onFlag={() => flag(ins._id)} />
-        ))}
-      </div>
+      {active.length > 0 ? (
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46]">
+          {active.map(ins => (
+            <InsightRow key={ins._id} insight={ins} dotClass={sevDot[ins.severity] || sevDot.info} onFlag={() => flag(ins._id)} />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4 text-center">
+          <p className="text-[12px] text-[#16a34a] font-medium">All clear · no active findings this run</p>
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1">Past insights are kept for continuity. Next sync will flag anything new.</p>
+        </div>
+      )}
 
       {suppressed.length > 0 && (
         <div className="mt-3">
