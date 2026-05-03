@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { parseIncomeStatement } from "./parse-income-statement.js";
 import { parseRentRoll } from "./parse-rent-roll.js";
 import { parseTotalUnits } from "./parse-total-units.js";
+import { sendSyncDigest, type DigestProperty } from "./digest.js";
 
 // Generated API surface lives in the parent project. We reference functions by
 // path so this script doesn't need its own Convex codegen.
@@ -15,7 +16,9 @@ const FN = {
   bulkInsertIncomeLines: "incomeLines:bulkInsertByCode",
   bulkReplaceTenants: "tenants:bulkReplaceByCode",
   bulkReplaceUnits: "units:bulkReplaceByCode",
+  recomputeMonthlyRevenue: "monthlyRevenue:recomputeFromLatest",
   extractInsights: "insights:extractForProperty",
+  getPropertyByCode: "properties:getByCode",
 } as const;
 
 export interface UploadedFile {
@@ -134,11 +137,28 @@ export async function uploadRunToConvex(
     }
   }
 
+  // Phase 2.5 — recompute monthly_revenue rollup from the latest income_lines +
+  // tenants + units. Powers the dashboard KPI cards and revenue chart from real data.
+  // We derive the month from the snapshotDate (YYYY-MM-DD → YYYY-MM).
+  const monthKey = snapshotDate.slice(0, 7);
+  for (const code of ingestedProperties) {
+    try {
+      const result: any = await client.mutation(FN.recomputeMonthlyRevenue as any, {
+        propertyCode: code,
+        month: monthKey,
+      });
+      console.log(`   monthly_revenue ${code} ${monthKey}: rent=$${result.rent.toLocaleString()} total=$${result.total.toLocaleString()} occ=${result.occupancy}%`);
+    } catch (err: any) {
+      console.error(`   monthly_revenue recompute failed for ${code}: ${err?.message || err}`);
+    }
+  }
+
   // Phase 3 — run Claude insights against each freshly ingested property. This is
   // what makes the sync deliver real value: each run produces narrative analysis
   // that references prior snapshots and prior insights for continuity.
   let totalInsights = 0;
   let totalAlertsCreated = 0;
+  const digestProperties: DigestProperty[] = [];
   const insightSummaries: Array<{ propertyCode: string; summary: string }> = [];
   for (const code of ingestedProperties) {
     try {
@@ -150,6 +170,17 @@ export async function uploadRunToConvex(
       totalInsights += result.insightsCount || 0;
       totalAlertsCreated += result.alertsCreated || 0;
       insightSummaries.push({ propertyCode: code, summary: result.summary });
+      const property: any = await client.query(FN.getPropertyByCode as any, { code });
+      digestProperties.push({
+        name: property?.name || code,
+        code,
+        summary: result.summary || "",
+        insights: (result.insights || []).map((i: any) => ({
+          severity: i.severity || "info",
+          title: i.title || "",
+        })),
+        alertsCreated: result.alertsCreated || 0,
+      });
       console.log(`   ${code}: ${result.insightsCount} insights, ${result.alertsCreated} alerts written`);
       console.log(`      → ${result.summary.slice(0, 200)}`);
     } catch (err: any) {
@@ -182,6 +213,24 @@ export async function uploadRunToConvex(
       console.log(s.summary);
     }
   }
+
+  // Phase 4 — email digest. Sends an HTML summary of the run to whoever is on
+  // YARDI_DIGEST_TO. Skipped silently if the env var isn't set, so unconfigured
+  // local runs don't blow up.
+  if (digestProperties.length > 0) {
+    try {
+      await sendSyncDigest({
+        syncJobId: jobId,
+        month: monthKey,
+        rowsIngested: totalRowsIngested,
+        filesUploaded: uploaded.length,
+        properties: digestProperties,
+      });
+    } catch (err: any) {
+      console.error(`   email digest failed: ${err?.message || err}`);
+    }
+  }
+
   return { jobId, uploaded, failed };
 }
 
