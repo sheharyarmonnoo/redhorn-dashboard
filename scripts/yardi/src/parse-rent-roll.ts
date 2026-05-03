@@ -42,13 +42,14 @@ export function parseRentRoll(filePath: string): ParsedRentRoll {
   const propertyHeader = String(grid[0]?.[0] ?? "").trim();
   const asOfHeader = grid.slice(0, 6).map(r => String(r?.[0] ?? "")).find(s => /as ?of|period/i.test(s)) ?? "";
 
-  // Find the header row — the first row containing both "unit" and "tenant" labels
+  // Find the header row — for Yardi's dashboard "Current Leases" the columns are:
+  // Property Id | Customer Id | Unit Id | Lease Name(Id) | Lease Type | Expiration Date | Area
   let headerRowIdx = -1;
   for (let i = 0; i < Math.min(grid.length, 30); i++) {
     const cells = (grid[i] || []).map(c => String(c).trim().toLowerCase());
-    const hasUnit = cells.some(c => c === "unit" || /^unit\s*(id|#)?$/.test(c));
-    const hasTenant = cells.some(c => /tenant|customer|lessee/.test(c));
-    if (hasUnit && hasTenant) {
+    const hasUnit = cells.some(c => /unit\s*id|^unit$/.test(c));
+    const hasLeaseOrTenant = cells.some(c => /tenant|customer|lessee|lease\s*name/.test(c));
+    if (hasUnit && hasLeaseOrTenant) {
       headerRowIdx = i;
       break;
     }
@@ -67,13 +68,15 @@ export function parseRentRoll(filePath: string): ParsedRentRoll {
   };
 
   const cols = {
-    unit: idx("unit", "unit id", "unit #"),
+    propertyId: idx("property id"),
+    unit: idx("unit id", "unit", "unit #"),
     building: idx("building", "bldg"),
-    tenant: idx("tenant", "customer", "lessee"),
+    tenant: idx("lease name", "tenant", "customer", "lessee"),
+    customerId: idx("customer id"),
     leaseType: idx("lease type", "type"),
-    sqft: idx("sqft", "sq ft", "area", "square feet"),
+    sqft: idx("area", "sqft", "sq ft", "square feet"),
     leaseFrom: idx("lease from", "start", "begin", "lease start", "from date"),
-    leaseTo: idx("lease to", "end", "expire", "lease end", "to date"),
+    leaseTo: idx("expiration date", "lease to", "end", "expire", "lease end"),
     monthlyRent: idx("monthly rent", "rent", "base rent"),
     monthlyElectric: idx("electric", "utility"),
     securityDeposit: idx("deposit", "security"),

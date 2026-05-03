@@ -4,6 +4,7 @@ import { basename } from "node:path";
 import { config } from "./config.js";
 import { parseIncomeStatement } from "./parse-income-statement.js";
 import { parseRentRoll } from "./parse-rent-roll.js";
+import { parseTotalUnits } from "./parse-total-units.js";
 
 // Generated API surface lives in the parent project. We reference functions by
 // path so this script doesn't need its own Convex codegen.
@@ -13,6 +14,7 @@ const FN = {
   completeSyncJob: "syncJobs:complete",
   bulkInsertIncomeLines: "incomeLines:bulkInsertByCode",
   bulkReplaceTenants: "tenants:bulkReplaceByCode",
+  bulkReplaceUnits: "units:bulkReplaceByCode",
   extractInsights: "insights:extractForProperty",
 } as const;
 
@@ -100,7 +102,7 @@ export async function uploadRunToConvex(
         if (!ingestedProperties.includes(u.propertyCode)) ingestedProperties.push(u.propertyCode);
       } else if (u.reportType === "rent_roll") {
         const parsed = parseRentRoll(u.filePath);
-        console.log(`   parsed RR ${u.fileName}: ${parsed.rows.length} units (${parsed.asOfHeader || "no as-of header"})`);
+        console.log(`   parsed RR ${u.fileName}: ${parsed.rows.length} leases`);
         if (parsed.rows.length === 0) {
           console.warn(`   warning: rent-roll parser returned 0 rows — header likely didn't match expected columns`);
         }
@@ -111,6 +113,18 @@ export async function uploadRunToConvex(
           rows: parsed.rows,
         });
         console.log(`   ingested RR → ${result.inserted} tenants · superseded ${result.supersededPrior}`);
+        totalRowsIngested += result.inserted;
+      } else if (u.reportType === "total_units") {
+        const parsed = parseTotalUnits(u.filePath);
+        console.log(`   parsed TU ${u.fileName}: ${parsed.rows.length} units`);
+        if (parsed.rows.length === 0) {
+          console.warn(`   warning: total-units parser returned 0 rows — header likely didn't match expected columns`);
+        }
+        const result: any = await client.mutation(FN.bulkReplaceUnits as any, {
+          propertyCode: u.propertyCode,
+          rows: parsed.rows,
+        });
+        console.log(`   ingested TU → ${result.inserted} units · replaced ${result.supersededPrior}`);
         totalRowsIngested += result.inserted;
       }
     } catch (err: any) {

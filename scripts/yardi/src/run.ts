@@ -1,14 +1,14 @@
 import { openAuthenticatedSession } from "./auth.js";
 import { getProperties } from "./properties.js";
 import { runIncomeStatementForProperty } from "./reports/income-statement.js";
-import { runRentRollForProperty } from "./reports/rent-roll.js";
+import { runRentRollForProperty, runTotalUnitsForProperty } from "./reports/rent-roll.js";
 import { latestClosedMonth } from "./paths.js";
 import { uploadRunToConvex } from "./convex-upload.js";
 
 interface RunResult {
   property: string;
   propertyCode: string;
-  reportType: "income_statement" | "rent_roll";
+  reportType: "income_statement" | "rent_roll" | "total_units";
   ok: boolean;
   path?: string;
   error?: string;
@@ -51,7 +51,7 @@ async function main() {
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "income_statement", ok: false, error: msg });
       }
 
-      // Rent Roll
+      // Rent Roll (Current Leases panel)
       try {
         const path = await runRentRollForProperty(voyager, property, month);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll", ok: true, path });
@@ -59,6 +59,16 @@ async function main() {
         const msg = err?.message || String(err);
         console.error(`   RR FAILED — ${msg}`);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll", ok: false, error: msg });
+      }
+
+      // Total Units (Space/Facilities panel)
+      try {
+        const path = await runTotalUnitsForProperty(voyager, property, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "total_units", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   TU FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "total_units", ok: false, error: msg });
       }
     }
 

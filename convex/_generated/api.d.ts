@@ -24,6 +24,7 @@ import type * as seed from "../seed.js";
 import type * as syncJobs from "../syncJobs.js";
 import type * as tenants from "../tenants.js";
 import type * as unitNotes from "../unitNotes.js";
+import type * as units from "../units.js";
 
 import type {
   ApiFromModules,
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   syncJobs: typeof syncJobs;
   tenants: typeof tenants;
   unitNotes: typeof unitNotes;
+  units: typeof units;
 }>;
 
 /**

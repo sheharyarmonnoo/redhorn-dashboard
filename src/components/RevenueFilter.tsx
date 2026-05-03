@@ -1,6 +1,6 @@
 "use client";
 import { useState, useMemo } from "react";
-import { tenants, formatCurrency } from "@/data/_seed_tenants";
+import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
 import { X } from "lucide-react";
 
 interface Props {
@@ -12,10 +12,12 @@ interface Props {
 
 export default function RevenueFilter({ open, onClose, selectedUnits, onApply }: Props) {
   const [local, setLocal] = useState<Set<string>>(new Set(selectedUnits));
+  const property = useActiveProperty();
+  const tenants = useTenants(property?._id);
 
   const occupiedTenants = useMemo(() =>
-    tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")),
-  []);
+    tenants.filter((t: any) => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")),
+  [tenants]);
 
   const buildings = useMemo(() => {
     const map = new Map<string, typeof occupiedTenants>();
