@@ -2,13 +2,14 @@ import { openAuthenticatedSession } from "./auth.js";
 import { getProperties } from "./properties.js";
 import { runIncomeStatementForProperty } from "./reports/income-statement.js";
 import { runRentRollForProperty, runTotalUnitsForProperty, runPastDueForProperty } from "./reports/rent-roll.js";
+import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
 import { latestClosedMonth } from "./paths.js";
 import { uploadRunToConvex } from "./convex-upload.js";
 
 interface RunResult {
   property: string;
   propertyCode: string;
-  reportType: "income_statement" | "rent_roll" | "total_units" | "past_due";
+  reportType: "income_statement" | "rent_roll" | "total_units" | "past_due" | "rent_roll_full";
   ok: boolean;
   path?: string;
   error?: string;
@@ -79,6 +80,18 @@ async function main() {
         const msg = err?.message || String(err);
         console.error(`   PD FAILED — ${msg}`);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "past_due", ok: false, error: msg });
+      }
+
+      // Rent Roll (full) — Reports > Tenant Reports > Commercial Rent Roll. Adds
+      // base rent, lease start, security deposit on top of the panel data. Soft-
+      // failing here is fine — the Current Leases panel data is already in place.
+      try {
+        const path = await runRentRollFullForProperty(voyager, property, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll_full", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   RR-full FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll_full", ok: false, error: msg });
       }
     }
 

@@ -478,6 +478,7 @@ export default function DataPipelinePage() {
     const friendlyType: Record<string, string> = {
       income_statement: "Income Statement",
       rent_roll: "Rent Roll",
+      rent_roll_full: "Rent Roll (Full)",
       total_units: "Total Units",
       past_due: "Past Due",
       aging: "Aging",

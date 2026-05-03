@@ -18,6 +18,7 @@ const FN = {
   bulkReplaceTenants: "tenants:bulkReplaceByCode",
   bulkReplaceUnits: "units:bulkReplaceByCode",
   applyPastDue: "tenants:applyPastDueByCode",
+  enrichRent: "tenants:enrichRentByCode",
   recomputeMonthlyRevenue: "monthlyRevenue:recomputeFromLatest",
   extractInsights: "insights:extractForProperty",
   getPropertyByCode: "properties:getByCode",
@@ -144,6 +145,24 @@ export async function uploadRunToConvex(
           rows: parsed.rows,
         });
         console.log(`   applied PD → matched ${result.matched}/${result.tenants} tenants · cleared ${result.cleared}`);
+        perFileRows = result.matched;
+        totalRowsIngested += result.matched;
+      } else if (u.reportType === "rent_roll_full") {
+        const parsed = parseRentRoll(u.filePath);
+        console.log(`   parsed RR-full ${u.fileName}: ${parsed.rows.length} rows`);
+        const result: any = await client.mutation(FN.enrichRent as any, {
+          propertyCode: u.propertyCode,
+          rows: parsed.rows.map(r => ({
+            unit: r.unit,
+            tenant: r.tenant,
+            monthlyRent: r.monthlyRent,
+            monthlyElectric: r.monthlyElectric,
+            securityDeposit: r.securityDeposit,
+            leaseFrom: r.leaseFrom,
+            leaseTo: r.leaseTo,
+          })),
+        });
+        console.log(`   enriched RR-full → matched ${result.matched}/${result.tenants} tenants`);
         perFileRows = result.matched;
         totalRowsIngested += result.matched;
       }

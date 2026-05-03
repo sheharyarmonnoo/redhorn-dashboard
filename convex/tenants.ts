@@ -310,3 +310,78 @@ export const applyPastDueByCode = mutation({
     };
   },
 });
+
+/**
+ * Enrich the latest tenants snapshot with monthly rent + lease start +
+ * security deposit pulled from the full Commercial Rent Roll report. The
+ * dashboard "Current Leases" panel doesn't carry these fields, so we get them
+ * from the proper rent roll and merge them in.
+ *
+ * Match strategy: unit first (cheapest, exact), then lease-name fallback.
+ * Numbers only overwrite when the new value is non-zero so we don't blank
+ * existing values when the rent-roll-full source omits a field.
+ */
+export const enrichRentByCode = mutation({
+  args: {
+    propertyCode: v.string(),
+    rows: v.array(
+      v.object({
+        unit: v.string(),
+        tenant: v.optional(v.string()),
+        monthlyRent: v.optional(v.number()),
+        monthlyElectric: v.optional(v.number()),
+        securityDeposit: v.optional(v.number()),
+        leaseFrom: v.optional(v.string()),
+        leaseTo: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const property = await ctx.db
+      .query("properties")
+      .withIndex("by_code", (q) => q.eq("code", args.propertyCode))
+      .first();
+    if (!property) throw new Error(`Unknown property code: ${args.propertyCode}`);
+
+    const tenants = await ctx.db
+      .query("tenants")
+      .withIndex("by_property_latest", (q) =>
+        q.eq("propertyId", property._id).eq("isLatest", true)
+      )
+      .collect();
+
+    const norm = (s: string) =>
+      s.toLowerCase().replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+    const byUnit: Record<string, (typeof args.rows)[number]> = {};
+    const byTenant: Record<string, (typeof args.rows)[number]> = {};
+    for (const r of args.rows) {
+      if (r.unit) byUnit[r.unit.trim().toLowerCase()] = r;
+      if (r.tenant) byTenant[norm(r.tenant)] = r;
+    }
+
+    let matched = 0;
+    for (const t of tenants) {
+      const key = (t.unit || "").trim().toLowerCase();
+      const tkey = norm(t.tenant || "");
+      const hit = byUnit[key] || byTenant[tkey];
+      if (!hit) continue;
+      const patch: any = {};
+      if (typeof hit.monthlyRent === "number" && hit.monthlyRent > 0) patch.monthlyRent = hit.monthlyRent;
+      if (typeof hit.monthlyElectric === "number" && hit.monthlyElectric > 0) patch.monthlyElectric = hit.monthlyElectric;
+      if (typeof hit.securityDeposit === "number" && hit.securityDeposit > 0) patch.securityDeposit = hit.securityDeposit;
+      if (hit.leaseFrom && hit.leaseFrom.trim()) patch.leaseFrom = hit.leaseFrom;
+      if (hit.leaseTo && hit.leaseTo.trim()) patch.leaseTo = hit.leaseTo;
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(t._id, patch);
+        matched++;
+      }
+    }
+
+    return {
+      propertyId: property._id,
+      tenants: tenants.length,
+      matched,
+      enrichmentRows: args.rows.length,
+    };
+  },
+});
