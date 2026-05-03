@@ -274,7 +274,13 @@ export const applyPastDueByCode = mutation({
       .collect();
 
     const norm = (s: string) =>
-      s.toLowerCase().replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+      s
+        .toLowerCase()
+        .replace(/\s*\([^)]*\)\s*/g, " ")
+        .replace(/[.,]/g, " ")
+        .replace(/\b(llc|inc|corp|co|ltd|llp)\b\.?/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
     const byName: Record<string, { pastDueAmount: number; lastPaymentDate?: string }> = {};
     for (const r of args.rows) {
       byName[norm(r.leaseName)] = {
@@ -351,7 +357,13 @@ export const enrichRentByCode = mutation({
       .collect();
 
     const norm = (s: string) =>
-      s.toLowerCase().replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+      s
+        .toLowerCase()
+        .replace(/\s*\([^)]*\)\s*/g, " ")
+        .replace(/[.,]/g, " ")
+        .replace(/\b(llc|inc|corp|co|ltd|llp)\b\.?/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
     const byUnit: Record<string, (typeof args.rows)[number]> = {};
     const byTenant: Record<string, (typeof args.rows)[number]> = {};
     for (const r of args.rows) {
