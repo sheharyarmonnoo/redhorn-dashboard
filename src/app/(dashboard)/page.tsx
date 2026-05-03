@@ -272,6 +272,54 @@ export default function DashboardPage() {
   );
 }
 
+function InsightRow({ insight, dotClass, onFlag }: {
+  insight: any;
+  dotClass: string;
+  onFlag: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#fafafa] dark:hover:bg-[#27272a] cursor-pointer text-left transition-colors"
+      >
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotClass}`} />
+        <span className="flex-1 text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate">{insight.title}</span>
+        {insight.dataContext?.mom && (
+          <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hidden sm:inline">{insight.dataContext.mom}</span>
+        )}
+        <span className="text-[9px] uppercase tracking-wide font-medium text-[#a1a1aa] dark:text-[#71717a] flex-shrink-0">{insight.severity}</span>
+        <span className={`text-[10px] text-[#a1a1aa] dark:text-[#71717a] transition-transform flex-shrink-0 ${expanded ? "rotate-90" : ""}`}>›</span>
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 pl-[1.625rem]">
+          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed">{insight.body}</p>
+          {insight.dataContext?.lineItem && (
+            <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">
+              <span className="uppercase tracking-wide font-medium">Line item:</span> {insight.dataContext.lineItem}
+            </p>
+          )}
+          {insight.dataContext?.mom && (
+            <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] sm:hidden mt-0.5">
+              <span className="uppercase tracking-wide font-medium">MoM:</span> {insight.dataContext.mom}
+            </p>
+          )}
+          <div className="mt-2 flex items-center justify-end">
+            <button
+              onClick={(e) => { e.stopPropagation(); onFlag(); }}
+              className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
+              title="Mark as false flag — Claude won't re-flag this next sync"
+            >
+              Mark as false flag
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FalseFlagCard({ insight, onUnflag, onAddComment }: {
   insight: any;
   onUnflag: () => void | Promise<void>;
@@ -372,10 +420,10 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
 
   if (active.length === 0 && suppressed.length === 0) return null;
 
-  const sevColor: Record<string, string> = {
-    critical: "text-[#dc2626] border-[#dc2626]/20 bg-[#dc2626]/[0.04]",
-    warning: "text-[#d97706] border-[#d97706]/25 bg-[#d97706]/[0.05]",
-    info: "text-[#2563eb] border-[#2563eb]/25 bg-[#2563eb]/[0.04]",
+  const sevDot: Record<string, string> = {
+    critical: "bg-[#dc2626]",
+    warning: "bg-[#d97706]",
+    info: "bg-[#2563eb]",
   };
 
   async function flag(id: any) {
@@ -393,7 +441,7 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
     <div className="mb-6 mt-6">
       <div className="flex items-baseline justify-between mb-3">
         <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Latest AI Insights</p>
-        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">From most recent Yardi sync</p>
+        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">From most recent Yardi sync · click to expand</p>
       </div>
       {latestSummary && (
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 mb-3">
@@ -401,31 +449,10 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
           <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{latestSummary}</p>
         </div>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {active.map(ins => {
-          const cls = sevColor[ins.severity] || sevColor.info;
-          return (
-            <div key={ins._id} className={`border rounded p-3 ${cls.split(" ")[2]} dark:bg-[#18181b] ${cls.split(" ")[1]} group relative`}>
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <p className={`text-[12px] font-semibold ${cls.split(" ")[0]}`}>{ins.title}</p>
-                <span className="text-[9px] uppercase tracking-wide font-medium text-[#a1a1aa] dark:text-[#71717a]">{ins.severity}</span>
-              </div>
-              <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed">{ins.body}</p>
-              {ins.dataContext?.mom && (
-                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">{ins.dataContext.mom}</p>
-              )}
-              <div className="mt-2 pt-2 border-t border-[#e4e4e7] dark:border-[#3f3f46]/60 flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => flag(ins._id)}
-                  className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
-                  title="Mark this as a false flag — Claude won't re-flag it next sync"
-                >
-                  Mark as false flag
-                </button>
-              </div>
-            </div>
-          );
-        })}
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46]">
+        {active.map(ins => (
+          <InsightRow key={ins._id} insight={ins} dotClass={sevDot[ins.severity] || sevDot.info} onFlag={() => flag(ins._id)} />
+        ))}
       </div>
 
       {suppressed.length > 0 && (

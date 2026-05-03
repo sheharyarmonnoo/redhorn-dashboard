@@ -20,7 +20,6 @@ import type * as incomeLines from "../incomeLines.js";
 import type * as insights from "../insights.js";
 import type * as monthlyRevenue from "../monthlyRevenue.js";
 import type * as properties from "../properties.js";
-import type * as seed from "../seed.js";
 import type * as syncJobs from "../syncJobs.js";
 import type * as tenants from "../tenants.js";
 import type * as unitNotes from "../unitNotes.js";
@@ -45,7 +44,6 @@ declare const fullApi: ApiFromModules<{
   insights: typeof insights;
   monthlyRevenue: typeof monthlyRevenue;
   properties: typeof properties;
-  seed: typeof seed;
   syncJobs: typeof syncJobs;
   tenants: typeof tenants;
   unitNotes: typeof unitNotes;

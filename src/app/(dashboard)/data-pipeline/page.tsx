@@ -6,7 +6,7 @@ import { useSyncJobs } from "@/hooks/useConvexData";
 import { useAction, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import PageHeader from "@/components/PageHeader";
-import { Download, X, Plus, Trash2, Save } from "lucide-react";
+import { Download, X, Trash2 } from "lucide-react";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -34,43 +34,6 @@ interface FileSyncRow {
   affectedUnits?: string[];
   resolution?: string;
 }
-
-const fileSyncHistory: FileSyncRow[] = [
-  { id: 1, filename: "RentRoll03_12_2026.xlsx", source: "Yardi", type: "Rent Roll", records: 52, size: "13.3 KB", status: "Success", syncedAt: "2026-03-12 09:15", statusDetail: "All 52 units parsed. 44 occupied, 8 vacant. Rent totals match previous month. No schema errors." },
-  { id: 2, filename: "LeaseLedger03_12_2026.xlsx", source: "Yardi", type: "Lease Ledger", records: 48, size: "14.0 KB", status: "Success", syncedAt: "2026-03-12 09:15", statusDetail: "48 ledger entries processed for A-102. All charges and payments balanced. ACH payment confirmed for March." },
-  { id: 3, filename: "IncomeStatement03_12_2026.xlsx", source: "Yardi", type: "Income Statement", records: 9, size: "12.1 KB", status: "Success", syncedAt: "2026-03-12 09:14", statusDetail: "9 months of P&L data imported. Revenue categories: Base Rent, CAM, Electric Recovery, Late Fees. All GL codes matched." },
-  { id: 4, filename: "RentRoll03_01_2026.xlsx", source: "Yardi", type: "Rent Roll", records: 52, size: "13.1 KB", status: "Success", syncedAt: "2026-03-01 08:30", statusDetail: "52 units parsed. No changes from previous cycle. All tenant records matched." },
-  { id: 5, filename: "LeaseLedger03_01_2026.xlsx", source: "Yardi", type: "Lease Ledger", records: 45, size: "13.8 KB", status: "Success", syncedAt: "2026-03-01 08:29", statusDetail: "45 entries processed. All balances reconciled. 3 fewer entries than current month — Feb shorter cycle." },
-  { id: 6, filename: "IncomeStatement02_2026.xlsx", source: "Yardi", type: "Income Statement", records: 8, size: "11.9 KB", status: "Success", syncedAt: "2026-02-28 14:22", statusDetail: "8 months of P&L data. February revenue within expected range. No anomalies detected." },
-  {
-    id: 7,
-    filename: "ElectricBilling_Feb2026.pdf",
-    source: "CenterPoint",
-    type: "Utility Bill",
-    records: 1,
-    size: "284 KB",
-    status: "Warning",
-    syncedAt: "2026-02-15 10:05",
-    statusDetail: "PDF parsed but 3 line items could not be matched to tenant units. CenterPoint meter IDs for units C-212, C-305, and A-90 did not match Yardi tenant records. Electric charges for these units were NOT auto-posted.",
-    affectedUnits: ["C-212", "C-305", "A-90"],
-    resolution: "Manually verify CenterPoint meter-to-unit mapping with PM. Update Yardi utility account codes for these 3 units. Re-run sync after correction.",
-  },
-  { id: 8, filename: "RentRoll02_01_2026.xlsx", source: "Yardi", type: "Rent Roll", records: 52, size: "13.0 KB", status: "Success", syncedAt: "2026-02-01 08:30", statusDetail: "52 units parsed. All matched January baseline." },
-  { id: 9, filename: "LeaseLedger02_01_2026.xlsx", source: "Yardi", type: "Lease Ledger", records: 42, size: "13.5 KB", status: "Success", syncedAt: "2026-02-01 08:29", statusDetail: "42 entries processed. Balances reconciled to zero." },
-  {
-    id: 10,
-    filename: "CAM_Reconciliation_2025.xlsx",
-    source: "Yardi",
-    type: "CAM Recon",
-    records: 35,
-    size: "28.4 KB",
-    status: "Failed",
-    syncedAt: "2026-01-15 11:44",
-    statusDetail: "File format mismatch — expected Yardi CAM reconciliation template but received a custom Excel with non-standard column headers. Parser could not map 'Reimb. Amount' and 'Tenant Share %' columns. No data was imported.",
-    affectedUnits: [],
-    resolution: "Request PM to export using the standard Yardi CAM reconciliation report (Report ID: CAM-RECON-STD). Alternatively, provide column mapping for custom format.",
-  },
-];
 
 function StatusCell(props: { value: string }) {
   const v = props.value;
@@ -289,159 +252,6 @@ function TrainingProtocol() {
         </div>
         <textarea value={notes} onChange={e => handleNotesChange(e.target.value)}
           className="w-full text-[12px] text-[#18181b] dark:text-[#fafafa] bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 leading-relaxed focus:outline-none focus:border-[#71717a] min-h-[200px] resize-y font-mono" />
-      </div>
-    </div>
-  );
-}
-
-// --- Sync Approval Queue ---
-const PENDING_KEY = "redhorn_pending_syncs";
-
-interface PendingChange {
-  id: string;
-  unit: string;
-  field: string;
-  oldValue: string;
-  newValue: string;
-  source: string;
-  detectedAt: string;
-  status: "pending" | "approved" | "rejected";
-}
-
-const defaultPending: PendingChange[] = [
-  { id: "pc1", unit: "C-200", field: "Tenant", oldValue: "(Vacant)", newValue: "New Sign Pro LLC", source: "RentRoll03_12_2026.xlsx", detectedAt: "2026-03-12 09:15", status: "pending" },
-  { id: "pc2", unit: "C-200", field: "Monthly Rent", oldValue: "$0", newValue: "$2,960", source: "RentRoll03_12_2026.xlsx", detectedAt: "2026-03-12 09:15", status: "pending" },
-  { id: "pc3", unit: "C-200", field: "Lease Start", oldValue: "—", newValue: "2026-04-01", source: "RentRoll03_12_2026.xlsx", detectedAt: "2026-03-12 09:15", status: "pending" },
-  { id: "pc4", unit: "A-90", field: "Delinquency Stage", oldValue: "Default Notice", newValue: "Lockout Pending", source: "System Rule", detectedAt: "2026-03-14 08:00", status: "pending" },
-  { id: "pc5", unit: "C-305", field: "Electric Charge", oldValue: "NOT POSTED", newValue: "$290 posted", source: "LeaseLedger03_12_2026.xlsx", detectedAt: "2026-03-12 09:15", status: "pending" },
-];
-
-function loadPending(): PendingChange[] {
-  if (typeof window === "undefined") return defaultPending;
-  try { const raw = localStorage.getItem(PENDING_KEY); return raw ? JSON.parse(raw) : defaultPending; }
-  catch { return defaultPending; }
-}
-function savePending(items: PendingChange[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(PENDING_KEY, JSON.stringify(items));
-}
-
-function SyncApprovalQueue() {
-  const [items, setItems] = useState<PendingChange[]>(defaultPending);
-  useEffect(() => { setItems(loadPending()); }, []);
-
-  function approve(id: string) {
-    const updated = items.map(i => i.id === id ? { ...i, status: "approved" as const } : i);
-    setItems(updated); savePending(updated);
-  }
-  function reject(id: string) {
-    const updated = items.map(i => i.id === id ? { ...i, status: "rejected" as const } : i);
-    setItems(updated); savePending(updated);
-  }
-  function approveAll() {
-    const updated = items.map(i => i.status === "pending" ? { ...i, status: "approved" as const } : i);
-    setItems(updated); savePending(updated);
-  }
-
-  const pending = items.filter(i => i.status === "pending");
-  const resolved = items.filter(i => i.status !== "pending");
-
-  return (
-    <div className="mt-4 space-y-4">
-      <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">New data from Yardi is held here until you approve. Nothing updates the dashboard automatically — you review and confirm each change.</p>
-
-      {pending.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{pending.length} pending changes</p>
-            <button onClick={approveAll}
-              className="text-[11px] font-medium px-2.5 py-1 bg-[#16a34a] text-white rounded hover:bg-[#15803d] cursor-pointer transition-colors">
-              Approve All
-            </button>
-          </div>
-          <div className="space-y-0 border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
-            {pending.map(item => (
-              <div key={item.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 bg-white dark:bg-[#18181b] hover:bg-[#fafafa] dark:hover:bg-[#27272a]">
-                <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] w-16 flex-shrink-0">{item.unit}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12px] text-[#18181b] dark:text-[#fafafa]">
-                    <span className="text-[#71717a] dark:text-[#a1a1aa]">{item.field}:</span>{" "}
-                    <span className="line-through text-[#a1a1aa] dark:text-[#71717a]">{item.oldValue}</span>{" → "}
-                    <span className="font-medium">{item.newValue}</span>
-                  </p>
-                  <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{item.source} · {item.detectedAt}</p>
-                </div>
-                <div className="flex gap-1 flex-shrink-0">
-                  <button onClick={() => approve(item.id)}
-                    className="text-[10px] font-medium px-2 py-1 bg-[#16a34a] text-white rounded hover:bg-[#15803d] cursor-pointer transition-colors">
-                    Approve
-                  </button>
-                  <button onClick={() => reject(item.id)}
-                    className="text-[10px] font-medium px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] text-[#71717a] dark:text-[#a1a1aa] rounded hover:text-[#dc2626] hover:border-[#dc2626] cursor-pointer transition-colors">
-                    Reject
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {pending.length === 0 && (
-        <div className="bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-6 text-center">
-          <p className="text-[13px] font-medium text-[#18181b] dark:text-[#fafafa]">All clear</p>
-          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mt-1">No pending changes to review.</p>
-        </div>
-      )}
-
-      {resolved.length > 0 && (
-        <div>
-          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-1">{resolved.length} resolved</p>
-          <div className="space-y-0">
-            {resolved.slice(0, 5).map(item => (
-              <div key={item.id} className="flex items-center gap-3 py-1.5 text-[11px]">
-                <span className={`font-medium ${item.status === "approved" ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
-                  {item.status === "approved" ? "✓" : "✗"}
-                </span>
-                <span className="text-[#71717a] dark:text-[#a1a1aa]">{item.unit}</span>
-                <span className="text-[#a1a1aa] dark:text-[#71717a]">{item.field}: {item.oldValue} → {item.newValue}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ScheduledTriggers() {
-  const triggers = [
-    { id: "t1", name: "Daily Rent Roll Sync", schedule: "Every day at 8:00 AM CT", source: "Yardi", status: "Active", lastRun: "2026-03-15 08:00", nextRun: "2026-03-16 08:00" },
-    { id: "t2", name: "Daily Lease Ledger Sync", schedule: "Every day at 8:05 AM CT", source: "Yardi", status: "Active", lastRun: "2026-03-15 08:05", nextRun: "2026-03-16 08:05" },
-    { id: "t3", name: "Monthly Income Statement", schedule: "1st of month at 9:00 AM CT", source: "Yardi", status: "Active", lastRun: "2026-03-01 09:00", nextRun: "2026-04-01 09:00" },
-    { id: "t4", name: "Utility Bill PDF Scan", schedule: "15th of month at 10:00 AM CT", source: "CenterPoint", status: "Paused", lastRun: "2026-02-15 10:05", nextRun: "—" },
-    { id: "t5", name: "Alert Evaluation", schedule: "Every 3 hours", source: "System", status: "Active", lastRun: "2026-03-15 14:00", nextRun: "2026-03-15 17:00" },
-  ];
-  return (
-    <div className="mt-4 space-y-3">
-      <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">Automated sync schedules. Paused triggers will not run until re-enabled.</p>
-      <div className="space-y-0 border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
-        {triggers.map(t => (
-          <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 bg-white dark:bg-[#18181b]">
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${t.status === "Active" ? "bg-[#16a34a]" : "bg-[#a1a1aa]"}`} />
-            <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{t.name}</p>
-              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{t.schedule} · Source: {t.source}</p>
-            </div>
-            <div className="text-right flex-shrink-0 hidden sm:block">
-              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">Last: {t.lastRun}</p>
-              <p className="text-[10px] text-[#71717a] dark:text-[#a1a1aa]">Next: {t.nextRun}</p>
-            </div>
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded flex-shrink-0 ${
-              t.status === "Active" ? "text-[#16a34a] bg-emerald-50 dark:bg-emerald-950/30" : "text-[#a1a1aa] dark:text-[#71717a] bg-[#f4f4f5] dark:bg-[#27272a]"
-            }`}>{t.status}</span>
-          </div>
-        ))}
       </div>
     </div>
   );
