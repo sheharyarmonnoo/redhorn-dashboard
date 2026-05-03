@@ -4,6 +4,8 @@ import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
 import { exportRentRoll, exportLeaseLedger, exportIncomeStatement, exportFullPackage } from "@/data/_seed_export";
 import { useSyncJobs } from "@/hooks/useConvexData";
+import { useQuery } from "convex/react";
+import { api } from "../../../../convex/_generated/api";
 import PageHeader from "@/components/PageHeader";
 import { Download, X, Plus, Trash2, Save } from "lucide-react";
 
@@ -86,9 +88,23 @@ function StatusCell(props: { value: string }) {
 }
 
 function DownloadCell(props: { data: FileSyncRow }) {
-  const fn = exportMap[props.data.type] || exportFullPackage;
+  const storageId = (props.data as any).storageId;
+  // Fetch the Convex storage URL for this file. Skip the query if we don't have a storage id.
+  const url = useQuery(
+    api.files.getUrl,
+    storageId ? { storageId: storageId as any } : "skip"
+  );
+  const handle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (url) window.open(url, "_blank", "noopener");
+  };
   return (
-    <button onClick={(e) => { e.stopPropagation(); fn(); }} className="text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer p-1" title={`Download ${props.data.filename}`}>
+    <button
+      onClick={handle}
+      disabled={!url}
+      className="text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer p-1 disabled:opacity-40 disabled:cursor-not-allowed"
+      title={url ? `Download ${props.data.filename}` : "Loading…"}
+    >
       <Download size={14} />
     </button>
   );
@@ -650,21 +666,61 @@ export default function DataPipelinePage() {
   const [activeSection, setActiveSection] = useState<"approval" | "workflow" | "protocol" | "triggers">("approval");
   const [showUpload, setShowUpload] = useState(false);
 
-  // Only show real sync jobs from Convex — no more hardcoded fallback that pretends to be real data.
+  // Flatten sync_jobs into one row per attached file. Each sync_jobs row contains
+  // a `files: [{storageId, fileName, reportType}]` array — show each file as its
+  // own grid row, with download links via the storageId.
   const syncData = useMemo(() => {
-    return syncJobs.map((job: any, idx: number) => ({
-      id: job._id || idx + 1,
-      filename: job.filename,
-      source: job.source,
-      type: job.type,
-      records: job.records ?? 0,
-      size: job.size ?? "",
-      status: job.status,
-      syncedAt: job.syncedAt,
-      statusDetail: job.statusDetail,
-      affectedUnits: job.affectedUnits,
-      resolution: job.resolution,
-    }));
+    const friendlyType: Record<string, string> = {
+      income_statement: "Income Statement",
+      rent_roll: "Rent Roll",
+      aging: "Aging",
+      receivable: "Receivable Detail",
+    };
+    const rows: any[] = [];
+    for (const job of syncJobs as any[]) {
+      const completedAt = job.completedAt || job.startedAt || "";
+      const statusLabel =
+        job.status === "completed" ? "Success" :
+        job.status === "partial"   ? "Warning" :
+        job.status === "failed"    ? "Failed"  : (job.status || "");
+      const baseDetail = job.errorMessage
+        ? job.errorMessage
+        : `${job.recordsCreated ?? 0} records ingested · source ${job.source ?? "—"}`;
+
+      const files = Array.isArray(job.files) ? job.files : [];
+      if (files.length === 0) {
+        rows.push({
+          id: job._id,
+          jobId: job._id,
+          storageId: undefined,
+          filename: "(no files attached)",
+          source: job.source ?? "",
+          type: (job.reportTypes || []).map((t: string) => friendlyType[t] || t).join(", "),
+          records: job.recordsCreated ?? 0,
+          size: "",
+          status: statusLabel,
+          syncedAt: completedAt,
+          statusDetail: baseDetail,
+        });
+        continue;
+      }
+      for (const f of files) {
+        rows.push({
+          id: `${job._id}-${f.storageId}`,
+          jobId: job._id,
+          storageId: f.storageId,
+          filename: f.fileName,
+          source: job.source ?? "",
+          type: friendlyType[f.reportType] || f.reportType || "",
+          records: job.recordsCreated ?? 0,
+          size: "",
+          status: statusLabel,
+          syncedAt: completedAt,
+          statusDetail: baseDetail,
+        });
+      }
+    }
+    return rows;
   }, [syncJobs]);
 
   const lastSyncLabel = useMemo(() => {
@@ -672,7 +728,14 @@ export default function DataPipelinePage() {
     const latest = [...syncData].sort((a: any, b: any) =>
       (b.syncedAt || "").localeCompare(a.syncedAt || "")
     )[0];
-    return latest?.syncedAt ? `Last sync ${latest.syncedAt}` : "";
+    if (!latest?.syncedAt) return "";
+    // ISO → "Apr 30, 2026 2:51 PM"
+    try {
+      const d = new Date(latest.syncedAt);
+      return `Last sync ${d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}`;
+    } catch {
+      return `Last sync ${latest.syncedAt}`;
+    }
   }, [syncData]);
 
   const columnDefs = useMemo<ColDef[]>(() => {
@@ -693,12 +756,17 @@ export default function DataPipelinePage() {
     }
     return [
       { field: "filename", headerName: "Filename", minWidth: 240, flex: 1 },
-      { field: "source", headerName: "Source", width: 100 },
-      { field: "type", headerName: "Type", width: 140 },
-      { field: "records", headerName: "Records", width: 90, type: "numericColumn" },
-      { field: "size", headerName: "Size", width: 90 },
-      { field: "syncedAt", headerName: "Last Updated", width: 150 },
-      { field: "status", headerName: "Status", width: 90, cellRenderer: StatusCell },
+      { field: "type", headerName: "Type", width: 160 },
+      { field: "source", headerName: "Source", width: 130 },
+      { field: "records", headerName: "Records", width: 95, type: "numericColumn" },
+      { field: "syncedAt", headerName: "Last Updated", width: 180,
+        valueFormatter: (p: { value: string }) => {
+          if (!p.value) return "";
+          try { return new Date(p.value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); }
+          catch { return p.value; }
+        }
+      },
+      { field: "status", headerName: "Status", width: 95, cellRenderer: StatusCell },
       { headerName: "", width: 60, cellRenderer: DownloadCell, sortable: false, filter: false },
     ];
   }, [isMobile]);
