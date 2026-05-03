@@ -90,3 +90,55 @@ export const updateStatus = mutation({
     });
   },
 });
+
+/**
+ * Mark an insight (or any alert) as a false flag with a human-supplied reason.
+ * Stored in dataContext.falseFlagReason so the next run's insights prompt can
+ * include it as a suppression hint — Claude won't re-flag the same pattern
+ * unless something materially changed.
+ */
+export const markFalseFlag = mutation({
+  args: {
+    id: v.id("alerts"),
+    reason: v.string(),
+    markedBy: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const alert = await ctx.db.get(args.id);
+    if (!alert) throw new Error("Alert not found");
+    const dataContext = { ...(alert.dataContext || {}), falseFlagReason: args.reason, falseFlaggedAt: new Date().toISOString() };
+    await ctx.db.patch(args.id, {
+      status: "false_flag",
+      resolvedAt: new Date().toISOString(),
+      resolvedBy: args.markedBy ?? "User",
+      dataContext,
+    });
+    await logActivity(ctx, {
+      type: "alert_resolved",
+      description: `False flag: ${alert.title} — ${args.reason.slice(0, 120)}`,
+      user: args.markedBy ?? "User",
+      unit: alert.unit,
+    });
+  },
+});
+
+/**
+ * Reverse a false-flag tag. Use when the user changed their mind — re-opens
+ * the alert and clears the suppression so future Claude runs see it again.
+ */
+export const undoFalseFlag = mutation({
+  args: { id: v.id("alerts") },
+  handler: async (ctx, args) => {
+    const alert = await ctx.db.get(args.id);
+    if (!alert) throw new Error("Alert not found");
+    const dataContext = { ...(alert.dataContext || {}) };
+    delete dataContext.falseFlagReason;
+    delete dataContext.falseFlaggedAt;
+    await ctx.db.patch(args.id, {
+      status: "new",
+      resolvedAt: undefined,
+      resolvedBy: undefined,
+      dataContext,
+    });
+  },
+});

@@ -59,6 +59,14 @@ export const bulkInsertByCode = mutation({
       inserted++;
     }
 
+    // Auto-flip the property's hasData flag once we have ingested rows. The
+    // dashboard's PropertyGuard uses this to decide whether to render the
+    // empty state, and the data-pipeline insights button skips properties
+    // without data.
+    if (inserted > 0 && !property.hasData) {
+      await ctx.db.patch(property._id, { hasData: true });
+    }
+
     return { propertyId: property._id, inserted, supersededPrior: prior.length };
   },
 });

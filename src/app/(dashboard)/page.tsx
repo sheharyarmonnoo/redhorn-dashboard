@@ -6,6 +6,9 @@ import PageHeader from "@/components/PageHeader";
 import ActionItems from "@/components/ActionItems";
 import RevenueFilter from "@/components/RevenueFilter";
 import { useActiveProperty, useTenants, useMonthlyRevenue, useAlerts, formatCurrency } from "@/hooks/useConvexData";
+import { useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { useUser } from "@clerk/nextjs";
 import { Filter } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useTheme } from "@/components/ThemeProvider";
@@ -271,14 +274,21 @@ export default function DashboardPage() {
 
 function LatestInsights({ propertyId }: { propertyId: string }) {
   const { alerts } = useAlerts();
-  const insights = useMemo(() => {
-    return (alerts as any[])
+  const { user } = useUser();
+  const markFalseFlag = useMutation(api.alerts.markFalseFlag);
+  const undoFalseFlag = useMutation(api.alerts.undoFalseFlag);
+  const [showSuppressed, setShowSuppressed] = useState(false);
+
+  const { active, suppressed, latestSummary } = useMemo(() => {
+    const all = (alerts as any[])
       .filter(a => a.alertType === "income_insight" && a.propertyId === propertyId)
-      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-      .slice(0, 5);
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const active = all.filter(a => a.status !== "false_flag" && a.status !== "resolved" && a.status !== "dismissed").slice(0, 6);
+    const suppressed = all.filter(a => a.status === "false_flag");
+    return { active, suppressed, latestSummary: active[0]?.aiAnalysis ?? all[0]?.aiAnalysis };
   }, [alerts, propertyId]);
 
-  if (insights.length === 0) return null;
+  if (active.length === 0 && suppressed.length === 0) return null;
 
   const sevColor: Record<string, string> = {
     critical: "text-[#dc2626] border-[#dc2626]/20 bg-[#dc2626]/[0.04]",
@@ -286,9 +296,16 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
     info: "text-[#2563eb] border-[#2563eb]/25 bg-[#2563eb]/[0.04]",
   };
 
-  // The aiAnalysis field on each insight is the same per-run summary; show the
-  // most recent one once at the top so the user sees the headline narrative.
-  const latestSummary = insights[0]?.aiAnalysis;
+  async function flag(id: any) {
+    const reason = window.prompt("Why is this a false flag? This explanation gets saved and the next sync will reference it so the same issue isn't re-flagged.");
+    if (!reason || !reason.trim()) return;
+    await markFalseFlag({ id, reason: reason.trim(), markedBy: user?.fullName || user?.firstName || "User" });
+  }
+
+  async function unflag(id: any) {
+    if (!window.confirm("Reopen this insight? It will appear again on the next sync.")) return;
+    await undoFalseFlag({ id });
+  }
 
   return (
     <div className="mb-6 mt-6">
@@ -303,10 +320,10 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {insights.map(ins => {
+        {active.map(ins => {
           const cls = sevColor[ins.severity] || sevColor.info;
           return (
-            <div key={ins._id} className={`border rounded p-3 ${cls.split(" ")[2]} dark:bg-[#18181b] ${cls.split(" ")[1]}`}>
+            <div key={ins._id} className={`border rounded p-3 ${cls.split(" ")[2]} dark:bg-[#18181b] ${cls.split(" ")[1]} group relative`}>
               <div className="flex items-start justify-between gap-2 mb-1">
                 <p className={`text-[12px] font-semibold ${cls.split(" ")[0]}`}>{ins.title}</p>
                 <span className="text-[9px] uppercase tracking-wide font-medium text-[#a1a1aa] dark:text-[#71717a]">{ins.severity}</span>
@@ -315,10 +332,55 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
               {ins.dataContext?.mom && (
                 <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">{ins.dataContext.mom}</p>
               )}
+              <div className="mt-2 pt-2 border-t border-[#e4e4e7] dark:border-[#3f3f46]/60 flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => flag(ins._id)}
+                  className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
+                  title="Mark this as a false flag — Claude won't re-flag it next sync"
+                >
+                  Mark as false flag
+                </button>
+              </div>
             </div>
           );
         })}
       </div>
+
+      {suppressed.length > 0 && (
+        <div className="mt-3">
+          <button
+            onClick={() => setShowSuppressed(s => !s)}
+            className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#71717a] dark:hover:text-[#a1a1aa] cursor-pointer underline decoration-dotted"
+          >
+            {showSuppressed ? "Hide" : "Show"} {suppressed.length} suppressed false flag{suppressed.length === 1 ? "" : "s"}
+          </button>
+          {showSuppressed && (
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 opacity-70">
+              {suppressed.map(ins => (
+                <div key={ins._id} className="border border-dashed border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 bg-[#fafafa] dark:bg-[#27272a]">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <p className="text-[12px] font-medium text-[#71717a] dark:text-[#a1a1aa] line-through">{ins.title}</p>
+                    <span className="text-[9px] uppercase tracking-wide font-medium text-[#16a34a]">false flag</span>
+                  </div>
+                  {ins.dataContext?.falseFlagReason && (
+                    <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed italic">"{ins.dataContext.falseFlagReason}"</p>
+                  )}
+                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">marked by {ins.resolvedBy || "User"}</p>
+                  <div className="mt-2 pt-2 border-t border-[#e4e4e7] dark:border-[#3f3f46]/60 flex items-center justify-end">
+                    <button
+                      onClick={() => unflag(ins._id)}
+                      className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#2563eb] cursor-pointer"
+                      title="Reopen — Claude will see this finding again next sync"
+                    >
+                      Reopen
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

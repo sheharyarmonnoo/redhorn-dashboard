@@ -45,13 +45,17 @@ export const extractForProperty = action({
     const priorSnapshot = priorDates.length > 0 ? priorBySnapshot[priorDates[0]] : null;
 
     // Prior insights for this property — give Claude continuity
-    const priorAlerts: any[] = await ctx.runQuery(api.alerts.listForProperty, {
+    const allPriorAlerts: any[] = await ctx.runQuery(api.alerts.listForProperty, {
       propertyId: property._id,
       alertType: "income_insight",
-      limit: 10,
+      limit: 30,
     });
+    // Split into "still active" (history Claude should reference) vs "false flags"
+    // (suppression list — these patterns should NOT be re-flagged unless materially worse).
+    const priorAlerts = allPriorAlerts.filter((a: any) => a.status !== "false_flag");
+    const falseFlags = allPriorAlerts.filter((a: any) => a.status === "false_flag");
 
-    const prompt = buildPrompt(property.name, latestDate, latest, priorSnapshot, priorAlerts);
+    const prompt = buildPrompt(property.name, latestDate, latest, priorSnapshot, priorAlerts, falseFlags);
     const rawAnalysis: string = await callClaude(prompt);
     const parsed = parseClaudeJson(rawAnalysis);
 
@@ -103,12 +107,18 @@ function rowsToTable(rows: any[]): string {
     .join("\n");
 }
 
-function buildPrompt(propertyName: string, latestDate: string, latest: any[], priorSnapshot: any[] | null, priorAlerts: any[]): string {
+function buildPrompt(propertyName: string, latestDate: string, latest: any[], priorSnapshot: any[] | null, priorAlerts: any[], falseFlags: any[]): string {
   const latestTable = rowsToTable(latest);
   const priorTable = priorSnapshot ? rowsToTable(priorSnapshot) : "(no prior snapshot — this is the first sync)";
   const priorInsightLog = priorAlerts.length === 0
     ? "(no prior insights recorded yet)"
     : priorAlerts.slice(0, 8).map(a => `- [${a.severity}] ${a.title} — ${a.body.slice(0, 200)}`).join("\n");
+  const falseFlagLog = falseFlags.length === 0
+    ? "(none yet)"
+    : falseFlags.slice(0, 12).map(a => {
+        const reason = a.dataContext?.falseFlagReason || "(no reason provided)";
+        return `- "${a.title}" — REASON THIS IS NOT AN ISSUE: ${reason}`;
+      }).join("\n");
 
   return [
     `You are a senior CRE asset-management analyst reviewing the latest income statement for "${propertyName}".`,
@@ -124,8 +134,14 @@ function buildPrompt(propertyName: string, latestDate: string, latest: any[], pr
     priorTable,
     `\`\`\``,
     ``,
-    `=== PRIOR INSIGHTS LOGGED FOR THIS PROPERTY (to keep continuity) ===`,
+    `=== PRIOR INSIGHTS LOGGED FOR THIS PROPERTY (continuity) ===`,
     priorInsightLog,
+    ``,
+    `=== ITEMS PREVIOUSLY MARKED AS FALSE FLAGS BY THE TEAM ===`,
+    `These patterns have been confirmed by the asset manager as expected behavior or already-explained.`,
+    `DO NOT re-flag them unless the data has materially changed (e.g. magnitude doubled, sign flipped, new occurrence outside the explained context).`,
+    `If you DO see something that looks similar but is genuinely different, explain why it's different.`,
+    falseFlagLog,
     ``,
     `Your job: surface 3–6 specific, actionable insights. Each one must:`,
     `1. Cite a specific line item (or pair of line items) by name`,
