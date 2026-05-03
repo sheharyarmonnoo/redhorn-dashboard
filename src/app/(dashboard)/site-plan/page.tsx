@@ -5,74 +5,20 @@ import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import SitePlan3D from "@/components/SitePlan3D";
 
-type ViewMode = "layout" | "map";
-
 export default function SitePlanPage() {
   const property = useActiveProperty();
   const tenantsList = useTenants(property?._id) as any[];
   const [selected, setSelected] = useState<any | null>(null);
-  const [view, setView] = useState<ViewMode>("layout");
 
   const occupied = tenantsList.filter((t: any) => t.status !== "vacant");
   const pastDue = tenantsList.filter((t: any) => t.status === "past_due");
   const vacant = tenantsList.filter((t: any) => t.status === "vacant");
 
-  const propertyName = property?.name || "";
-  const propertyLocation = property?.location || "";
-
   return (
     <div>
-      <PageHeader title="Site Plan" subtitle="Click any unit for details">
-        <div className="flex items-center border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
-          <button
-            onClick={() => setView("layout")}
-            className={`text-[11px] font-medium px-3 py-1.5 transition-colors cursor-pointer ${
-              view === "layout" ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]" : "bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
-            }`}
-          >
-            Layout
-          </button>
-          <button
-            onClick={() => setView("map")}
-            className={`text-[11px] font-medium px-3 py-1.5 transition-colors cursor-pointer ${
-              view === "map" ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]" : "bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
-            }`}
-          >
-            Map
-          </button>
-        </div>
-      </PageHeader>
+      <PageHeader title="Site Plan" subtitle="Click any unit for details" />
 
-      {view === "layout" ? (
-        <SitePlan3D onSelect={setSelected} selectedUnit={selected?.unit || null} />
-      ) : (
-        <div className="w-full bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
-          <div className="bg-[#18181b] dark:bg-[#09090b] text-white px-4 sm:px-5 py-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-[13px] font-semibold tracking-tight">{propertyName || "Property"}</h2>
-              <p className="text-[10px] text-[#a1a1aa] mt-0.5">{propertyLocation || "—"}</p>
-            </div>
-            {propertyLocation && (
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(propertyLocation)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[10px] text-[#71717a] hover:text-white transition-colors cursor-pointer"
-              >
-                Open in Google Maps →
-              </a>
-            )}
-          </div>
-          <iframe
-            src={`https://www.google.com/maps?q=${encodeURIComponent(propertyLocation || propertyName)}&output=embed`}
-            width="100%"
-            height="500"
-            style={{ border: 0 }}
-            loading="lazy"
-            title={`${propertyName} — Map`}
-          />
-        </div>
-      )}
+      <SitePlan3D onSelect={setSelected} selectedUnit={selected?.unit || null} />
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-4">

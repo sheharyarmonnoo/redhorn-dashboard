@@ -3,7 +3,6 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import KPICard from "@/components/KPICard";
 import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
-import ActionItems from "@/components/ActionItems";
 import RevenueFilter from "@/components/RevenueFilter";
 import { useActiveProperty, useTenants, useMonthlyRevenue, useAlerts, formatCurrency } from "@/hooks/useConvexData";
 import { useMutation } from "convex/react";
@@ -168,8 +167,6 @@ export default function DashboardPage() {
         <KPICard title="Electric Posting" value={electricMissing.length > 0 ? `${electricMissing.length} Missing` : "All Posted"} color={electricMissing.length > 0 ? "text-[#d97706]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("electric")} />
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
       </div>
-
-      <ActionItems />
 
       <LatestInsights propertyId={property._id} />
 
