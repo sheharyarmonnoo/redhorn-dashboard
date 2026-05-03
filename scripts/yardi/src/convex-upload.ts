@@ -65,7 +65,7 @@ export async function uploadRunToConvex(
   // Create one sync_jobs row per scraper run, with all uploaded files attached.
   const reportTypes = Array.from(new Set(uploaded.map(u => u.reportType)));
   const jobId = await client.mutation(FN.createSyncJob as any, {
-    source: opts.source ?? "yardi_playwright",
+    source: opts.source ?? "yardi_sync",
     reportTypes,
     files: uploaded.map(u => ({
       storageId: u.storageId,

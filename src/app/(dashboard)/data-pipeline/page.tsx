@@ -2,9 +2,8 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
-import { exportRentRoll, exportLeaseLedger, exportIncomeStatement, exportFullPackage } from "@/data/_seed_export";
 import { useSyncJobs } from "@/hooks/useConvexData";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import PageHeader from "@/components/PageHeader";
 import { Download, X, Plus, Trash2, Save } from "lucide-react";
@@ -21,14 +20,6 @@ function useIsMobile() {
   }, []);
   return isMobile;
 }
-
-const exportMap: Record<string, () => void> = {
-  "Rent Roll": exportRentRoll,
-  "Lease Ledger": exportLeaseLedger,
-  "Income Statement": exportIncomeStatement,
-  "CAM Recon": exportFullPackage,
-  "Utility Bill": exportFullPackage,
-};
 
 interface FileSyncRow {
   id: number;
@@ -663,8 +654,12 @@ export default function DataPipelinePage() {
   const isMobile = useIsMobile();
   const syncJobs = useSyncJobs();
   const [selectedFile, setSelectedFile] = useState<FileSyncRow | null>(null);
-  const [activeSection, setActiveSection] = useState<"approval" | "workflow" | "protocol" | "triggers">("approval");
+  const [activeSection, setActiveSection] = useState<"workflow" | "protocol">("workflow");
   const [showUpload, setShowUpload] = useState(false);
+  const [insightsRunning, setInsightsRunning] = useState(false);
+  const [insightsResult, setInsightsResult] = useState<string | null>(null);
+  const runInsights = useAction(api.insights.extractForProperty);
+  const propertiesAvailable = useQuery(api.properties.list) ?? [];
 
   // Flatten sync_jobs into one row per attached file. Each sync_jobs row contains
   // a `files: [{storageId, fileName, reportType}]` array — show each file as its
@@ -676,6 +671,14 @@ export default function DataPipelinePage() {
       aging: "Aging",
       receivable: "Receivable Detail",
     };
+    const friendlySource: Record<string, string> = {
+      yardi_playwright: "Yardi Sync",
+      yardi_sync: "Yardi Sync",
+      yardi_auto: "Yardi Sync",
+      n8n: "Scheduled Sync",
+      manual_upload: "Manual Upload",
+    };
+    const labelSource = (s: string) => friendlySource[s] || s || "—";
     const rows: any[] = [];
     for (const job of syncJobs as any[]) {
       const completedAt = job.completedAt || job.startedAt || "";
@@ -789,19 +792,37 @@ export default function DataPipelinePage() {
   return (
     <div>
       <PageHeader title="Data Pipeline" subtitle="File sync history — click any row for details">
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowUpload(true)}
-            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] cursor-pointer transition-colors">
-            Upload
-          </button>
-          <button onClick={exportFullPackage}
-            className="flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] rounded cursor-pointer transition-colors">
-            <Download size={13} /> Export
-          </button>
-        </div>
+        <button
+          onClick={async () => {
+            setInsightsRunning(true);
+            setInsightsResult(null);
+            try {
+              const summaries: string[] = [];
+              for (const p of propertiesAvailable as any[]) {
+                if (!p.hasData) continue;
+                const r: any = await runInsights({ propertyCode: p.code });
+                summaries.push(`• ${p.name}: ${r.alertsCreated} insight${r.alertsCreated === 1 ? "" : "s"} — ${r.analysis}`);
+              }
+              setInsightsResult(summaries.join("\n\n") || "No properties with data yet.");
+            } catch (err: any) {
+              setInsightsResult(`Error: ${err?.message || err}`);
+            } finally {
+              setInsightsRunning(false);
+            }
+          }}
+          disabled={insightsRunning || syncData.length === 0}
+          className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {insightsRunning ? "Running insights…" : "Run insights"}
+        </button>
       </PageHeader>
 
-      {showUpload && <SmartUploadModal onClose={() => setShowUpload(false)} />}
+      {insightsResult && (
+        <div className="mt-2 mb-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40 rounded p-3 text-[12px] text-[#18181b] dark:text-[#fafafa] whitespace-pre-wrap">
+          <p className="text-[10px] font-semibold text-[#2563eb] dark:text-[#60a5fa] uppercase tracking-wide mb-1">Latest run</p>
+          {insightsResult}
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-3">
@@ -848,8 +869,6 @@ export default function DataPipelinePage() {
       {/* Tabs */}
       <div className="mt-8 flex gap-1 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
         {([
-          { key: "approval" as const, label: "Approval Queue" },
-          { key: "triggers" as const, label: "Scheduled Triggers" },
           { key: "workflow" as const, label: "Processing Workflow" },
           { key: "protocol" as const, label: "Training Protocol" },
         ]).map(tab => (
@@ -862,30 +881,13 @@ export default function DataPipelinePage() {
         ))}
       </div>
 
-      {(activeSection === "approval" || activeSection === "triggers") && (
-        <div className="mt-3 mb-3 flex items-start gap-2 text-[11px] text-[#d97706] dark:text-[#fbbf24] bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded px-3 py-2">
-          <span className="font-semibold">Preview</span>
-          <span className="text-[#71717a] dark:text-[#a1a1aa]">
-            This section shows how {activeSection === "approval" ? "the pending-changes approval queue" : "scheduled sync triggers"} will look. It is not yet wired to live data.
-          </span>
-        </div>
-      )}
-
-      {activeSection === "approval" && (
-        <SyncApprovalQueue />
-      )}
-
-      {activeSection === "triggers" && (
-        <ScheduledTriggers />
-      )}
-
       {activeSection === "workflow" && (
         <div className="mt-4 space-y-4">
           <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">How data flows from Yardi to the dashboard while preserving your notes and overrides.</p>
 
           <div className="space-y-0">
             {[
-              { step: "1", label: "Export", desc: "Yardi generates rent roll, lease ledger, income statement, and utility reports. Triggered by cron (auto) or manual upload.", status: "Automated via Playwright" },
+              { step: "1", label: "Export", desc: "Yardi generates rent roll, lease ledger, income statement, and utility reports. Triggered by cron (auto) or manual upload.", status: "Automated sync" },
               { step: "2", label: "Validate", desc: "Parser checks file format, column headers, and data types. Flags warnings if columns are missing or values are out of range.", status: "Schema validation" },
               { step: "3", label: "Transform", desc: "Raw data is normalized: dates standardized, currency parsed, unit IDs matched to master list, new tenants detected.", status: "ETL pipeline" },
               { step: "4", label: "Merge with Overrides", desc: "User notes, status overrides, delinquency stages, and action items from previous cycles are preserved. New data is merged — never overwrites manual entries.", status: "Note preservation" },

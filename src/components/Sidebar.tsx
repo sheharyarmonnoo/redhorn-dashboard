@@ -7,16 +7,39 @@ import { UserButton, useUser } from "@clerk/nextjs";
 import { useProperties, useActivePropertyId } from "@/hooks/useConvexData";
 import { useTheme } from "@/components/ThemeProvider";
 
-const nav = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },
-  { href: "/site-plan", label: "Site Plan", icon: Map, badge: null },
-  { href: "/rent-roll", label: "Rent Roll", icon: Table, badge: null },
-  { href: "/leases", label: "Lease Expirations", icon: CalendarClock, badge: null },
-  { href: "/alerts", label: "Alerts", icon: AlertTriangle, badge: null },
-  { href: "/deals", label: "Deal Pipeline", icon: Briefcase, badge: null },
-  { href: "/activity", label: "Activity", icon: Activity, badge: null },
-  { href: "/data-pipeline", label: "Data Pipeline", icon: Database, badge: null },
-  { href: "/account", label: "Account", icon: UserCircle, badge: null },
+type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; badge?: string | null };
+type NavGroup = { label: string; items: NavItem[] };
+
+const navGroups: NavGroup[] = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Property",
+    items: [
+      { href: "/site-plan", label: "Site Plan", icon: Map },
+      { href: "/rent-roll", label: "Rent Roll", icon: Table },
+      { href: "/leases", label: "Lease Expirations", icon: CalendarClock },
+      { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+    ],
+  },
+  {
+    label: "Growth",
+    items: [
+      { href: "/deals", label: "Deal Pipeline", icon: Briefcase },
+      { href: "/activity", label: "Activity", icon: Activity },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { href: "/data-pipeline", label: "Data Pipeline", icon: Database },
+      { href: "/account", label: "Account", icon: UserCircle },
+    ],
+  },
 ];
 
 function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
@@ -41,19 +64,23 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
         <div className="px-2 pt-4 pb-3 flex justify-center">
           <span className="text-[14px] font-bold text-white">R</span>
         </div>
-        <nav className="flex-1 px-2 py-2 space-y-1">
-          {nav.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href;
-            return (
-              <Link key={href} href={href}
-                title={label}
-                className={`flex items-center justify-center w-9 h-9 rounded transition-colors ${
-                  active ? "bg-white/[0.08] text-white" : "text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]"
-                }`}>
-                <Icon size={16} strokeWidth={1.5} />
-              </Link>
-            );
-          })}
+        <nav className="flex-1 px-2 py-2 overflow-y-auto">
+          {navGroups.map((group, gIdx) => (
+            <div key={group.label} className={gIdx > 0 ? "mt-3 pt-3 border-t border-white/[0.04]" : ""}>
+              {group.items.map(({ href, label, icon: Icon }) => {
+                const active = pathname === href;
+                return (
+                  <Link key={href} href={href}
+                    title={label}
+                    className={`flex items-center justify-center w-9 h-9 rounded transition-colors mb-0.5 ${
+                      active ? "bg-white/[0.08] text-white" : "text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]"
+                    }`}>
+                    <Icon size={16} strokeWidth={1.5} />
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
         <div className="px-2 py-2 flex flex-col items-center gap-2 border-t border-white/[0.06]">
           <button
@@ -114,23 +141,29 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
         )}
       </div>
 
-      <div className="px-4 mt-4 mb-2">
-        <p className="text-[9px] text-[#52525b] font-medium uppercase tracking-[0.12em] px-2">Navigation</p>
-      </div>
-      <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
-        {nav.map(({ href, label, icon: Icon, badge }) => {
-          const active = pathname === href;
-          return (
-            <Link key={href} href={href} onClick={onNavigate}
-              className={`flex items-center gap-2.5 px-2.5 py-2 rounded text-[12px] transition-colors ${
-                active ? "bg-white/[0.08] text-white font-medium" : "text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]"
-              }`}>
-              <Icon size={15} strokeWidth={1.5} />
-              <span className="flex-1">{label}</span>
-              {badge && <span className="text-[10px] text-[#52525b] font-medium">{badge}</span>}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-3 mt-4 overflow-y-auto">
+        {navGroups.map((group) => (
+          <div key={group.label} className="mb-4 last:mb-0">
+            <p className="text-[9px] text-[#52525b] font-medium uppercase tracking-[0.14em] px-2.5 mb-1.5">
+              {group.label}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map(({ href, label, icon: Icon, badge }) => {
+                const active = pathname === href;
+                return (
+                  <Link key={href} href={href} onClick={onNavigate}
+                    className={`flex items-center gap-2.5 px-2.5 py-2 rounded text-[12px] transition-colors ${
+                      active ? "bg-white/[0.08] text-white font-medium" : "text-[#71717a] hover:text-[#d4d4d8] hover:bg-white/[0.04]"
+                    }`}>
+                    <Icon size={15} strokeWidth={1.5} />
+                    <span className="flex-1">{label}</span>
+                    {badge && <span className="text-[10px] text-[#52525b] font-medium">{badge}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* User */}

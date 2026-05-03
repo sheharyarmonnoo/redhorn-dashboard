@@ -74,7 +74,7 @@ async function main() {
       } else {
         console.log(`\nUploading ${filesToUpload.length} file(s) to Convex…`);
         try {
-          const bundle = await uploadRunToConvex(filesToUpload, { source: "yardi_playwright" });
+          const bundle = await uploadRunToConvex(filesToUpload, { source: "yardi_sync" });
           console.log(`Convex sync_job: ${bundle.jobId}`);
         } catch (err: any) {
           console.error(`Convex upload failed: ${err?.message || err}`);

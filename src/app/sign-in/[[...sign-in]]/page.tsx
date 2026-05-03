@@ -3,7 +3,7 @@ import { dark } from "@clerk/themes";
 
 export default function SignInPage() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-4 bg-[#09090b]">
+    <div className="flex-1 flex flex-col items-center justify-center min-h-screen px-4 bg-[#09090b]">
       <div className="mb-8 sm:mb-10">
         <img
           src="/redhorn-logo.png"

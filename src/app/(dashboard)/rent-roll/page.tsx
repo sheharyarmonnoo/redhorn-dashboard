@@ -3,7 +3,6 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
 import { useAllTenants, formatCurrency } from "@/hooks/useConvexData";
-import { exportRentRoll } from "@/data/_seed_export";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import { Download } from "lucide-react";
@@ -117,11 +116,17 @@ export default function RentRollPage() {
   const totalRent = tenants.filter((t: any) => t.status !== "vacant").reduce((s: number, t: any) => s + t.monthlyRent, 0);
   const totalSqft = tenants.reduce((s: number, t: any) => s + t.sqft, 0);
 
+  // Real export: dump the current grid (filtered + grouped) to CSV via AG Grid.
+  function exportRentRollReal() {
+    const fileName = `rent-roll-${new Date().toISOString().slice(0, 10)}.csv`;
+    gridRef.current?.api?.exportDataAsCsv({ fileName });
+  }
+
   return (
     <div>
       <PageHeader title="Rent Roll" subtitle={`All units as of ${new Date().toLocaleString("en-US", { month: "long", year: "numeric" })} — Tap any row for details`}>
-        <button onClick={exportRentRoll} className="flex items-center gap-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] hover:border-[#4f6ef7] text-[#5a5e73] dark:text-[#a1a1aa] hover:text-[#4f6ef7] text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
-          <Download size={13} /> Export .xlsx
+        <button onClick={exportRentRollReal} disabled={tenants.length === 0} className="flex items-center gap-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] hover:border-[#4f6ef7] text-[#5a5e73] dark:text-[#a1a1aa] hover:text-[#4f6ef7] text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+          <Download size={13} /> Export .csv
         </button>
       </PageHeader>
 
