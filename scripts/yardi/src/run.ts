@@ -1,12 +1,14 @@
 import { openAuthenticatedSession } from "./auth.js";
 import { getProperties } from "./properties.js";
 import { runIncomeStatementForProperty } from "./reports/income-statement.js";
+import { runRentRollForProperty } from "./reports/rent-roll.js";
 import { latestClosedMonth } from "./paths.js";
 import { uploadRunToConvex } from "./convex-upload.js";
 
 interface RunResult {
   property: string;
   propertyCode: string;
+  reportType: "income_statement" | "rent_roll";
   ok: boolean;
   path?: string;
   error?: string;
@@ -39,14 +41,24 @@ async function main() {
 
     const results: RunResult[] = [];
     for (const property of properties) {
+      // Income Statement
       try {
         const path = await runIncomeStatementForProperty(voyager, property, month, templateArg);
-        // We pass convexCode downstream so the ingest mutation can resolve to the right propertyId.
-        results.push({ property: property.name, propertyCode: property.convexCode, ok: true, path });
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "income_statement", ok: true, path });
       } catch (err: any) {
         const msg = err?.message || String(err);
-        console.error(`   FAILED — ${msg}`);
-        results.push({ property: property.name, propertyCode: property.convexCode, ok: false, error: msg });
+        console.error(`   IS FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "income_statement", ok: false, error: msg });
+      }
+
+      // Rent Roll
+      try {
+        const path = await runRentRollForProperty(voyager, property, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   RR FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll", ok: false, error: msg });
       }
     }
 
@@ -66,7 +78,7 @@ async function main() {
         .map(r => ({
           filePath: r.path!,
           propertyCode: r.propertyCode,
-          reportType: "income_statement",
+          reportType: r.reportType,
         }));
 
       if (filesToUpload.length === 0) {

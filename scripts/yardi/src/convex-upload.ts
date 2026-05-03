@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { config } from "./config.js";
 import { parseIncomeStatement } from "./parse-income-statement.js";
+import { parseRentRoll } from "./parse-rent-roll.js";
 
 // Generated API surface lives in the parent project. We reference functions by
 // path so this script doesn't need its own Convex codegen.
@@ -11,6 +12,7 @@ const FN = {
   createSyncJob: "syncJobs:create",
   completeSyncJob: "syncJobs:complete",
   bulkInsertIncomeLines: "incomeLines:bulkInsertByCode",
+  bulkReplaceTenants: "tenants:bulkReplaceByCode",
   extractInsights: "insights:extractForProperty",
 } as const;
 
@@ -75,25 +77,42 @@ export async function uploadRunToConvex(
     })),
   });
 
-  // Phase 2 — parse each uploaded income statement and insert rows into income_lines.
+  // Phase 2 — parse each uploaded report and insert rows into the right Convex
+  // table (income_statement → income_lines, rent_roll → tenants). Track which
+  // properties got an income_statement update so we know who to run insights on.
   let totalRowsIngested = 0;
   const ingestErrors: string[] = [];
   const snapshotDate = new Date().toISOString();
   const ingestedProperties: string[] = [];
   for (const u of uploaded) {
-    if (u.reportType !== "income_statement") continue;
     try {
-      const parsed = parseIncomeStatement(u.filePath);
-      console.log(`   parsed ${u.fileName}: ${parsed.rows.length} rows (${parsed.periodHeader})`);
-      const result: any = await client.mutation(FN.bulkInsertIncomeLines as any, {
-        propertyCode: u.propertyCode,
-        syncId: jobId,
-        snapshotDate,
-        rows: parsed.rows,
-      });
-      console.log(`   ingested → propertyId ${result.propertyId} · ${result.inserted} rows · superseded ${result.supersededPrior}`);
-      totalRowsIngested += result.inserted;
-      ingestedProperties.push(u.propertyCode);
+      if (u.reportType === "income_statement") {
+        const parsed = parseIncomeStatement(u.filePath);
+        console.log(`   parsed IS ${u.fileName}: ${parsed.rows.length} rows (${parsed.periodHeader})`);
+        const result: any = await client.mutation(FN.bulkInsertIncomeLines as any, {
+          propertyCode: u.propertyCode,
+          syncId: jobId,
+          snapshotDate,
+          rows: parsed.rows,
+        });
+        console.log(`   ingested IS → ${result.inserted} rows · superseded ${result.supersededPrior}`);
+        totalRowsIngested += result.inserted;
+        if (!ingestedProperties.includes(u.propertyCode)) ingestedProperties.push(u.propertyCode);
+      } else if (u.reportType === "rent_roll") {
+        const parsed = parseRentRoll(u.filePath);
+        console.log(`   parsed RR ${u.fileName}: ${parsed.rows.length} units (${parsed.asOfHeader || "no as-of header"})`);
+        if (parsed.rows.length === 0) {
+          console.warn(`   warning: rent-roll parser returned 0 rows — header likely didn't match expected columns`);
+        }
+        const result: any = await client.mutation(FN.bulkReplaceTenants as any, {
+          propertyCode: u.propertyCode,
+          syncId: jobId,
+          snapshotDate,
+          rows: parsed.rows,
+        });
+        console.log(`   ingested RR → ${result.inserted} tenants · superseded ${result.supersededPrior}`);
+        totalRowsIngested += result.inserted;
+      }
     } catch (err: any) {
       const msg = `${u.fileName}: ${err?.message || err}`;
       ingestErrors.push(msg);

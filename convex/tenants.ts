@@ -155,3 +155,84 @@ export const bulkInsert = mutation({
     return ids;
   },
 });
+
+/**
+ * Bulk replacement of tenants for a single property. Server resolves
+ * propertyCode → propertyId, marks all current rows as `isLatest=false`
+ * (preserving history), inserts the new snapshot. Manual overrides on
+ * tenants (notes, delinquency stage, posting status) are NOT carried
+ * over here — those should be re-applied on top of the fresh data
+ * via the override layer or merged client-side. This matches the
+ * income_lines approach.
+ */
+export const bulkReplaceByCode = mutation({
+  args: {
+    propertyCode: v.string(),
+    syncId: v.optional(v.id("sync_jobs")),
+    snapshotDate: v.string(),
+    rows: v.array(
+      v.object({
+        unit: v.string(),
+        building: v.optional(v.string()),
+        tenant: v.optional(v.string()),
+        leaseType: v.optional(v.string()),
+        sqft: v.optional(v.number()),
+        leaseFrom: v.optional(v.string()),
+        leaseTo: v.optional(v.string()),
+        monthlyRent: v.optional(v.number()),
+        monthlyElectric: v.optional(v.number()),
+        securityDeposit: v.optional(v.number()),
+        status: v.optional(v.string()),
+        pastDueAmount: v.optional(v.number()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const property = await ctx.db
+      .query("properties")
+      .withIndex("by_code", (q) => q.eq("code", args.propertyCode))
+      .first();
+    if (!property) throw new Error(`Unknown property code: ${args.propertyCode}`);
+
+    const prior = await ctx.db
+      .query("tenants")
+      .withIndex("by_property_latest", (q) =>
+        q.eq("propertyId", property._id).eq("isLatest", true)
+      )
+      .collect();
+    for (const row of prior) {
+      await ctx.db.patch(row._id, { isLatest: false });
+    }
+
+    let inserted = 0;
+    for (const r of args.rows) {
+      await ctx.db.insert("tenants", {
+        syncId: args.syncId,
+        propertyId: property._id,
+        unit: r.unit,
+        building: r.building || "",
+        tenant: r.tenant || "",
+        leaseType: r.leaseType || "",
+        sqft: r.sqft ?? 0,
+        leaseFrom: r.leaseFrom || "",
+        leaseTo: r.leaseTo || "",
+        monthlyRent: r.monthlyRent ?? 0,
+        monthlyElectric: r.monthlyElectric ?? 0,
+        securityDeposit: r.securityDeposit ?? 0,
+        status: r.status || "current",
+        pastDueAmount: r.pastDueAmount ?? 0,
+        electricPosted: false,
+        lastPaymentDate: "",
+        snapshotDate: args.snapshotDate,
+        isLatest: true,
+      });
+      inserted++;
+    }
+
+    if (inserted > 0 && !property.hasData) {
+      await ctx.db.patch(property._id, { hasData: true });
+    }
+
+    return { propertyId: property._id, inserted, supersededPrior: prior.length };
+  },
+});

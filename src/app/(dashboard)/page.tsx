@@ -443,7 +443,7 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
                   key={ins._id}
                   insight={ins}
                   onUnflag={() => unflag(ins._id)}
-                  onAddComment={(text) => addComment({ id: ins._id, text, author: user?.fullName || user?.firstName || "User" })}
+                  onAddComment={async (text) => { await addComment({ id: ins._id, text, author: user?.fullName || user?.firstName || "User" }); }}
                 />
               ))}
             </div>
