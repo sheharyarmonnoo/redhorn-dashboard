@@ -18,6 +18,31 @@ export const list = query({
   },
 });
 
+/**
+ * Pull recent alerts for a property, optionally filtered by alertType.
+ * Used by the insights action to give Claude continuity of prior findings.
+ */
+export const listForProperty = query({
+  args: {
+    propertyId: v.id("properties"),
+    alertType: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // The schema has by_property indexed as (propertyId, status). To get all alerts
+    // for a property regardless of status, scan and filter.
+    const all = await ctx.db
+      .query("alerts")
+      .filter((q) => q.eq(q.field("propertyId"), args.propertyId))
+      .order("desc")
+      .take(args.limit ?? 20);
+    if (args.alertType) {
+      return all.filter((a) => a.alertType === args.alertType);
+    }
+    return all;
+  },
+});
+
 export const create = mutation({
   args: {
     propertyId: v.optional(v.id("properties")),

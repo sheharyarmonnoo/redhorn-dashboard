@@ -11,6 +11,7 @@ const FN = {
   createSyncJob: "syncJobs:create",
   completeSyncJob: "syncJobs:complete",
   bulkInsertIncomeLines: "incomeLines:bulkInsertByCode",
+  extractInsights: "insights:extractForProperty",
 } as const;
 
 export interface UploadedFile {
@@ -78,6 +79,7 @@ export async function uploadRunToConvex(
   let totalRowsIngested = 0;
   const ingestErrors: string[] = [];
   const snapshotDate = new Date().toISOString();
+  const ingestedProperties: string[] = [];
   for (const u of uploaded) {
     if (u.reportType !== "income_statement") continue;
     try {
@@ -91,10 +93,36 @@ export async function uploadRunToConvex(
       });
       console.log(`   ingested → propertyId ${result.propertyId} · ${result.inserted} rows · superseded ${result.supersededPrior}`);
       totalRowsIngested += result.inserted;
+      ingestedProperties.push(u.propertyCode);
     } catch (err: any) {
       const msg = `${u.fileName}: ${err?.message || err}`;
       ingestErrors.push(msg);
       console.error(`   ingest failed: ${msg}`);
+    }
+  }
+
+  // Phase 3 — run Claude insights against each freshly ingested property. This is
+  // what makes the sync deliver real value: each run produces narrative analysis
+  // that references prior snapshots and prior insights for continuity.
+  let totalInsights = 0;
+  let totalAlertsCreated = 0;
+  const insightSummaries: Array<{ propertyCode: string; summary: string }> = [];
+  for (const code of ingestedProperties) {
+    try {
+      console.log(`   running insights for ${code}…`);
+      const result: any = await client.action(FN.extractInsights as any, {
+        propertyCode: code,
+        syncJobId: jobId,
+      });
+      totalInsights += result.insightsCount || 0;
+      totalAlertsCreated += result.alertsCreated || 0;
+      insightSummaries.push({ propertyCode: code, summary: result.summary });
+      console.log(`   ${code}: ${result.insightsCount} insights, ${result.alertsCreated} alerts written`);
+      console.log(`      → ${result.summary.slice(0, 200)}`);
+    } catch (err: any) {
+      const msg = `insights for ${code}: ${err?.message || err}`;
+      ingestErrors.push(msg);
+      console.error(`   ${msg}`);
     }
   }
 
@@ -112,8 +140,15 @@ export async function uploadRunToConvex(
   });
 
   console.log(
-    `Convex sync_job ${jobId} — ${uploaded.length} files uploaded, ${totalRowsIngested} income_lines rows ingested, ${ingestErrors.length} ingest errors.`
+    `Convex sync_job ${jobId} — ${uploaded.length} files uploaded, ${totalRowsIngested} income_lines rows ingested, ${totalInsights} insights generated (${totalAlertsCreated} alerts), ${ingestErrors.length} errors.`
   );
+  if (insightSummaries.length > 0) {
+    console.log(`\n=== Insights ===`);
+    for (const s of insightSummaries) {
+      console.log(`\n[${s.propertyCode}]`);
+      console.log(s.summary);
+    }
+  }
   return { jobId, uploaded, failed };
 }
 

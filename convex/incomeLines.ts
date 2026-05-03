@@ -74,3 +74,24 @@ export const listByProperty = query({
       .collect();
   },
 });
+
+/**
+ * All income_lines rows for a property across every snapshot — used by the
+ * insights action to build prior-period comparisons.
+ */
+export const allForProperty = query({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    // Use the by_property_latest index (which includes propertyId as first key)
+    // and pull both isLatest=true and isLatest=false rows.
+    const latest = await ctx.db
+      .query("income_lines")
+      .withIndex("by_property_latest", (q) => q.eq("propertyId", args.propertyId).eq("isLatest", true))
+      .collect();
+    const prior = await ctx.db
+      .query("income_lines")
+      .withIndex("by_property_latest", (q) => q.eq("propertyId", args.propertyId).eq("isLatest", false))
+      .collect();
+    return [...latest, ...prior];
+  },
+});

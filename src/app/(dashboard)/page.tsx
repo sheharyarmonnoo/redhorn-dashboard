@@ -5,7 +5,7 @@ import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
 import ActionItems from "@/components/ActionItems";
 import RevenueFilter from "@/components/RevenueFilter";
-import { useActiveProperty, useTenants, useMonthlyRevenue, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useMonthlyRevenue, useAlerts, formatCurrency } from "@/hooks/useConvexData";
 import { Filter } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useTheme } from "@/components/ThemeProvider";
@@ -162,6 +162,8 @@ export default function DashboardPage() {
 
       <ActionItems />
 
+      <LatestInsights propertyId={property._id} />
+
       {/* Charts */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mb-6">
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
@@ -263,6 +265,60 @@ export default function DashboardPage() {
       </div>
 
       <KPIDrawer open={!!kpiDrawer} kpiKey={kpiDrawer} onClose={() => setKpiDrawer(null)} />
+    </div>
+  );
+}
+
+function LatestInsights({ propertyId }: { propertyId: string }) {
+  const { alerts } = useAlerts();
+  const insights = useMemo(() => {
+    return (alerts as any[])
+      .filter(a => a.alertType === "income_insight" && a.propertyId === propertyId)
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .slice(0, 5);
+  }, [alerts, propertyId]);
+
+  if (insights.length === 0) return null;
+
+  const sevColor: Record<string, string> = {
+    critical: "text-[#dc2626] border-[#dc2626]/20 bg-[#dc2626]/[0.04]",
+    warning: "text-[#d97706] border-[#d97706]/25 bg-[#d97706]/[0.05]",
+    info: "text-[#2563eb] border-[#2563eb]/25 bg-[#2563eb]/[0.04]",
+  };
+
+  // The aiAnalysis field on each insight is the same per-run summary; show the
+  // most recent one once at the top so the user sees the headline narrative.
+  const latestSummary = insights[0]?.aiAnalysis;
+
+  return (
+    <div className="mb-6 mt-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Latest AI Insights</p>
+        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">From most recent Yardi sync</p>
+      </div>
+      {latestSummary && (
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 mb-3">
+          <p className="text-[11px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide mb-1">Summary</p>
+          <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{latestSummary}</p>
+        </div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {insights.map(ins => {
+          const cls = sevColor[ins.severity] || sevColor.info;
+          return (
+            <div key={ins._id} className={`border rounded p-3 ${cls.split(" ")[2]} dark:bg-[#18181b] ${cls.split(" ")[1]}`}>
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <p className={`text-[12px] font-semibold ${cls.split(" ")[0]}`}>{ins.title}</p>
+                <span className="text-[9px] uppercase tracking-wide font-medium text-[#a1a1aa] dark:text-[#71717a]">{ins.severity}</span>
+              </div>
+              <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed">{ins.body}</p>
+              {ins.dataContext?.mom && (
+                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">{ins.dataContext.mom}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
