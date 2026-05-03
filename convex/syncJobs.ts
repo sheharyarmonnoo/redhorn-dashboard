@@ -25,6 +25,7 @@ export const create = mutation({
           storageId: v.id("_storage"),
           fileName: v.string(),
           reportType: v.string(),
+          rowsIngested: v.optional(v.number()),
         })
       )
     ),
@@ -36,6 +37,27 @@ export const create = mutation({
       recordsCreated: 0,
       startedAt: new Date().toISOString(),
     });
+  },
+});
+
+/**
+ * Patch a single file's rowsIngested count after that file's parse + insert
+ * has finished. Lets the Data Pipeline grid show real per-file counts instead
+ * of the job's lump sum against every row.
+ */
+export const setFileRecords = mutation({
+  args: {
+    id: v.id("sync_jobs"),
+    storageId: v.id("_storage"),
+    rowsIngested: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.id);
+    if (!job || !Array.isArray(job.files)) return;
+    const updated = job.files.map((f) =>
+      f.storageId === args.storageId ? { ...f, rowsIngested: args.rowsIngested } : f
+    );
+    await ctx.db.patch(args.id, { files: updated });
   },
 });
 

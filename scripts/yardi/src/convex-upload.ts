@@ -19,6 +19,7 @@ const FN = {
   recomputeMonthlyRevenue: "monthlyRevenue:recomputeFromLatest",
   extractInsights: "insights:extractForProperty",
   getPropertyByCode: "properties:getByCode",
+  setFileRecords: "syncJobs:setFileRecords",
 } as const;
 
 export interface UploadedFile {
@@ -90,6 +91,7 @@ export async function uploadRunToConvex(
   const snapshotDate = new Date().toISOString();
   const ingestedProperties: string[] = [];
   for (const u of uploaded) {
+    let perFileRows = 0;
     try {
       if (u.reportType === "income_statement") {
         const parsed = parseIncomeStatement(u.filePath);
@@ -101,6 +103,7 @@ export async function uploadRunToConvex(
           rows: parsed.rows,
         });
         console.log(`   ingested IS → ${result.inserted} rows · superseded ${result.supersededPrior}`);
+        perFileRows = result.inserted;
         totalRowsIngested += result.inserted;
         if (!ingestedProperties.includes(u.propertyCode)) ingestedProperties.push(u.propertyCode);
       } else if (u.reportType === "rent_roll") {
@@ -116,6 +119,7 @@ export async function uploadRunToConvex(
           rows: parsed.rows,
         });
         console.log(`   ingested RR → ${result.inserted} tenants · superseded ${result.supersededPrior}`);
+        perFileRows = result.inserted;
         totalRowsIngested += result.inserted;
       } else if (u.reportType === "total_units") {
         const parsed = parseTotalUnits(u.filePath);
@@ -128,8 +132,14 @@ export async function uploadRunToConvex(
           rows: parsed.rows,
         });
         console.log(`   ingested TU → ${result.inserted} units · replaced ${result.supersededPrior}`);
+        perFileRows = result.inserted;
         totalRowsIngested += result.inserted;
       }
+      await client.mutation(FN.setFileRecords as any, {
+        id: jobId,
+        storageId: u.storageId,
+        rowsIngested: perFileRows,
+      });
     } catch (err: any) {
       const msg = `${u.fileName}: ${err?.message || err}`;
       ingestErrors.push(msg);

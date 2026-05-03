@@ -168,6 +168,7 @@ export default defineSchema({
       storageId: v.id("_storage"),
       fileName: v.string(),
       reportType: v.string(),
+      rowsIngested: v.optional(v.number()),
     }))),
     anomalies: v.optional(v.array(v.object({
       type: v.string(),

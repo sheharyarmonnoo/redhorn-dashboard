@@ -148,6 +148,38 @@ export const undoFalseFlag = mutation({
  * original false-flag reason — useful when the team learns more later. Future
  * Claude insight runs read these comments alongside the original reason.
  */
+/**
+ * Resolve all open income_insight alerts whose title or body mentions a frozen
+ * data feed / identical-snapshot pattern. Used as a one-off cleanup after the
+ * suppression rule was added to the prompt — those alerts are now history, not
+ * active issues. Reports how many it resolved.
+ */
+export const resolveStaleFrozenFeedAlerts = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db
+      .query("alerts")
+      .filter((q) => q.eq(q.field("alertType"), "income_insight"))
+      .collect();
+    const matches = all.filter((a) => {
+      if (a.status === "resolved" || a.status === "false_flag") return false;
+      const blob = `${a.title} ${a.body}`.toLowerCase();
+      return /frozen\s+data\s+feed|identical\s+snapshot|byte-for-byte|consecutive\s+identical|consecutive\s+run|unchanged\s+for/.test(
+        blob
+      );
+    });
+    const now = new Date().toISOString();
+    for (const a of matches) {
+      await ctx.db.patch(a._id, {
+        status: "resolved",
+        resolvedAt: now,
+        resolvedBy: "system_cleanup",
+      });
+    }
+    return { resolved: matches.length };
+  },
+});
+
 export const addComment = mutation({
   args: {
     id: v.id("alerts"),
