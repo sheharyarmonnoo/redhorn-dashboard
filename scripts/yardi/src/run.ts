@@ -1,14 +1,14 @@
 import { openAuthenticatedSession } from "./auth.js";
 import { getProperties } from "./properties.js";
 import { runIncomeStatementForProperty } from "./reports/income-statement.js";
-import { runRentRollForProperty, runTotalUnitsForProperty } from "./reports/rent-roll.js";
+import { runRentRollForProperty, runTotalUnitsForProperty, runPastDueForProperty } from "./reports/rent-roll.js";
 import { latestClosedMonth } from "./paths.js";
 import { uploadRunToConvex } from "./convex-upload.js";
 
 interface RunResult {
   property: string;
   propertyCode: string;
-  reportType: "income_statement" | "rent_roll" | "total_units";
+  reportType: "income_statement" | "rent_roll" | "total_units" | "past_due";
   ok: boolean;
   path?: string;
   error?: string;
@@ -69,6 +69,16 @@ async function main() {
         const msg = err?.message || String(err);
         console.error(`   TU FAILED — ${msg}`);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "total_units", ok: false, error: msg });
+      }
+
+      // Past Due Amount (Receivables panel) — populates Past Due column on rent roll
+      try {
+        const path = await runPastDueForProperty(voyager, property, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "past_due", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   PD FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "past_due", ok: false, error: msg });
       }
     }
 

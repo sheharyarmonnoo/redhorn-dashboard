@@ -41,6 +41,28 @@ export async function runTotalUnitsForProperty(
   );
 }
 
+/**
+ * Run the "Past Due Amount" dashboard panel for one property.
+ * The panel shows per-tenant outstanding balances; we use it to populate the
+ * Past Due column on the rent roll. The label may appear as "Past Due Amount"
+ * or "Past Due Amounts" — navigateDashboardLink does a startsWith match so
+ * either works, and we attempt the canonical form first.
+ */
+export async function runPastDueForProperty(
+  voyagerPage: Page,
+  property: YardiProperty,
+  asOfMonthIso: string
+): Promise<string> {
+  return runDashboardListExport(
+    voyagerPage,
+    property,
+    asOfMonthIso,
+    "Past Due Amount",
+    `${slugForProperty(property.code)}-past-due.xlsx`,
+    "Past Due"
+  );
+}
+
 async function runDashboardListExport(
   voyagerPage: Page,
   property: YardiProperty,
@@ -220,6 +242,9 @@ function panelLabelToExpectedHeaders(label: string): string[] {
       return ["unit id"]; // Total Units lists unit IDs
     case "Lease Expirations within Date Range":
       return ["expiration"];
+    case "Past Due Amount":
+      // Past Due panel shows tenant + balance; "past due" appears in the column header
+      return ["past due"];
     default:
       return [];
   }

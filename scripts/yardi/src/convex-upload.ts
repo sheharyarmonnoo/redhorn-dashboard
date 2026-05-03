@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { parseIncomeStatement } from "./parse-income-statement.js";
 import { parseRentRoll } from "./parse-rent-roll.js";
 import { parseTotalUnits } from "./parse-total-units.js";
+import { parsePastDue } from "./parse-past-due.js";
 import { sendSyncDigest, type DigestProperty } from "./digest.js";
 
 // Generated API surface lives in the parent project. We reference functions by
@@ -16,6 +17,7 @@ const FN = {
   bulkInsertIncomeLines: "incomeLines:bulkInsertByCode",
   bulkReplaceTenants: "tenants:bulkReplaceByCode",
   bulkReplaceUnits: "units:bulkReplaceByCode",
+  applyPastDue: "tenants:applyPastDueByCode",
   recomputeMonthlyRevenue: "monthlyRevenue:recomputeFromLatest",
   extractInsights: "insights:extractForProperty",
   getPropertyByCode: "properties:getByCode",
@@ -134,6 +136,16 @@ export async function uploadRunToConvex(
         console.log(`   ingested TU → ${result.inserted} units · replaced ${result.supersededPrior}`);
         perFileRows = result.inserted;
         totalRowsIngested += result.inserted;
+      } else if (u.reportType === "past_due") {
+        const parsed = parsePastDue(u.filePath);
+        console.log(`   parsed PD ${u.fileName}: ${parsed.rows.length} delinquent leases`);
+        const result: any = await client.mutation(FN.applyPastDue as any, {
+          propertyCode: u.propertyCode,
+          rows: parsed.rows,
+        });
+        console.log(`   applied PD → matched ${result.matched}/${result.tenants} tenants · cleared ${result.cleared}`);
+        perFileRows = result.matched;
+        totalRowsIngested += result.matched;
       }
       await client.mutation(FN.setFileRecords as any, {
         id: jobId,

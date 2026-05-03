@@ -236,3 +236,77 @@ export const bulkReplaceByCode = mutation({
     return { propertyId: property._id, inserted, supersededPrior: prior.length };
   },
 });
+
+/**
+ * Patch the latest tenants snapshot for a property with per-lease past-due
+ * dollar amounts pulled from the Past Due dashboard panel. We match by lease
+ * name (case-insensitive, trimmed) since the rent-roll panel uses
+ * "Lease Name(Id)" and the past-due panel uses "Lease Name" / "Customer".
+ *
+ * Tenants that don't have a matching past-due row are zeroed out so a paid-off
+ * tenant doesn't keep its prior balance forever. Status is also flipped to
+ * "past_due" for any tenant with a positive balance.
+ */
+export const applyPastDueByCode = mutation({
+  args: {
+    propertyCode: v.string(),
+    rows: v.array(
+      v.object({
+        leaseName: v.string(),
+        unit: v.optional(v.string()),
+        pastDueAmount: v.number(),
+        lastPaymentDate: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const property = await ctx.db
+      .query("properties")
+      .withIndex("by_code", (q) => q.eq("code", args.propertyCode))
+      .first();
+    if (!property) throw new Error(`Unknown property code: ${args.propertyCode}`);
+
+    const tenants = await ctx.db
+      .query("tenants")
+      .withIndex("by_property_latest", (q) =>
+        q.eq("propertyId", property._id).eq("isLatest", true)
+      )
+      .collect();
+
+    const norm = (s: string) =>
+      s.toLowerCase().replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+    const byName: Record<string, { pastDueAmount: number; lastPaymentDate?: string }> = {};
+    for (const r of args.rows) {
+      byName[norm(r.leaseName)] = {
+        pastDueAmount: r.pastDueAmount,
+        lastPaymentDate: r.lastPaymentDate,
+      };
+    }
+
+    let matched = 0;
+    let cleared = 0;
+    for (const t of tenants) {
+      const key = norm(t.tenant || "");
+      const hit = byName[key];
+      const newAmount = hit?.pastDueAmount ?? 0;
+      const newStatus =
+        newAmount > 0 ? "past_due" : (t.status === "past_due" ? "current" : t.status);
+      const patch: any = {
+        pastDueAmount: newAmount,
+        status: newStatus,
+      };
+      if (hit?.lastPaymentDate) patch.lastPaymentDate = hit.lastPaymentDate;
+      await ctx.db.patch(t._id, patch);
+      if (hit) matched++;
+      else if ((t.pastDueAmount || 0) > 0) cleared++;
+    }
+
+    return {
+      propertyId: property._id,
+      tenants: tenants.length,
+      matched,
+      cleared,
+      pastDueRows: args.rows.length,
+    };
+  },
+});
