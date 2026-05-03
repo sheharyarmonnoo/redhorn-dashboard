@@ -117,8 +117,12 @@ function buildPrompt(propertyName: string, latestDate: string, latest: any[], pr
     ? "(none yet)"
     : falseFlags.slice(0, 12).map(a => {
         const reason = a.dataContext?.falseFlagReason || "(no reason provided)";
-        return `- "${a.title}" — REASON THIS IS NOT AN ISSUE: ${reason}`;
-      }).join("\n");
+        const comments = Array.isArray(a.dataContext?.comments) ? a.dataContext.comments : [];
+        const commentBlock = comments.length === 0
+          ? ""
+          : "\n  Additional context (comments added later):\n" + comments.slice(0, 6).map((c: any) => `    • ${c.author}: ${c.text}`).join("\n");
+        return `- "${a.title}" — REASON THIS IS NOT AN ISSUE: ${reason}${commentBlock}`;
+      }).join("\n\n");
 
   return [
     `You are a senior CRE asset-management analyst reviewing the latest income statement for "${propertyName}".`,

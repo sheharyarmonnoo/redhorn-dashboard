@@ -142,3 +142,37 @@ export const undoFalseFlag = mutation({
     });
   },
 });
+
+/**
+ * Append a comment to an alert. Comments add long-form context on top of the
+ * original false-flag reason — useful when the team learns more later. Future
+ * Claude insight runs read these comments alongside the original reason.
+ */
+export const addComment = mutation({
+  args: {
+    id: v.id("alerts"),
+    text: v.string(),
+    author: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const alert = await ctx.db.get(args.id);
+    if (!alert) throw new Error("Alert not found");
+    const text = args.text.trim();
+    if (!text) return;
+    const existing = (alert.dataContext as any)?.comments;
+    const comments = Array.isArray(existing) ? [...existing] : [];
+    comments.push({
+      text: text.slice(0, 2000),
+      author: args.author?.slice(0, 80) || "User",
+      createdAt: new Date().toISOString(),
+    });
+    const dataContext = { ...(alert.dataContext || {}), comments };
+    await ctx.db.patch(args.id, { dataContext });
+    await logActivity(ctx, {
+      type: "note_added",
+      description: `Comment on "${alert.title}": ${text.slice(0, 120)}`,
+      user: args.author || "User",
+      unit: alert.unit,
+    });
+  },
+});

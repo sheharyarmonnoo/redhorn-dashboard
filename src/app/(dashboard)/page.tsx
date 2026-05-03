@@ -272,11 +272,93 @@ export default function DashboardPage() {
   );
 }
 
+function FalseFlagCard({ insight, onUnflag, onAddComment }: {
+  insight: any;
+  onUnflag: () => void | Promise<void>;
+  onAddComment: (text: string) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState("");
+  const [posting, setPosting] = useState(false);
+  const comments = Array.isArray(insight.dataContext?.comments) ? insight.dataContext.comments : [];
+
+  function fmtTime(iso: string) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    } catch { return ""; }
+  }
+
+  async function submit() {
+    const text = draft.trim();
+    if (!text) return;
+    setPosting(true);
+    try {
+      await onAddComment(text);
+      setDraft("");
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  return (
+    <div className="border border-dashed border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 bg-[#fafafa] dark:bg-[#27272a]">
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <p className="text-[12px] font-medium text-[#71717a] dark:text-[#a1a1aa] line-through">{insight.title}</p>
+        <span className="text-[9px] uppercase tracking-wide font-medium text-[#16a34a]">false flag</span>
+      </div>
+      {insight.dataContext?.falseFlagReason && (
+        <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed italic">"{insight.dataContext.falseFlagReason}"</p>
+      )}
+      <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">marked by {insight.resolvedBy || "User"}</p>
+
+      {comments.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-[#e4e4e7] dark:border-[#3f3f46]/60 space-y-1.5">
+          {comments.map((c: any, i: number) => (
+            <div key={i} className="text-[11px] leading-relaxed">
+              <span className="font-medium text-[#52525b] dark:text-[#d4d4d8]">{c.author}</span>
+              <span className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] ml-1.5">{fmtTime(c.createdAt)}</span>
+              <p className="text-[#71717a] dark:text-[#a1a1aa]">{c.text}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-2 pt-2 border-t border-[#e4e4e7] dark:border-[#3f3f46]/60">
+        <div className="flex gap-1.5">
+          <input
+            type="text"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
+            placeholder="Add a comment for next sync's context…"
+            className="flex-1 text-[11px] px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]"
+          />
+          <button
+            onClick={submit}
+            disabled={!draft.trim() || posting}
+            className="text-[10px] font-medium px-2 py-1 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {posting ? "…" : "Add"}
+          </button>
+        </div>
+        <button
+          onClick={onUnflag}
+          className="mt-1.5 text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#2563eb] cursor-pointer"
+          title="Reopen — Claude will see this finding again next sync"
+        >
+          Reopen
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function LatestInsights({ propertyId }: { propertyId: string }) {
   const { alerts } = useAlerts();
   const { user } = useUser();
   const markFalseFlag = useMutation(api.alerts.markFalseFlag);
   const undoFalseFlag = useMutation(api.alerts.undoFalseFlag);
+  const addComment = useMutation(api.alerts.addComment);
   const [showSuppressed, setShowSuppressed] = useState(false);
 
   const { active, suppressed, latestSummary } = useMemo(() => {
@@ -355,27 +437,14 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
             {showSuppressed ? "Hide" : "Show"} {suppressed.length} suppressed false flag{suppressed.length === 1 ? "" : "s"}
           </button>
           {showSuppressed && (
-            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 opacity-70">
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
               {suppressed.map(ins => (
-                <div key={ins._id} className="border border-dashed border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 bg-[#fafafa] dark:bg-[#27272a]">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <p className="text-[12px] font-medium text-[#71717a] dark:text-[#a1a1aa] line-through">{ins.title}</p>
-                    <span className="text-[9px] uppercase tracking-wide font-medium text-[#16a34a]">false flag</span>
-                  </div>
-                  {ins.dataContext?.falseFlagReason && (
-                    <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed italic">"{ins.dataContext.falseFlagReason}"</p>
-                  )}
-                  <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">marked by {ins.resolvedBy || "User"}</p>
-                  <div className="mt-2 pt-2 border-t border-[#e4e4e7] dark:border-[#3f3f46]/60 flex items-center justify-end">
-                    <button
-                      onClick={() => unflag(ins._id)}
-                      className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#2563eb] cursor-pointer"
-                      title="Reopen — Claude will see this finding again next sync"
-                    >
-                      Reopen
-                    </button>
-                  </div>
-                </div>
+                <FalseFlagCard
+                  key={ins._id}
+                  insight={ins}
+                  onUnflag={() => unflag(ins._id)}
+                  onAddComment={(text) => addComment({ id: ins._id, text, author: user?.fullName || user?.firstName || "User" })}
+                />
               ))}
             </div>
           )}
