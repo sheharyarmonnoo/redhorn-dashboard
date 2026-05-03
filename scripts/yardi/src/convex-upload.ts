@@ -14,6 +14,7 @@ const FN = {
   generateUploadUrl: "files:generateUploadUrl",
   createSyncJob: "syncJobs:create",
   completeSyncJob: "syncJobs:complete",
+  logActivity: "activityLog:log",
   bulkInsertIncomeLines: "incomeLines:bulkInsertByCode",
   bulkReplaceTenants: "tenants:bulkReplaceByCode",
   bulkReplaceUnits: "units:bulkReplaceByCode",
@@ -270,6 +271,19 @@ export async function uploadRunToConvex(
     } catch (err: any) {
       console.error(`   email digest failed: ${err?.message || err}`);
     }
+  }
+
+  // Phase 5 — log the sync to the Activity feed so the dashboard's Activity
+  // page shows a paper trail of every run, not just the alerts created by it.
+  try {
+    const propsLabel = digestProperties.map(p => p.code).join(", ") || "—";
+    await client.mutation(FN.logActivity as any, {
+      type: "sync",
+      description: `Yardi sync · ${uploaded.length} files · ${totalRowsIngested} rows · ${totalInsights} insights · ${totalAlertsCreated} alerts (${propsLabel})`,
+      user: "System",
+    });
+  } catch {
+    /* non-fatal */
   }
 
   return { jobId, uploaded, failed };
