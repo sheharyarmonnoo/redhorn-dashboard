@@ -11,6 +11,7 @@ export const bulkInsertByCode = mutation({
     propertyCode: v.string(),
     syncId: v.optional(v.id("sync_jobs")),
     snapshotDate: v.string(), // ISO timestamp — also serves as updated_time
+    historical: v.optional(v.boolean()), // when true, insert as isLatest=false; don't bump prior latest
     rows: v.array(
       v.object({
         lineItem: v.string(),
@@ -31,15 +32,22 @@ export const bulkInsertByCode = mutation({
       throw new Error(`Unknown property code: ${args.propertyCode}`);
     }
 
-    // Mark prior latest rows for this property as not-latest so the new snapshot wins
-    const prior = await ctx.db
-      .query("income_lines")
-      .withIndex("by_property_latest", (q) =>
-        q.eq("propertyId", property._id).eq("isLatest", true)
-      )
-      .collect();
-    for (const row of prior) {
-      await ctx.db.patch(row._id, { isLatest: false });
+    const isHistorical = args.historical === true;
+
+    // Only flip the prior latest pointer when we're ingesting current data.
+    // Historical backfills should slot in alongside existing snapshots.
+    let priorCount = 0;
+    if (!isHistorical) {
+      const prior = await ctx.db
+        .query("income_lines")
+        .withIndex("by_property_latest", (q) =>
+          q.eq("propertyId", property._id).eq("isLatest", true)
+        )
+        .collect();
+      for (const row of prior) {
+        await ctx.db.patch(row._id, { isLatest: false });
+      }
+      priorCount = prior.length;
     }
 
     let inserted = 0;
@@ -54,20 +62,16 @@ export const bulkInsertByCode = mutation({
         yearToDate: r.yearToDate,
         sinceInception: r.sinceInception,
         snapshotDate: args.snapshotDate,
-        isLatest: true,
+        isLatest: !isHistorical,
       });
       inserted++;
     }
 
-    // Auto-flip the property's hasData flag once we have ingested rows. The
-    // dashboard's PropertyGuard uses this to decide whether to render the
-    // empty state, and the data-pipeline insights button skips properties
-    // without data.
     if (inserted > 0 && !property.hasData) {
       await ctx.db.patch(property._id, { hasData: true });
     }
 
-    return { propertyId: property._id, inserted, supersededPrior: prior.length };
+    return { propertyId: property._id, inserted, supersededPrior: priorCount, historical: isHistorical };
   },
 });
 

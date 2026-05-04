@@ -21,6 +21,7 @@ const FN = {
   applyPastDue: "tenants:applyPastDueByCode",
   enrichRent: "tenants:enrichRentByCode",
   recomputeMonthlyRevenue: "monthlyRevenue:recomputeFromLatest",
+  recomputeMonthlyRevenueFromMonth: "monthlyRevenue:recomputeFromMonth",
   extractInsights: "insights:extractForProperty",
   getPropertyByCode: "properties:getByCode",
   setFileRecords: "syncJobs:setFileRecords",
@@ -47,7 +48,7 @@ export interface SyncBundle {
  */
 export async function uploadRunToConvex(
   files: Array<{ filePath: string; propertyCode: string; reportType: string }>,
-  opts: { source?: string } = {}
+  opts: { source?: string; historical?: boolean; month?: string } = {}
 ): Promise<SyncBundle> {
   const convexUrl = config.NEXT_PUBLIC_CONVEX_URL;
   if (!convexUrl) {
@@ -92,7 +93,12 @@ export async function uploadRunToConvex(
   // properties got an income_statement update so we know who to run insights on.
   let totalRowsIngested = 0;
   const ingestErrors: string[] = [];
-  const snapshotDate = new Date().toISOString();
+  // For historical backfill, anchor the snapshot to the END of the report's
+  // period so monthly_revenue:recomputeFromMonth can find these rows by month
+  // prefix. For live syncs, today's timestamp is fine.
+  const snapshotDate = opts.historical && opts.month
+    ? endOfMonthIso(opts.month)
+    : new Date().toISOString();
   const ingestedProperties: string[] = [];
   for (const u of uploaded) {
     let perFileRows = 0;
@@ -105,8 +111,9 @@ export async function uploadRunToConvex(
           syncId: jobId,
           snapshotDate,
           rows: parsed.rows,
+          historical: opts.historical === true,
         });
-        console.log(`   ingested IS → ${result.inserted} rows · superseded ${result.supersededPrior}`);
+        console.log(`   ingested IS → ${result.inserted} rows · superseded ${result.supersededPrior}${opts.historical ? "  (historical)" : ""}`);
         perFileRows = result.inserted;
         totalRowsIngested += result.inserted;
         if (!ingestedProperties.includes(u.propertyCode)) ingestedProperties.push(u.propertyCode);
@@ -179,17 +186,21 @@ export async function uploadRunToConvex(
     }
   }
 
-  // Phase 2.5 — recompute monthly_revenue rollup from the latest income_lines +
-  // tenants + units. Powers the dashboard KPI cards and revenue chart from real data.
-  // We derive the month from the snapshotDate (YYYY-MM-DD → YYYY-MM).
-  const monthKey = snapshotDate.slice(0, 7);
+  // Phase 2.5 — recompute monthly_revenue rollup. For live syncs we use the
+  // latest income_lines snapshot (recomputeFromLatest); for historical
+  // backfills we recompute from the specific month's snapshot we just inserted
+  // so the rollup lands in the right month and doesn't disturb the current one.
+  const monthKey = (opts.historical && opts.month) ? opts.month : snapshotDate.slice(0, 7);
   for (const code of ingestedProperties) {
     try {
-      const result: any = await client.mutation(FN.recomputeMonthlyRevenue as any, {
+      const fnPath = opts.historical
+        ? FN.recomputeMonthlyRevenueFromMonth
+        : FN.recomputeMonthlyRevenue;
+      const result: any = await client.mutation(fnPath as any, {
         propertyCode: code,
         month: monthKey,
       });
-      console.log(`   monthly_revenue ${code} ${monthKey}: rent=$${result.rent.toLocaleString()} total=$${result.total.toLocaleString()} occ=${result.occupancy}%`);
+      console.log(`   monthly_revenue ${code} ${monthKey}: rent=$${result.rent.toLocaleString()} total=$${result.total.toLocaleString()} occ=${result.occupancy}%${opts.historical ? "  (historical)" : ""}`);
     } catch (err: any) {
       console.error(`   monthly_revenue recompute failed for ${code}: ${err?.message || err}`);
     }
@@ -198,37 +209,40 @@ export async function uploadRunToConvex(
   // Phase 3 — run Claude insights against each freshly ingested property. This is
   // what makes the sync deliver real value: each run produces narrative analysis
   // that references prior snapshots and prior insights for continuity.
+  // Skipped on historical backfills — those are pure data ingest, not analysis.
   let totalInsights = 0;
   let totalAlertsCreated = 0;
   const digestProperties: DigestProperty[] = [];
   const insightSummaries: Array<{ propertyCode: string; summary: string }> = [];
-  for (const code of ingestedProperties) {
-    try {
-      console.log(`   running insights for ${code}…`);
-      const result: any = await client.action(FN.extractInsights as any, {
-        propertyCode: code,
-        syncJobId: jobId,
-      });
-      totalInsights += result.insightsCount || 0;
-      totalAlertsCreated += result.alertsCreated || 0;
-      insightSummaries.push({ propertyCode: code, summary: result.summary });
-      const property: any = await client.query(FN.getPropertyByCode as any, { code });
-      digestProperties.push({
-        name: property?.name || code,
-        code,
-        summary: result.summary || "",
-        insights: (result.insights || []).map((i: any) => ({
-          severity: i.severity || "info",
-          title: i.title || "",
-        })),
-        alertsCreated: result.alertsCreated || 0,
-      });
-      console.log(`   ${code}: ${result.insightsCount} insights, ${result.alertsCreated} alerts written`);
-      console.log(`      → ${result.summary.slice(0, 200)}`);
-    } catch (err: any) {
-      const msg = `insights for ${code}: ${err?.message || err}`;
-      ingestErrors.push(msg);
-      console.error(`   ${msg}`);
+  if (!opts.historical) {
+    for (const code of ingestedProperties) {
+      try {
+        console.log(`   running insights for ${code}…`);
+        const result: any = await client.action(FN.extractInsights as any, {
+          propertyCode: code,
+          syncJobId: jobId,
+        });
+        totalInsights += result.insightsCount || 0;
+        totalAlertsCreated += result.alertsCreated || 0;
+        insightSummaries.push({ propertyCode: code, summary: result.summary });
+        const property: any = await client.query(FN.getPropertyByCode as any, { code });
+        digestProperties.push({
+          name: property?.name || code,
+          code,
+          summary: result.summary || "",
+          insights: (result.insights || []).map((i: any) => ({
+            severity: i.severity || "info",
+            title: i.title || "",
+          })),
+          alertsCreated: result.alertsCreated || 0,
+        });
+        console.log(`   ${code}: ${result.insightsCount} insights, ${result.alertsCreated} alerts written`);
+        console.log(`      → ${result.summary.slice(0, 200)}`);
+      } catch (err: any) {
+        const msg = `insights for ${code}: ${err?.message || err}`;
+        ingestErrors.push(msg);
+        console.error(`   ${msg}`);
+      }
     }
   }
 
@@ -258,8 +272,8 @@ export async function uploadRunToConvex(
 
   // Phase 4 — email digest. Sends an HTML summary of the run to whoever is on
   // YARDI_DIGEST_TO. Skipped silently if the env var isn't set, so unconfigured
-  // local runs don't blow up.
-  if (digestProperties.length > 0) {
+  // local runs don't blow up. Also skipped on historical backfills.
+  if (digestProperties.length > 0 && !opts.historical) {
     try {
       await sendSyncDigest({
         syncJobId: jobId,
@@ -276,10 +290,13 @@ export async function uploadRunToConvex(
   // Phase 5 — log the sync to the Activity feed so the dashboard's Activity
   // page shows a paper trail of every run, not just the alerts created by it.
   try {
-    const propsLabel = digestProperties.map(p => p.code).join(", ") || "—";
+    const propsLabel = ingestedProperties.join(", ") || "—";
+    const desc = opts.historical
+      ? `Yardi historical backfill · ${monthKey} · ${uploaded.length} files · ${totalRowsIngested} rows (${propsLabel})`
+      : `Yardi sync · ${uploaded.length} files · ${totalRowsIngested} rows · ${totalInsights} insights · ${totalAlertsCreated} alerts (${propsLabel})`;
     await client.mutation(FN.logActivity as any, {
       type: "sync",
-      description: `Yardi sync · ${uploaded.length} files · ${totalRowsIngested} rows · ${totalInsights} insights · ${totalAlertsCreated} alerts (${propsLabel})`,
+      description: desc,
       user: "System",
     });
   } catch {
@@ -287,6 +304,13 @@ export async function uploadRunToConvex(
   }
 
   return { jobId, uploaded, failed };
+}
+
+function endOfMonthIso(month: string): string {
+  // "2026-04" → "2026-04-30T23:59:59.000Z"
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return new Date(Date.UTC(y, m - 1, lastDay, 23, 59, 59)).toISOString();
 }
 
 async function uploadOneFile(client: ConvexHttpClient, filePath: string): Promise<string> {

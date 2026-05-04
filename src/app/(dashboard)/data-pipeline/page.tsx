@@ -487,6 +487,7 @@ export default function DataPipelinePage() {
     const friendlySource: Record<string, string> = {
       yardi_playwright: "Yardi Sync",
       yardi_sync: "Yardi Sync",
+      yardi_sync_historical: "Yardi (Historical)",
       yardi_auto: "Yardi Sync",
       n8n: "Scheduled Sync",
       manual_upload: "Manual Upload",

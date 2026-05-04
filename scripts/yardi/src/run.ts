@@ -22,9 +22,10 @@ async function main() {
   const templateArg = process.argv.find(a => a.startsWith("--template="))?.split("=")[1];
   const codeArg = process.argv.find(a => a.startsWith("--code="))?.split("=")[1];
   const skipUpload = process.argv.includes("--no-upload");
+  const historical = process.argv.includes("--historical");
 
   console.log(`\nYardi Income Statement scraper`);
-  console.log(`  month:     ${month}`);
+  console.log(`  month:     ${month}${historical ? "  (historical backfill)" : ""}`);
   console.log(`  browser:   ${headed ? "headed" : "headless"}`);
   console.log(`  upload:    ${skipUpload ? "off" : "Convex sync_jobs"}`);
   if (templateArg) console.log(`  template:  ${templateArg}`);
@@ -42,7 +43,7 @@ async function main() {
 
     const results: RunResult[] = [];
     for (const property of properties) {
-      // Income Statement
+      // Income Statement — always run
       try {
         const path = await runIncomeStatementForProperty(voyager, property, month, templateArg);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "income_statement", ok: true, path });
@@ -51,6 +52,12 @@ async function main() {
         console.error(`   IS FAILED — ${msg}`);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "income_statement", ok: false, error: msg });
       }
+
+      // Historical backfill mode skips everything except the income statement —
+      // we only need IS rows to build the monthly_revenue rollup, and we don't
+      // want to overwrite current rent-roll / past-due data with a snapshot of
+      // last month's leases.
+      if (historical) continue;
 
       // Rent Roll (Current Leases panel)
       try {
@@ -119,7 +126,11 @@ async function main() {
       } else {
         console.log(`\nUploading ${filesToUpload.length} file(s) to Convex…`);
         try {
-          const bundle = await uploadRunToConvex(filesToUpload, { source: "yardi_sync" });
+          const bundle = await uploadRunToConvex(filesToUpload, {
+            source: historical ? "yardi_sync_historical" : "yardi_sync",
+            historical,
+            month,
+          });
           console.log(`Convex sync_job: ${bundle.jobId}`);
         } catch (err: any) {
           console.error(`Convex upload failed: ${err?.message || err}`);
