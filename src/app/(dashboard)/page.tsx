@@ -401,17 +401,20 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
   const addComment = useMutation(api.alerts.addComment);
   const [showSuppressed, setShowSuppressed] = useState(false);
   const [flagging, setFlagging] = useState<{ id: any; title: string } | null>(null);
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
 
-  const { active, suppressed, latestSummary, hasAnyHistory } = useMemo(() => {
+  const { active, suppressed, latestSummary, latestSummaryAt, hasAnyHistory } = useMemo(() => {
     const all = (alerts as any[])
       .filter(a => a.alertType === "income_insight" && a.propertyId === propertyId)
-      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+      .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
     const active = all.filter(a => a.status !== "false_flag" && a.status !== "resolved" && a.status !== "dismissed").slice(0, 6);
     const suppressed = all.filter(a => a.status === "false_flag");
+    const top = active[0] ?? all[0];
     return {
       active,
       suppressed,
-      latestSummary: active[0]?.aiAnalysis ?? all[0]?.aiAnalysis,
+      latestSummary: top?.aiAnalysis,
+      latestSummaryAt: top?._creationTime,
       hasAnyHistory: all.length > 0,
     };
   }, [alerts, propertyId]);
@@ -448,10 +451,12 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">From most recent Yardi sync · click to expand</p>
       </div>
       {latestSummary && (
-        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 mb-3">
-          <p className="text-[11px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide mb-1">Summary</p>
-          <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{latestSummary}</p>
-        </div>
+        <SummaryCard
+          summary={latestSummary}
+          updatedAt={latestSummaryAt}
+          expanded={summaryExpanded}
+          onToggle={() => setSummaryExpanded(s => !s)}
+        />
       )}
       {active.length > 0 ? (
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46]">
@@ -560,4 +565,70 @@ function FalseFlagModal({ title, onCancel, onSubmit }: {
       </div>
     </div>
   );
+}
+
+function SummaryCard({ summary, updatedAt, expanded, onToggle }: {
+  summary: string;
+  updatedAt?: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const isLong = summary.length > 280;
+  const ts = updatedAt ? formatRelativeTime(updatedAt) : "";
+
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 mb-3">
+      <div className="flex items-baseline justify-between mb-2">
+        <p className="text-[11px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide">Summary</p>
+        {ts && <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">Updated {ts}</p>}
+      </div>
+      <div className={`text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed space-y-2 ${!expanded && isLong ? "line-clamp-3" : ""}`}>
+        {renderMarkdown(summary)}
+      </div>
+      {isLong && (
+        <button
+          onClick={onToggle}
+          className="text-[11px] text-[#2563eb] dark:text-[#60a5fa] hover:underline mt-2 cursor-pointer"
+        >
+          {expanded ? "Show less" : "Read more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Lightweight markdown renderer — handles **bold** and \n\n paragraph breaks.
+// Avoids a markdown library; the prompt is constrained to these two features.
+function renderMarkdown(text: string): React.ReactNode {
+  const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+  return paragraphs.map((p, i) => (
+    <p key={i}>{renderInline(p)}</p>
+  ));
+}
+
+function renderInline(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  const re = /\*\*([^*]+)\*\*/g;
+  let last = 0;
+  let m;
+  let key = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(<strong key={key++} className="font-semibold text-[#18181b] dark:text-[#fafafa]">{m[1]}</strong>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
+function formatRelativeTime(ts: number): string {
+  const diffMs = Date.now() - ts;
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.floor(hr / 24);
+  if (d < 7) return `${d}d ago`;
+  return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
