@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useActiveProperty, useTenants, useUnits } from "@/hooks/useConvexData";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
@@ -9,7 +9,15 @@ export default function SitePlanPage() {
   const property = useActiveProperty();
   const tenantsList = useTenants(property?._id) as any[];
   const units = useUnits(property?._id) as any[];
-  const [selected, setSelected] = useState<any | null>(null);
+  // Track only the unit string. Re-resolve the full tenant object from the
+  // live list each render so override mutations (e.g. status toggle) flow
+  // back into the open drawer immediately, without a close + reopen.
+  const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
+
+  const selected = useMemo(() => {
+    if (!selectedUnit) return null;
+    return tenantsList.find((t: any) => t.unit === selectedUnit) || null;
+  }, [tenantsList, selectedUnit]);
 
   const occupied = tenantsList.filter((t: any) => t.status !== "vacant");
   const pastDue = tenantsList.filter((t: any) => t.status === "past_due");
@@ -54,10 +62,10 @@ export default function SitePlanPage() {
       </div>
 
       <div className="mt-4">
-        <SitePlan3D onSelect={setSelected} selectedUnit={selected?.unit || null} />
+        <SitePlan3D onSelect={(t: any) => setSelectedUnit(t?.unit ?? null)} selectedUnit={selectedUnit} />
       </div>
 
-      <UnitDetailPanel tenant={selected} onClose={() => setSelected(null)} />
+      <UnitDetailPanel tenant={selected} onClose={() => setSelectedUnit(null)} />
     </div>
   );
 }
