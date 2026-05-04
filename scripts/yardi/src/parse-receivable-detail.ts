@@ -16,91 +16,119 @@ export interface ParsedReceivableDetail {
 }
 
 /**
- * Parse a Yardi Receivable Detail Excel into per-tenant transaction rows.
+ * Parse a Yardi Commercial Lease Ledger SSRS export.
  *
- * Auto-detects header row by looking for tenant + charge/receipt columns. Then
- * maps columns by fuzzy header match. Skips subtotal rows and any rows that
- * lack a tenant identifier.
+ * The Lease Ledger format is a sectioned report — each lease has a metadata
+ * block, a transaction-detail table, and an aging row. We walk row-by-row
+ * extracting the tenant name + unit from each "Lease Information" block, then
+ * the transactions until we hit the aging row or the next Lease Information.
+ *
+ * Column layout (verified against rs_Comm_Lease_Ledger output):
+ *   Col 1: Date (e.g. "03/01/26")
+ *   Col 2: Description ("CAM-CY Est CAM/Escalation (03/2026)")
+ *   Col 7: Charges
+ *   Col 10: Payments / Receipts
+ *   Col 16: Running Balance
  */
 export function parseReceivableDetail(filePath: string): ParsedReceivableDetail {
   const wb = xlsx.readFile(filePath);
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const grid = xlsx.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: "" });
 
-  let headerRowIdx = -1;
-  for (let i = 0; i < Math.min(grid.length, 30); i++) {
-    const cells = (grid[i] || []).map(c => String(c).trim().toLowerCase());
-    const hasTenant = cells.some(c => /tenant|customer|lessee|lease\s*name/.test(c));
-    const hasMoney = cells.some(c => /charges|receipts|charge|receipt|amount|balance/.test(c));
-    if (hasTenant && hasMoney) {
-      headerRowIdx = i;
-      break;
-    }
-  }
-  if (headerRowIdx === -1) return { rows: [] };
-
-  const headers = (grid[headerRowIdx] || []).map(c => String(c).trim().toLowerCase());
-  const idx = (...names: string[]) => {
-    for (const n of names) {
-      const i = headers.findIndex(h => h === n.toLowerCase() || h.includes(n.toLowerCase()));
-      if (i !== -1) return i;
-    }
-    return -1;
-  };
-
-  const cols = {
-    tenantName: idx("lease name", "tenant", "customer", "lessee", "name"),
-    unit: idx("unit id", "unit"),
-    controlNumber: idx("control", "control number", "doc", "reference"),
-    transactionDate: idx("trans date", "transaction date", "post date", "date"),
-    postMonth: idx("post month", "post period", "period"),
-    chargeCode: idx("charge code", "code", "type"),
-    description: idx("description", "memo", "notes"),
-    charges: idx("charges", "charge", "billed"),
-    receipts: idx("receipts", "receipt", "payments", "paid"),
-    balance: idx("balance", "open", "outstanding"),
-    amount: idx("amount", "net"),
-  };
-
   const rows: ParsedReceivableDetail["rows"] = [];
-  for (let i = headerRowIdx + 1; i < grid.length; i++) {
-    const r = grid[i] || [];
-    const tenant = cols.tenantName >= 0 ? String(r[cols.tenantName] ?? "").trim() : "";
-    if (!tenant) continue;
-    if (/^total\b|grand\s*total|^sum\b/i.test(tenant)) continue;
-
-    const transDate = cols.transactionDate >= 0 ? formatDate(r[cols.transactionDate]) : "";
-    const postMonthRaw = cols.postMonth >= 0 ? String(r[cols.postMonth] ?? "").trim() : "";
-    const postMonth = postMonthRaw && /^\d{4}-\d{2}/.test(postMonthRaw)
-      ? postMonthRaw.slice(0, 7)
-      : (transDate ? transDate.slice(0, 7) : undefined);
-
-    let charges = cols.charges >= 0 ? toNumber(r[cols.charges]) : 0;
-    let receipts = cols.receipts >= 0 ? toNumber(r[cols.receipts]) : 0;
-    // Some exports collapse charges + receipts into a single signed amount.
-    if (charges === 0 && receipts === 0 && cols.amount >= 0) {
-      const amt = toNumber(r[cols.amount]);
-      if (amt > 0) charges = amt;
-      else if (amt < 0) receipts = -amt;
+  let i = 0;
+  while (i < grid.length) {
+    const row = grid[i] || [];
+    const c1 = (row[1] || "").toString().trim();
+    if (c1 === "Lease Information") {
+      const meta = readLeaseMetadata(grid, i);
+      const tx = readTransactions(grid, meta.nextRow, meta.tenantName, meta.unit);
+      rows.push(...tx.rows);
+      i = tx.nextRow;
+    } else {
+      i++;
     }
-    const balance = cols.balance >= 0 ? toNumber(r[cols.balance]) : (charges - receipts);
-
-    if (charges === 0 && receipts === 0 && balance === 0) continue;
-
-    rows.push({
-      tenantName: tenant,
-      unit: cols.unit >= 0 ? String(r[cols.unit] ?? "").trim() : undefined,
-      controlNumber: cols.controlNumber >= 0 ? String(r[cols.controlNumber] ?? "").trim() : undefined,
-      transactionDate: transDate || undefined,
-      postMonth,
-      chargeCode: cols.chargeCode >= 0 ? String(r[cols.chargeCode] ?? "").trim() : undefined,
-      description: cols.description >= 0 ? String(r[cols.description] ?? "").trim() : undefined,
-      charges,
-      receipts,
-      balance,
-    });
   }
   return { rows };
+}
+
+function readLeaseMetadata(grid: any[][], startIdx: number): { tenantName: string; unit: string; nextRow: number } {
+  let tenantName = "";
+  let unit = "";
+  let i = startIdx + 1;
+  const limit = Math.min(grid.length, startIdx + 25);
+  while (i < limit) {
+    const row = grid[i] || [];
+    const c1 = (row[1] || "").toString();
+    const c8 = (row[8] || "").toString().trim();
+    const c12 = (row[12] || "").toString().trim();
+    const c2 = (row[2] || "").toString().trim();
+
+    // Tenant name lives in col 1 as a multi-line cell; first line is the name.
+    if (!tenantName && c1.trim().length > 0 && c1.trim() !== "Lease Information") {
+      const firstLine = (c1.split("\n")[0] || "").trim();
+      if (firstLine.length > 0 && firstLine.length < 120) tenantName = firstLine;
+    }
+
+    // Assigned Space(s) → unit
+    if (c8 === "Assigned Space(s)" && c12) unit = c12;
+
+    // Transaction header marks the boundary
+    if (c1.trim() === "Date" && c2.startsWith("Description")) {
+      return { tenantName, unit, nextRow: i + 1 };
+    }
+    i++;
+  }
+  return { tenantName, unit, nextRow: i };
+}
+
+function readTransactions(
+  grid: any[][],
+  startIdx: number,
+  tenantName: string,
+  unit: string
+): { rows: ParsedReceivableDetail["rows"]; nextRow: number } {
+  const rows: ParsedReceivableDetail["rows"] = [];
+  let i = startIdx;
+  while (i < grid.length) {
+    const row = grid[i] || [];
+    const c1 = (row[1] || "").toString().trim();
+    const c2 = (row[2] || "").toString().trim();
+
+    // Stop on aging row or next lease block
+    if (/^0-?\s*30/.test(c1) || /Days/i.test(c1)) break;
+    if (c1 === "Lease Information") break;
+
+    const dateRaw = c1;
+    const desc = c2;
+    const charges = toNumber(row[7]);
+    const receipts = toNumber(row[10]);
+    const balance = toNumber(row[16]);
+
+    if (dateRaw || desc || charges !== 0 || receipts !== 0) {
+      const transactionDate = formatDate(dateRaw);
+      // Skip totally empty rows (Yardi pads sections with blank rows)
+      if (!transactionDate && !desc && charges === 0 && receipts === 0) {
+        i++;
+        continue;
+      }
+      // Pull a charge code prefix if the description looks like "CAM-Electric ..." etc.
+      const chargeCode = (desc.split(/\s+/)[0] || "").replace(/[^A-Za-z0-9-]/g, "").slice(0, 32) || undefined;
+      rows.push({
+        tenantName,
+        unit: unit || undefined,
+        transactionDate: transactionDate || undefined,
+        postMonth: transactionDate ? transactionDate.slice(0, 7) : undefined,
+        description: desc || undefined,
+        chargeCode: chargeCode && chargeCode.length > 1 ? chargeCode : undefined,
+        charges,
+        receipts,
+        balance,
+      });
+    }
+    i++;
+  }
+  return { rows, nextRow: i };
 }
 
 function toNumber(v: any): number {
@@ -121,6 +149,7 @@ function formatDate(v: any): string {
     return `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
   }
   const s = String(v).trim();
+  // "03/01/26" → "2026-03-01"
   const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (m) {
     const [, mo, d, y] = m;
