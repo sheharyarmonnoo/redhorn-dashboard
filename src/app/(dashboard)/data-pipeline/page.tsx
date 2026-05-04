@@ -680,58 +680,6 @@ export default function DataPipelinePage() {
       {selectedFile && (
         <DetailPanel file={selectedFile} onClose={() => setSelectedFile(null)} />
       )}
-
-      {/* Tabs */}
-      <div className="mt-8 flex gap-1 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
-        {([
-          { key: "workflow" as const, label: "Processing Workflow" },
-          { key: "protocol" as const, label: "Training Protocol" },
-        ]).map(tab => (
-          <button key={tab.key} onClick={() => setActiveSection(tab.key)}
-            className={`text-[12px] font-medium px-3 py-2 border-b-2 transition-colors cursor-pointer ${
-              activeSection === tab.key ? "border-[#18181b] dark:border-[#fafafa] text-[#18181b] dark:text-[#fafafa]" : "border-transparent text-[#a1a1aa] dark:text-[#71717a] hover:text-[#71717a] dark:hover:text-[#a1a1aa]"
-            }`}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {activeSection === "workflow" && (
-        <div className="mt-4 space-y-4">
-          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">How data flows from Yardi to the dashboard while preserving your notes and overrides.</p>
-
-          <div className="space-y-0">
-            {[
-              { step: "1", label: "Export", desc: "Yardi generates rent roll, lease ledger, income statement, and utility reports. Triggered by cron (auto) or manual upload.", status: "Automated sync" },
-              { step: "2", label: "Validate", desc: "Parser checks file format, column headers, and data types. Flags warnings if columns are missing or values are out of range.", status: "Schema validation" },
-              { step: "3", label: "Transform", desc: "Raw data is normalized: dates standardized, currency parsed, unit IDs matched to master list, new tenants detected.", status: "ETL pipeline" },
-              { step: "4", label: "Merge with Overrides", desc: "User notes, status overrides, delinquency stages, and action items from previous cycles are preserved. New data is merged — never overwrites manual entries.", status: "Note preservation" },
-              { step: "5", label: "Alert Evaluation", desc: "Training protocol rules are evaluated against new data. Alerts generated for: missing postings, late fees, lease expirations, threshold breaches.", status: "Rule engine" },
-              { step: "6", label: "Push to Dashboard", desc: "Processed data replaces stale data. Charts, KPIs, site plan, and grids update. Kanban items auto-created for critical alerts if protocol says so.", status: "Live update" },
-            ].map((s, i) => (
-              <div key={i} className="flex gap-3 py-3 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
-                <div className="w-6 h-6 rounded bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] text-[11px] font-semibold flex items-center justify-center flex-shrink-0 mt-0.5">{s.step}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-[13px] font-medium text-[#18181b] dark:text-[#fafafa]">{s.label}</p>
-                    <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{s.status}</span>
-                  </div>
-                  <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5 leading-relaxed">{s.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 text-[11px] text-[#71717a] dark:text-[#a1a1aa]">
-            Key guarantee: User notes, manual status changes, and Kanban items are <strong className="text-[#18181b] dark:text-[#fafafa]">never overwritten</strong> by data syncs.
-            They live in a separate override layer that merges on top of incoming Yardi data.
-          </div>
-        </div>
-      )}
-
-      {activeSection === "protocol" && (
-        <TrainingProtocol />
-      )}
     </div>
   );
 }
