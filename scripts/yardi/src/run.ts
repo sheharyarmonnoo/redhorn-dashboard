@@ -1,10 +1,12 @@
 import { openAuthenticatedSession } from "./auth.js";
 import { getProperties } from "./properties.js";
 import { runIncomeStatementForProperty } from "./reports/income-statement.js";
-import { runRentRollForProperty, runTotalUnitsForProperty, runPastDueForProperty } from "./reports/rent-roll.js";
-import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
-import { runGlDetailForProperty } from "./reports/gl-detail.js";
-import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
+import { runRentRollForProperty, runTotalUnitsForProperty } from "./reports/rent-roll.js";
+// Held back until we have a viable Yardi delivery path:
+//   import { runPastDueForProperty } from "./reports/rent-roll.js";
+//   import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
+//   import { runGlDetailForProperty } from "./reports/gl-detail.js";
+//   import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
 import { latestClosedMonth } from "./paths.js";
 import { uploadRunToConvex } from "./convex-upload.js";
 
@@ -81,50 +83,15 @@ async function main() {
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "total_units", ok: false, error: msg });
       }
 
-      // Past Due Amount (Receivables panel) — populates Past Due column on rent roll
-      try {
-        const path = await runPastDueForProperty(voyager, property, month);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "past_due", ok: true, path });
-      } catch (err: any) {
-        const msg = err?.message || String(err);
-        console.error(`   PD FAILED — ${msg}`);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "past_due", ok: false, error: msg });
-      }
-
-      // Rent Roll (full) — Reports > Tenant Reports > Commercial Rent Roll. Adds
-      // base rent, lease start, security deposit on top of the panel data. Soft-
-      // failing here is fine — the Current Leases panel data is already in place.
-      try {
-        const path = await runRentRollFullForProperty(voyager, property, month);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll_full", ok: true, path });
-      } catch (err: any) {
-        const msg = err?.message || String(err);
-        console.error(`   RR-full FAILED — ${msg}`);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll_full", ok: false, error: msg });
-      }
-
-      // GL Transaction Detail — line-level journal entries with posting dates.
-      // Aggregates to the income statement; querying by date powers "when was
-      // this expense posted" insights.
-      try {
-        const path = await runGlDetailForProperty(voyager, property, month);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "gl_detail", ok: true, path });
-      } catch (err: any) {
-        const msg = err?.message || String(err);
-        console.error(`   GL FAILED — ${msg}`);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "gl_detail", ok: false, error: msg });
-      }
-
-      // Receivable Detail — per-tenant charge + payment activity. Powers
-      // verified Electric Not Posted alerts, aging, and AR timing analysis.
-      try {
-        const path = await runReceivableDetailForProperty(voyager, property, month);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "receivable_detail", ok: true, path });
-      } catch (err: any) {
-        const msg = err?.message || String(err);
-        console.error(`   RD FAILED — ${msg}`);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "receivable_detail", ok: false, error: msg });
-      }
+      // Past Due / Rent Roll (full) / GL Detail / Receivable Detail are
+      // intentionally not wired into the live sync. Their scrapers exist
+      // (scripts/yardi/src/reports/*.ts) but Yardi exposes them through
+      // workflows that don't lend themselves to fast automation: panel-name
+      // mismatches, SSRSReportFilter without a download path, and the
+      // SysConductorReportMonitor queue page (60-300s per page load).
+      // Re-enable any of these by uncommenting the relevant try-block once
+      // we have a working delivery mechanism (e.g. n8n cron + manual
+      // queue-poll, or a different report path).
     }
 
     console.log("\n=== Download Summary ===");
