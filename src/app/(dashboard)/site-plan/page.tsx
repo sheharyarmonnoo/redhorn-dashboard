@@ -38,10 +38,8 @@ export default function SitePlanPage() {
     <div>
       <PageHeader title="Site Plan" subtitle="Click any unit for details" />
 
-      <SitePlan3D onSelect={setSelected} selectedUnit={selected?.unit || null} />
-
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         {[
           { label: "Total Units", value: totalUnits, color: "text-[#18181b] dark:text-[#fafafa]" },
           { label: "Occupied", value: occupied.length, color: "text-[#16a34a]" },
@@ -75,6 +73,10 @@ export default function SitePlanPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="mt-4">
+        <SitePlan3D onSelect={setSelected} selectedUnit={selected?.unit || null} />
       </div>
 
       <UnitDetailPanel tenant={selected} onClose={() => setSelected(null)} />
