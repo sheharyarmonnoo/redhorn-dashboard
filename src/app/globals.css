@@ -136,3 +136,16 @@ body {
 @media (min-width: 1024px) {
   .mobile-nav { display: none; }
 }
+
+/* Account page — hide Clerk's internal navbar so it doesn't duplicate our sidebar */
+.account-clerk-wrapper .cl-navbar,
+.account-clerk-wrapper .cl-navbarMobileMenuRow,
+.account-clerk-wrapper [class*="cl-navbar"] {
+  display: none !important;
+}
+.account-clerk-wrapper .cl-cardBox,
+.account-clerk-wrapper .cl-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-shadow: none !important;
+}

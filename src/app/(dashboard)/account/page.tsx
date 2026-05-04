@@ -70,23 +70,25 @@ export default function AccountPage() {
         )}
       </div>
 
-      <div className="max-w-3xl">
-        <h2 className="text-[13px] font-semibold mb-3 text-[#18181b] dark:text-[#fafafa]">Profile</h2>
-        <div className="rounded-md border border-[#e4e4e7] dark:border-[#3f3f46] overflow-hidden" style={{ maxHeight: "70vh", overflowY: "auto" }}>
-          <UserProfile
-            appearance={{
-              elements: {
-                rootBox: "w-full",
-                cardBox: "w-full shadow-none",
-                card: "shadow-none border-none w-full",
-                navbar: "hidden",
-                navbarMobileMenuRow: "hidden",
-                pageScrollBox: "p-4",
-                page: "gap-4",
-              },
-            }}
-          />
-        </div>
+      <div className="max-w-3xl account-clerk-wrapper">
+        <UserProfile
+          appearance={{
+            elements: {
+              rootBox: "w-full",
+              cardBox: "w-full shadow-none border border-[#e4e4e7] dark:border-[#3f3f46] rounded-md",
+              card: "shadow-none border-none w-full bg-white dark:bg-[#18181b]",
+              navbar: "!hidden",
+              navbarMobileMenuRow: "!hidden",
+              scrollBox: "rounded-md",
+              pageScrollBox: "px-6 py-5",
+              page: "gap-5",
+              header: "pb-2",
+              profileSectionTitleText: "text-[13px] font-semibold",
+              profileSectionPrimaryButton: "text-[12px]",
+              formButtonPrimary: "text-[12px]",
+            },
+          }}
+        />
       </div>
     </div>
   );
