@@ -37,15 +37,36 @@ export const extractForProperty = action({
       return { propertyCode: args.propertyCode, summary: "No income statement data yet for this property.", insightsCount: 0, alertsCreated: 0, insights: [] };
     }
 
-    // Prior snapshots — for month-over-month comparison
+    // Prior snapshots — for month-over-month comparison.
+    //
+    // Critical: pick the most recent snapshot whose REPORTING PERIOD differs
+    // from the latest. If we just diff "previous snapshotDate", re-running
+    // the sync for the same month picks April-vs-April and flags the (real,
+    // expected) zero delta as a "duplicate snapshot / data feed frozen"
+    // anomaly. The thing the analyst cares about is March-vs-April, not
+    // April-vs-April even if both runs landed in Convex.
     const allHistorical: any[] = await ctx.runQuery(api.incomeLines.allForProperty, { propertyId: property._id });
     const priorBySnapshot = groupBySnapshot(allHistorical);
     const latestDate = latest[0]?.snapshotDate;
-    const priorDates = Object.keys(priorBySnapshot).filter(d => d !== latestDate).sort().reverse();
-    const priorSnapshot = priorDates.length > 0 ? priorBySnapshot[priorDates[0]] : null;
-
-    // Reporting periods (e.g. "2026-04" for the latest CP, "2026-03" for prior)
     const latestPeriod = latest[0]?.period as string | undefined;
+    const priorDatesSorted = Object.keys(priorBySnapshot).filter(d => d !== latestDate).sort().reverse();
+    let priorSnapshot: any[] | null = null;
+    for (const d of priorDatesSorted) {
+      const rows = priorBySnapshot[d];
+      const period = rows?.[0]?.period as string | undefined;
+      if (latestPeriod && period && period !== latestPeriod) {
+        priorSnapshot = rows;
+        break;
+      }
+    }
+    // Fall back to the most recent prior snapshot only if we have no period
+    // metadata at all (older rows ingested before the period column was
+    // wired). With period present, we'd rather report "no prior period
+    // available" than compare same-period snapshots.
+    if (!priorSnapshot && !latestPeriod && priorDatesSorted.length > 0) {
+      priorSnapshot = priorBySnapshot[priorDatesSorted[0]];
+    }
+
     const priorPeriod = priorSnapshot?.[0]?.period as string | undefined;
 
     // Per-tenant transactional data (Lease Ledger) — the AR-side view that
@@ -286,7 +307,8 @@ function buildPrompt(propertyName: string, latestDate: string, latestPeriod: str
     `Save the numbers, magnitudes, and full context for the "detail" field.`,
     ``,
     `IMPORTANT — avoid alert fatigue:`,
-    `If the latest snapshot is byte-for-byte identical to the prior snapshot, DO NOT generate a "frozen data feed" or "data refresh failure" insight — the user has already been told. The prior insights log will show this finding from earlier runs. Focus only on net-new findings or material changes.`,
+    `If the prior period table above shows "(no prior snapshot — this is the first sync)", the user just re-ran the sync for the same period. NEVER flag "data feed frozen", "duplicate snapshot", "byte-for-byte identical", "data refresh failure", or any variation of that finding. There is simply no prior period to diff against. Skip all MoM commentary and focus the insights on tenant-level signals from the AR / Lease Ledger data, plus open items still showing in the prior insights log.`,
+    `Even if you have BOTH periods present and they happen to share many identical line items, prefer to call out the items that DID move rather than flagging the overall snapshot as suspect — Yardi data legitimately can be near-flat between months once leases are stable.`,
     `If there are genuinely no new findings worth flagging this run, return an empty insights array (zero entries). Better to return nothing than to repeat the same alert from prior runs.`,
     `Each finding you flag MUST be either (a) net-new this run, (b) materially worse than its prior occurrence, or (c) a confirmed resolution of a prior issue.`,
     ``,
