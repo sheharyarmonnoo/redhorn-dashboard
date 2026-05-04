@@ -1,8 +1,9 @@
 "use client";
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef } from "ag-grid-community";
 import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
+import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import PageHeader from "@/components/PageHeader";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -115,9 +116,10 @@ export default function LeasesPage() {
 
   const defaultColDef = useMemo<ColDef>(() => ({ sortable: true, resizable: true, filter: true }), []);
 
-  const onGridReady = useCallback((params: GridReadyEvent) => {
-    if (window.innerWidth >= 768) params.api.sizeColumnsToFit();
-  }, []);
+  const persistence = useAgGridPersistence({
+    storageKey: "redhorn_grid_leases",
+    fallbackFit: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
+  });
 
   const atRiskRent = leaseData
     .filter((t: any) => t.urgency === "Expired" || t.urgency === "Critical (<90d)")
@@ -166,7 +168,12 @@ export default function LeasesPage() {
           rowData={filteredData}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
-          onGridReady={onGridReady}
+          onGridReady={persistence.onGridReady}
+          onColumnResized={persistence.onColumnResized}
+          onColumnMoved={persistence.onColumnMoved}
+          onColumnVisible={persistence.onColumnVisible}
+          onColumnPinned={persistence.onColumnPinned}
+          onSortChanged={persistence.onSortChanged}
           animateRows={true}
           pagination={true}
           paginationPageSize={500}

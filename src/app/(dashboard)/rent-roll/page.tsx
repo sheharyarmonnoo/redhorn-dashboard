@@ -1,8 +1,9 @@
 "use client";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import { useAllTenants, formatCurrency } from "@/hooks/useConvexData";
+import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import { Download } from "lucide-react";
@@ -99,12 +100,10 @@ export default function RentRollPage() {
     suppressMovable: false,
   }), []);
 
-  const onGridReady = useCallback((params: GridReadyEvent) => {
-    // Only auto-fit on desktop — on mobile let columns keep their width for horizontal scroll
-    if (window.innerWidth >= 768) {
-      params.api.sizeColumnsToFit();
-    }
-  }, []);
+  const persistence = useAgGridPersistence({
+    storageKey: "redhorn_grid_rent_roll",
+    fallbackFit: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
+  });
 
   const onRowClicked = useCallback((event: RowClickedEvent) => {
     // Ignore clicks on group rows — only open the detail panel for leaf tenant rows
@@ -165,7 +164,12 @@ export default function RentRollPage() {
           autoGroupColumnDef={autoGroupColumnDef}
           groupDisplayType="groupRows"
           groupDefaultExpanded={1}
-          onGridReady={onGridReady}
+          onGridReady={persistence.onGridReady}
+          onColumnResized={persistence.onColumnResized}
+          onColumnMoved={persistence.onColumnMoved}
+          onColumnVisible={persistence.onColumnVisible}
+          onColumnPinned={persistence.onColumnPinned}
+          onSortChanged={persistence.onSortChanged}
           onRowClicked={onRowClicked}
           rowSelection="single"
           animateRows={true}

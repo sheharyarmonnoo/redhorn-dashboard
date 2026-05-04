@@ -1,8 +1,9 @@
 "use client";
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef } from "ag-grid-community";
 import { useActiveProperty, useTenants, useActivityLog, formatCurrency } from "@/hooks/useConvexData";
+import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import PageHeader from "@/components/PageHeader";
 import { Zap, DollarSign, CalendarClock, AlertTriangle, Clock } from "lucide-react";
 
@@ -276,9 +277,8 @@ export default function AlertsPage() {
     sortable: true, resizable: true, filter: true,
   }), []);
 
-  const onGridReady = useCallback((params: GridReadyEvent) => {
-    params.api.sizeColumnsToFit();
-  }, []);
+  const persistence = useAgGridPersistence({ storageKey: "redhorn_grid_alerts" });
+  const historyPersistence = useAgGridPersistence({ storageKey: "redhorn_grid_alert_history" });
 
   // Pull alert-relevant activity from the real audit log so the history reflects the live system.
   const activityLog = useActivityLog(100) as any[];
@@ -394,7 +394,12 @@ export default function AlertsPage() {
           rowData={activeAlerts}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
-          onGridReady={onGridReady}
+          onGridReady={persistence.onGridReady}
+          onColumnResized={persistence.onColumnResized}
+          onColumnMoved={persistence.onColumnMoved}
+          onColumnVisible={persistence.onColumnVisible}
+          onColumnPinned={persistence.onColumnPinned}
+          onSortChanged={persistence.onSortChanged}
           animateRows={true}
           pagination={true}
           paginationPageSize={500}
@@ -439,7 +444,12 @@ export default function AlertsPage() {
             rowData={alertHistory}
             columnDefs={historyColDefs}
             defaultColDef={defaultColDef}
-            onGridReady={(params) => params.api.sizeColumnsToFit()}
+            onGridReady={historyPersistence.onGridReady}
+            onColumnResized={historyPersistence.onColumnResized}
+            onColumnMoved={historyPersistence.onColumnMoved}
+            onColumnVisible={historyPersistence.onColumnVisible}
+            onColumnPinned={historyPersistence.onColumnPinned}
+            onSortChanged={historyPersistence.onSortChanged}
             animateRows={true}
           />
         </div>

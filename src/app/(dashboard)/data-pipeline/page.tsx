@@ -1,8 +1,9 @@
 "use client";
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef, GridReadyEvent, RowClickedEvent } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import { useSyncJobs } from "@/hooks/useConvexData";
+import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import { useAction, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import PageHeader from "@/components/PageHeader";
@@ -43,21 +44,18 @@ function StatusCell(props: { value: string }) {
 
 function DownloadCell(props: { data: FileSyncRow }) {
   const storageId = (props.data as any).storageId;
-  // Fetch the Convex storage URL for this file. Skip the query if we don't have a storage id.
-  const url = useQuery(
-    api.files.getUrl,
-    storageId ? { storageId: storageId as any } : "skip"
-  );
   const handle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (url) window.open(url, "_blank", "noopener");
+    if (!storageId) return;
+    const proxyUrl = `/api/files/${storageId}?name=${encodeURIComponent(props.data.filename)}`;
+    window.open(proxyUrl, "_blank", "noopener");
   };
   return (
     <button
       onClick={handle}
-      disabled={!url}
+      disabled={!storageId}
       className="text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer p-1 disabled:opacity-40 disabled:cursor-not-allowed"
-      title={url ? `Download ${props.data.filename}` : "Loading…"}
+      title={storageId ? `Download ${props.data.filename}` : "Unavailable"}
     >
       <Download size={14} />
     </button>
@@ -592,9 +590,7 @@ export default function DataPipelinePage() {
     sortable: true, resizable: true, filter: true,
   }), []);
 
-  const onGridReady = useCallback((params: GridReadyEvent) => {
-    params.api.sizeColumnsToFit();
-  }, []);
+  const persistence = useAgGridPersistence({ storageKey: "redhorn_grid_data_pipeline" });
 
   const onRowClicked = useCallback((event: RowClickedEvent) => {
     const row = event.data as FileSyncRow;
@@ -667,7 +663,12 @@ export default function DataPipelinePage() {
           rowData={syncData}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
-          onGridReady={onGridReady}
+          onGridReady={persistence.onGridReady}
+          onColumnResized={persistence.onColumnResized}
+          onColumnMoved={persistence.onColumnMoved}
+          onColumnVisible={persistence.onColumnVisible}
+          onColumnPinned={persistence.onColumnPinned}
+          onSortChanged={persistence.onSortChanged}
           onRowClicked={onRowClicked}
           animateRows={true}
           pagination={true}
