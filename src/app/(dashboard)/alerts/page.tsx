@@ -281,43 +281,15 @@ export default function AlertsPage() {
         </div>
       </PageHeader>
 
-      {/* Add Alert Form */}
+      {/* Add / Edit Alert Modal */}
       {showAddAlert && (
-        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4 mb-4 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-            <input type="text" value={newAlert.unit} onChange={e => setNewAlert({ ...newAlert, unit: e.target.value })}
-              placeholder="Unit (e.g. A-102)"
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]" />
-            <select value={newAlert.category} onChange={e => setNewAlert({ ...newAlert, category: e.target.value })}
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa]">
-              <option value="General">General</option>
-              <option value="Electric Not Posted">Electric Not Posted</option>
-              <option value="Past Due">Past Due</option>
-              <option value="Lease Expiring">Lease Expiring</option>
-              <option value="Holdover">Holdover</option>
-              <option value="Maintenance">Maintenance</option>
-              <option value="PM Follow-up">PM Follow-up</option>
-            </select>
-            <select value={newAlert.severity} onChange={e => setNewAlert({ ...newAlert, severity: e.target.value as AlertRow["severity"] })}
-              className="text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa]">
-              <option value="Critical">Critical</option>
-              <option value="Warning">Warning</option>
-              <option value="Info">Info</option>
-            </select>
-            <div className="flex gap-2">
-              <button onClick={editingAlertId ? saveEditAlert : addAlert} disabled={!newAlert.detail.trim()}
-                className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] disabled:bg-[#e4e4e7] dark:disabled:bg-[#3f3f46] disabled:text-[#a1a1aa] dark:disabled:text-[#71717a] cursor-pointer transition-colors">
-                {editingAlertId ? "Save" : "Add"}
-              </button>
-              <button onClick={() => { setShowAddAlert(false); setEditingAlertId(null); setNewAlert({ unit: "", category: "General", severity: "Warning", detail: "" }); }}
-                className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] cursor-pointer px-2 py-1">Cancel</button>
-            </div>
-          </div>
-          <textarea value={newAlert.detail} onChange={e => setNewAlert({ ...newAlert, detail: e.target.value })}
-            placeholder="Alert description..."
-            rows={2}
-            className="w-full text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa] resize-none" />
-        </div>
+        <AlertModal
+          editing={!!editingAlertId}
+          alert={newAlert}
+          onChange={setNewAlert}
+          onCancel={() => { setShowAddAlert(false); setEditingAlertId(null); setNewAlert({ unit: "", category: "General", severity: "Warning", detail: "" }); }}
+          onSubmit={editingAlertId ? saveEditAlert : addAlert}
+        />
       )}
 
       {/* Active Alerts Grid */}
@@ -371,6 +343,103 @@ export default function AlertsPage() {
         </div>
       )}
 
+    </div>
+  );
+}
+
+function AlertModal({
+  editing, alert, onChange, onCancel, onSubmit,
+}: {
+  editing: boolean;
+  alert: { unit: string; category: string; severity: AlertRow["severity"]; detail: string };
+  onChange: (a: { unit: string; category: string; severity: AlertRow["severity"]; detail: string }) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") onCancel();
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSubmit();
+  }
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg shadow-xl w-full max-w-md p-5"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">
+          {editing ? "Edit alert" : "New alert"}
+        </p>
+
+        <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Description</label>
+        <textarea
+          autoFocus
+          value={alert.detail}
+          onChange={(e) => onChange({ ...alert, detail: e.target.value })}
+          rows={3}
+          placeholder="What needs attention? Be specific so the next person knows the action."
+          className="w-full text-[12px] bg-white dark:bg-[#09090b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2 text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] dark:placeholder-[#52525b] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] resize-none mb-3"
+        />
+
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <div>
+            <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Unit</label>
+            <input
+              type="text"
+              value={alert.unit}
+              onChange={(e) => onChange({ ...alert, unit: e.target.value })}
+              placeholder="A-102"
+              className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Category</label>
+            <select
+              value={alert.category}
+              onChange={(e) => onChange({ ...alert, category: e.target.value })}
+              className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            >
+              <option value="General">General</option>
+              <option value="Past Due">Past Due</option>
+              <option value="Lease Expiring">Lease Expiring</option>
+              <option value="Holdover">Holdover</option>
+              <option value="Maintenance">Maintenance</option>
+              <option value="PM Follow-up">PM Follow-up</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Severity</label>
+            <select
+              value={alert.severity}
+              onChange={(e) => onChange({ ...alert, severity: e.target.value as AlertRow["severity"] })}
+              className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            >
+              <option value="Critical">Critical</option>
+              <option value="Warning">Warning</option>
+              <option value="Info">Info</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] px-3 py-1.5 rounded cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={!alert.detail.trim()}
+            className="text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-3 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {editing ? "Save changes" : "Add alert"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
