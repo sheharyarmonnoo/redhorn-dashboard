@@ -81,11 +81,40 @@ export async function runSsrsReportForProperty(
   // Submit — first <input type="submit"> in the form
   const outPath = resolve(downloadDirFor(monthIso), opts.outputFilename || `${slugForProperty(property.code)}-${opts.reportFile.replace(/\.SSRS\.txt$/i, "")}.xlsx`);
 
+  // Yardi's "Save to Excel File" submits the form's target="filter" through to
+  // the server which streams the .xlsx back. Depending on browser/popup state
+  // the download fires either on the parent page (when iframe target matches)
+  // OR on a freshly-opened popup window. Listen for both — whichever fires
+  // first wins.
   const submitBtn = frame.locator('input[type="submit"]').first();
-  const [download] = await Promise.all([
-    voyagerPage.waitForEvent("download", { timeout: 240_000 }),
-    submitBtn.click(),
+  const context = voyagerPage.context();
+
+  const popupPromise = context.waitForEvent("page", { timeout: 240_000 }).catch(() => null);
+  const parentDownloadPromise = voyagerPage.waitForEvent("download", { timeout: 240_000 }).catch(() => null);
+
+  await submitBtn.click();
+
+  // Race: either the parent page captures the download directly, or a popup
+  // opens and we catch its download.
+  const winner = await Promise.race([
+    parentDownloadPromise.then(d => d ? { kind: "parent" as const, download: d } : null),
+    popupPromise.then(p => p ? { kind: "popup" as const, page: p } : null),
   ]);
+
+  if (!winner) {
+    throw new Error(`SSRS submit timed out — neither parent download nor popup fired for ${opts.reportLabel}`);
+  }
+
+  let download;
+  if (winner.kind === "parent") {
+    download = winner.download;
+  } else {
+    // Popup opened — wait for download on it
+    console.log(`   SSRS opened popup; waiting for its download…`);
+    download = await winner.page.waitForEvent("download", { timeout: 240_000 });
+    await winner.page.close().catch(() => {});
+  }
+
   await download.saveAs(outPath);
   console.log(`   saved → ${outPath}`);
   return outPath;

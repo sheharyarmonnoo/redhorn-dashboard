@@ -1,5 +1,6 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import { writeFileSync } from "node:fs";
 import { config } from "./config.js";
 
 /**
@@ -97,6 +98,104 @@ async function searchMailbox(client: ImapFlow, mailbox: string, afterDate: Date)
       if (match) return match[1];
     }
     return null;
+  } finally {
+    lock.release();
+  }
+}
+
+/**
+ * Wait for a Yardi SSRS report email with an Excel attachment, save the
+ * attachment to `outPath`.
+ *
+ * SSRS reports submitted with Destination=Emailxlsx arrive within ~30s. We
+ * poll the inbox + REDHORN label for a fresh email whose subject contains
+ * the report's keyword (e.g. "Lease Ledger") AND has an .xlsx attachment
+ * received after `afterDate`.
+ */
+export async function fetchYardiReportAttachment(opts: {
+  outPath: string;
+  subjectKeywords: string[];      // e.g. ["Lease Ledger", "Commercial Lease Ledger"]
+  afterDate: Date;
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+}): Promise<void> {
+  const timeoutMs = opts.timeoutMs ?? 240_000;
+  const pollIntervalMs = opts.pollIntervalMs ?? 8_000;
+  const deadline = Date.now() + timeoutMs;
+  const subjects = opts.subjectKeywords.map(k => k.toLowerCase());
+
+  while (Date.now() < deadline) {
+    const found = await tryFetchAttachmentOnce(opts.outPath, subjects, opts.afterDate);
+    if (found) return;
+    await new Promise(r => setTimeout(r, pollIntervalMs));
+  }
+  throw new Error(
+    `Timed out after ${timeoutMs}ms waiting for Yardi report email with subject matching: ${opts.subjectKeywords.join(", ")}.`
+  );
+}
+
+async function tryFetchAttachmentOnce(outPath: string, subjects: string[], afterDate: Date): Promise<boolean> {
+  const client = new ImapFlow({
+    host: "imap.gmail.com",
+    port: 993,
+    secure: true,
+    auth: { user: config.GMAIL_USER, pass: config.GMAIL_PASSWORD },
+    logger: false,
+  });
+  await client.connect();
+  try {
+    const mailboxes = ["INBOX", config.GMAIL_LABEL, `[Gmail]/${config.GMAIL_LABEL}`];
+    for (const mailbox of mailboxes) {
+      const ok = await searchMailboxForAttachment(client, mailbox, outPath, subjects, afterDate);
+      if (ok) return true;
+    }
+    return false;
+  } finally {
+    await client.logout().catch(() => {});
+  }
+}
+
+async function searchMailboxForAttachment(
+  client: ImapFlow,
+  mailbox: string,
+  outPath: string,
+  subjects: string[],
+  afterDate: Date
+): Promise<boolean> {
+  try {
+    await client.status(mailbox, { messages: true });
+  } catch {
+    return false;
+  }
+  const lock = await client.getMailboxLock(mailbox);
+  try {
+    const since = new Date(Math.min(afterDate.getTime() - 60_000, Date.now() - 5 * 60_000));
+    const uids = await client.search({ since });
+    if (!uids || uids.length === 0) return false;
+
+    const sorted = [...uids].sort((a, b) => b - a).slice(0, 25);
+    for (const uid of sorted) {
+      const msg = await client.fetchOne(String(uid), { source: true, envelope: true });
+      if (!msg || !msg.source) continue;
+      const dateObj = msg.envelope?.date ? new Date(msg.envelope.date) : null;
+      if (dateObj && dateObj < afterDate) continue;
+
+      const parsed = await simpleParser(msg.source);
+      const subject = (parsed.subject || "").toLowerCase();
+      const subjectMatches = subjects.some(k => subject.includes(k));
+      if (!subjectMatches) continue;
+
+      const xlsxAttach = (parsed.attachments || []).find(a => {
+        const name = (a.filename || "").toLowerCase();
+        return name.endsWith(".xlsx") || name.endsWith(".xlsm") || name.endsWith(".xls");
+      });
+      if (!xlsxAttach || !xlsxAttach.content) continue;
+
+      writeFileSync(outPath, xlsxAttach.content);
+      console.log(`   email attachment saved → ${outPath}  (from "${parsed.subject}")`);
+      return true;
+    }
+    return false;
   } finally {
     lock.release();
   }
