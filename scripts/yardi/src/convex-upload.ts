@@ -6,6 +6,8 @@ import { parseIncomeStatement } from "./parse-income-statement.js";
 import { parseRentRoll } from "./parse-rent-roll.js";
 import { parseTotalUnits } from "./parse-total-units.js";
 import { parsePastDue } from "./parse-past-due.js";
+import { parseGlDetail } from "./parse-gl-detail.js";
+import { parseReceivableDetail } from "./parse-receivable-detail.js";
 import { sendSyncDigest, type DigestProperty } from "./digest.js";
 
 // Generated API surface lives in the parent project. We reference functions by
@@ -20,6 +22,8 @@ const FN = {
   bulkReplaceUnits: "units:bulkReplaceByCode",
   applyPastDue: "tenants:applyPastDueByCode",
   enrichRent: "tenants:enrichRentByCode",
+  bulkInsertGlTransactions: "glTransactions:bulkInsertByCode",
+  bulkInsertReceivableDetails: "receivableDetails:bulkInsertByCode",
   recomputeMonthlyRevenue: "monthlyRevenue:recomputeFromLatest",
   recomputeMonthlyRevenueFromMonth: "monthlyRevenue:recomputeFromMonth",
   extractInsights: "insights:extractForProperty",
@@ -173,6 +177,39 @@ export async function uploadRunToConvex(
         console.log(`   enriched RR-full → matched ${result.matched}/${result.tenants} tenants`);
         perFileRows = result.matched;
         totalRowsIngested += result.matched;
+      } else if (u.reportType === "gl_detail") {
+        const parsed = parseGlDetail(u.filePath);
+        console.log(`   parsed GL ${u.fileName}: ${parsed.rows.length} JE rows`);
+        if (parsed.rows.length === 0) {
+          console.warn(`   warning: GL detail parser returned 0 rows — header likely didn't match expected columns`);
+        }
+        // Derive month from the rows themselves; falls back to the snapshot month.
+        const rowMonth = parsed.rows[0]?.postMonth || snapshotDate.slice(0, 7);
+        const result: any = await client.mutation(FN.bulkInsertGlTransactions as any, {
+          propertyCode: u.propertyCode,
+          syncId: jobId,
+          month: rowMonth,
+          rows: parsed.rows,
+        });
+        console.log(`   ingested GL → ${result.inserted} rows · replaced ${result.replaced}`);
+        perFileRows = result.inserted;
+        totalRowsIngested += result.inserted;
+      } else if (u.reportType === "receivable_detail") {
+        const parsed = parseReceivableDetail(u.filePath);
+        console.log(`   parsed RD ${u.fileName}: ${parsed.rows.length} transactions`);
+        if (parsed.rows.length === 0) {
+          console.warn(`   warning: receivable detail parser returned 0 rows — header likely didn't match expected columns`);
+        }
+        const rowMonth = parsed.rows[0]?.postMonth || snapshotDate.slice(0, 7);
+        const result: any = await client.mutation(FN.bulkInsertReceivableDetails as any, {
+          propertyCode: u.propertyCode,
+          syncId: jobId,
+          month: rowMonth,
+          rows: parsed.rows,
+        });
+        console.log(`   ingested RD → ${result.inserted} rows · replaced ${result.replaced}`);
+        perFileRows = result.inserted;
+        totalRowsIngested += result.inserted;
       }
       await client.mutation(FN.setFileRecords as any, {
         id: jobId,

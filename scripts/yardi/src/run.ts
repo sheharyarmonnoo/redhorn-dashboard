@@ -3,13 +3,15 @@ import { getProperties } from "./properties.js";
 import { runIncomeStatementForProperty } from "./reports/income-statement.js";
 import { runRentRollForProperty, runTotalUnitsForProperty, runPastDueForProperty } from "./reports/rent-roll.js";
 import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
+import { runGlDetailForProperty } from "./reports/gl-detail.js";
+import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
 import { latestClosedMonth } from "./paths.js";
 import { uploadRunToConvex } from "./convex-upload.js";
 
 interface RunResult {
   property: string;
   propertyCode: string;
-  reportType: "income_statement" | "rent_roll" | "total_units" | "past_due" | "rent_roll_full";
+  reportType: "income_statement" | "rent_roll" | "total_units" | "past_due" | "rent_roll_full" | "gl_detail" | "receivable_detail";
   ok: boolean;
   path?: string;
   error?: string;
@@ -99,6 +101,29 @@ async function main() {
         const msg = err?.message || String(err);
         console.error(`   RR-full FAILED — ${msg}`);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll_full", ok: false, error: msg });
+      }
+
+      // GL Transaction Detail — line-level journal entries with posting dates.
+      // Aggregates to the income statement; querying by date powers "when was
+      // this expense posted" insights.
+      try {
+        const path = await runGlDetailForProperty(voyager, property, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "gl_detail", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   GL FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "gl_detail", ok: false, error: msg });
+      }
+
+      // Receivable Detail — per-tenant charge + payment activity. Powers
+      // verified Electric Not Posted alerts, aging, and AR timing analysis.
+      try {
+        const path = await runReceivableDetailForProperty(voyager, property, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "receivable_detail", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   RD FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "receivable_detail", ok: false, error: msg });
       }
     }
 

@@ -99,16 +99,20 @@ export default defineSchema({
     syncId: v.optional(v.id("sync_jobs")),
     propertyId: v.id("properties"),
     tenantName: v.string(),
+    unit: v.optional(v.string()),
     controlNumber: v.optional(v.string()),
     transactionDate: v.optional(v.string()),
     postMonth: v.optional(v.string()),
     chargeCode: v.optional(v.string()),
+    description: v.optional(v.string()),
     charges: v.number(),
     receipts: v.number(),
     balance: v.number(),
     notes: v.optional(v.string()),
   })
     .index("by_property", ["propertyId"])
+    .index("by_property_month", ["propertyId", "postMonth"])
+    .index("by_property_tenant", ["propertyId", "tenantName"])
     .index("by_sync", ["syncId"]),
 
   // ===== INCOME STATEMENT LINES =====
@@ -139,6 +143,29 @@ export default defineSchema({
     type: v.string(),
     syncId: v.optional(v.id("sync_jobs")),
   }).index("by_unit", ["propertyId", "unit"]),
+
+  // ===== GL TRANSACTIONS (line-level journal entries) =====
+  // Every JE row from Yardi's GL Detail report. Aggregating these by month +
+  // account reproduces the income statement; querying by date answers
+  // "when was this expense posted, and is it normal vs prior months?"
+  gl_transactions: defineTable({
+    syncId: v.optional(v.id("sync_jobs")),
+    propertyId: v.id("properties"),
+    postingDate: v.string(),     // YYYY-MM-DD
+    postMonth: v.optional(v.string()), // YYYY-MM
+    accountCode: v.string(),     // GL account number
+    accountName: v.string(),     // Human-readable account
+    description: v.string(),
+    reference: v.optional(v.string()),  // check #, invoice #
+    vendor: v.optional(v.string()),
+    debit: v.number(),
+    credit: v.number(),
+    amount: v.number(),          // signed: debit positive, credit negative (or vice versa per use)
+  })
+    .index("by_property_date", ["propertyId", "postingDate"])
+    .index("by_property_month", ["propertyId", "postMonth"])
+    .index("by_property_account", ["propertyId", "accountCode"])
+    .index("by_sync", ["syncId"]),
 
   // ===== MONTHLY REVENUE =====
   monthly_revenue: defineTable({

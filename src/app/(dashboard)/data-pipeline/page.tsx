@@ -479,6 +479,8 @@ export default function DataPipelinePage() {
       rent_roll_full: "Rent Roll (Full)",
       total_units: "Total Units",
       past_due: "Past Due",
+      gl_detail: "GL Detail",
+      receivable_detail: "Receivable Detail",
       aging: "Aging",
       receivable: "Receivable Detail",
     };
