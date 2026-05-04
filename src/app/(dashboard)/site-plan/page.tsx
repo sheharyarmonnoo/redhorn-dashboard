@@ -53,28 +53,6 @@ export default function SitePlanPage() {
         ))}
       </div>
 
-      {/* Unit Index */}
-      <div className="mt-4 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
-        <p className="text-[12px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">All Units</p>
-        <div className="flex flex-wrap gap-1">
-          {allSlots.map((t: any) => (
-            <button
-              key={t.unit}
-              onClick={() => setSelected(t)}
-              className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors cursor-pointer ${
-                t.status === "current" ? "bg-white dark:bg-[#18181b] border-[#e4e4e7] dark:border-[#3f3f46] text-[#18181b] dark:text-[#fafafa] hover:bg-[#fafafa] dark:hover:bg-[#27272a]" :
-                t.status === "past_due" ? "bg-white dark:bg-[#18181b] border-[#dc2626]/30 text-[#dc2626] hover:bg-red-50 dark:hover:bg-red-950/30" :
-                t.status === "expiring_soon" ? "bg-white dark:bg-[#18181b] border-[#2563eb]/30 text-[#2563eb] dark:text-[#60a5fa] hover:bg-blue-50 dark:hover:bg-blue-950/30" :
-                t.status === "vacant" ? "bg-[#fafafa] dark:bg-[#27272a] border-[#e4e4e7] dark:border-[#3f3f46] text-[#a1a1aa] dark:text-[#71717a]" :
-                "bg-white dark:bg-[#18181b] border-[#d97706]/30 text-[#d97706] hover:bg-amber-50 dark:hover:bg-amber-950/30"
-              }`}
-            >
-              {t.unit}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="mt-4">
         <SitePlan3D onSelect={setSelected} selectedUnit={selected?.unit || null} />
       </div>

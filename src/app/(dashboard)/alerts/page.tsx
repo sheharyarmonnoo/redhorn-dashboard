@@ -97,6 +97,7 @@ export default function AlertsPage() {
   const [showAddAlert, setShowAddAlert] = useState(false);
   const [newAlert, setNewAlert] = useState({ unit: "", category: "General", severity: "Warning" as AlertRow["severity"], detail: "" });
   const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
 
   useEffect(() => { setArchivedIds(loadArchived()); setCustomAlerts(loadCustomAlerts()); }, []);
 
@@ -208,24 +209,6 @@ export default function AlertsPage() {
   const activeAlerts = allAlerts.filter(a => !archivedIds.has(a.id));
   const archivedAlerts = allAlerts.filter(a => archivedIds.has(a.id));
 
-  function ArchiveCell(props: { data: AlertRow }) {
-    const isCustom = props.data.id.startsWith("custom-");
-    return (
-      <div className="flex items-center gap-1">
-        {isCustom && (
-          <button onClick={(e) => { e.stopPropagation(); startEditAlert(props.data); }}
-            className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] transition-colors">
-            Edit
-          </button>
-        )}
-        <button onClick={(e) => { e.stopPropagation(); archiveAlert(props.data.id); }}
-          className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] transition-colors">
-          Handled
-        </button>
-      </div>
-    );
-  }
-
   function RestoreCell(props: { data: AlertRow }) {
     return (
       <button onClick={(e) => { e.stopPropagation(); restoreAlert(props.data.id); }}
@@ -238,26 +221,23 @@ export default function AlertsPage() {
   const columnDefs = useMemo<ColDef[]>(() => {
     if (isMobile) {
       return [
-        { field: "severity", headerName: "Sev", width: 85, cellRenderer: SeverityCellRenderer },
-        { field: "unit", headerName: "Unit", width: 90 },
-        { field: "category", headerName: "Type", width: 140, cellRenderer: CategoryCellRenderer },
+        { field: "severity", headerName: "Sev", width: 80, cellRenderer: SeverityCellRenderer },
+        { field: "unit", headerName: "Unit", width: 80 },
+        { field: "category", headerName: "Type", width: 130, cellRenderer: CategoryCellRenderer },
         { field: "detail", headerName: "Details", minWidth: 140, flex: 1 },
-        { headerName: "", width: 130, cellRenderer: ArchiveCell, sortable: false, filter: false },
       ];
     }
     return [
       { field: "severity", headerName: "Severity", width: 110, cellRenderer: SeverityCellRenderer, filter: true },
-      { field: "category", headerName: "Category", width: 170, cellRenderer: CategoryCellRenderer, filter: true },
-      { field: "unit", headerName: "Unit", width: 100 },
-      { field: "tenant", headerName: "Tenant", minWidth: 160, flex: 1 },
-      { field: "building", headerName: "Bldg", width: 70 },
-      { field: "detail", headerName: "Details", minWidth: 280, flex: 2 },
+      { field: "category", headerName: "Category", width: 160, cellRenderer: CategoryCellRenderer, filter: true },
+      { field: "unit", headerName: "Unit", width: 90 },
+      { field: "tenant", headerName: "Tenant", width: 200 },
+      { field: "detail", headerName: "Details", minWidth: 320, flex: 1 },
       { field: "amount", headerName: "Amount", width: 110, type: "numericColumn",
         valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
       { field: "date", headerName: "Date", width: 110 },
-      { headerName: "", width: 130, cellRenderer: ArchiveCell, sortable: false, filter: false },
     ];
-  }, [isMobile, archivedIds, customAlerts]);
+  }, [isMobile]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true, resizable: true, filter: true,
@@ -316,12 +296,32 @@ export default function AlertsPage() {
           onColumnVisible={persistence.onColumnVisible}
           onColumnPinned={persistence.onColumnPinned}
           onSortChanged={persistence.onSortChanged}
+          onRowClicked={(e) => setSelectedAlertId(e.data?.id ?? null)}
+          rowClass="cursor-pointer"
           animateRows={true}
           pagination={true}
           paginationPageSize={500}
           getRowId={(params) => params.data.id}
         />
       </div>
+
+      <AlertDrawer
+        alert={activeAlerts.find(a => a.id === selectedAlertId) ?? null}
+        onClose={() => setSelectedAlertId(null)}
+        onSave={(updates) => {
+          if (!selectedAlertId) return;
+          const isCustom = selectedAlertId.startsWith("custom-");
+          if (!isCustom) return;
+          const updated = customAlerts.map(a => a.id === selectedAlertId ? { ...a, ...updates } : a);
+          setCustomAlerts(updated);
+          saveCustomAlerts(updated);
+        }}
+        onMarkHandled={() => {
+          if (!selectedAlertId) return;
+          archiveAlert(selectedAlertId);
+          setSelectedAlertId(null);
+        }}
+      />
 
       {/* Archived / Handled */}
       {archivedAlerts.length > 0 && (
