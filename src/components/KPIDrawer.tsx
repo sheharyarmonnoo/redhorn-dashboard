@@ -219,9 +219,11 @@ function ExpiringDetail() {
           <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No leases expiring in the next 90 days.</p>
         ) : expiring.map((t: any) => (
           <div key={t.unit} className="py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} — {t.tenant}</span>
-              <span className="text-[12px] text-[#d97706]">{t.leaseTo}</span>
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate min-w-0 flex-1" title={`${t.unit} — ${t.tenant}`}>
+                {t.unit} — {t.tenant}
+              </span>
+              <span className="text-[12px] text-[#d97706] whitespace-nowrap flex-shrink-0">{formatLeaseDate(t.leaseTo)}</span>
             </div>
             <p className="text-[10px] text-[#71717a] mt-0.5">{formatCurrency(t.monthlyRent)}/mo · {t.sqft.toLocaleString()} SF · Bldg {t.building}</p>
             {t.notes && <p className="text-[10px] text-[#a1a1aa] mt-0.5">{t.notes}</p>}
@@ -281,4 +283,17 @@ export default function KPIDrawer({ open, kpiKey, onClose }: KPIDrawerProps) {
       </div>
     </div>
   );
+}
+
+// Renders an ISO date as "Jul 14, 2026". Returns the input untouched if it
+// doesn't look like a YYYY-MM-DD so we don't accidentally swallow values
+// the parser doesn't understand.
+function formatLeaseDate(iso?: string): string {
+  if (!iso || iso.length < 10) return iso || "—";
+  const m = iso.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return iso;
+  const [, y, mo, d] = m;
+  const date = new Date(Number(y), Number(mo) - 1, Number(d));
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
