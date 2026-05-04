@@ -30,13 +30,13 @@ function useAssigneeOptions() {
   return { options, meName: isRedhornUser ? meName : undefined };
 }
 
-function AssigneeSelect({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+function AssigneeSelect({ value, onChange, placeholder, fullWidth }: { value: string; onChange: (v: string) => void; placeholder?: string; fullWidth?: boolean }) {
   const { options } = useAssigneeOptions();
   return (
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
-      className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa]"
+      className={`text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] ${fullWidth ? "w-full" : ""}`}
     >
       <option value="">{placeholder || "Unassigned"}</option>
       {options.map(name => (
@@ -224,24 +224,16 @@ export default function ActionItems({ heading = "Tasks", showHeader = true }: { 
       )}
 
       {showAdd && (
-        <div className="flex flex-col sm:flex-row gap-2 mb-3 p-3 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded">
-          <input type="text" value={newText} onChange={e => setNewText(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleAdd()}
-            placeholder="Type an action item..."
-            className="flex-1 text-[12px] px-2.5 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]"
-            autoFocus />
-          <select value={newPriority} onChange={e => setNewPriority(e.target.value)}
-            className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-[#fafafa] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa]">
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
-          <AssigneeSelect value={newAssignee} onChange={setNewAssignee} placeholder="Assign to..." />
-          <button onClick={handleAdd}
-            className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors cursor-pointer">
-            Add
-          </button>
-        </div>
+        <NewTaskModal
+          text={newText}
+          priority={newPriority}
+          assignee={newAssignee}
+          onTextChange={setNewText}
+          onPriorityChange={setNewPriority}
+          onAssigneeChange={setNewAssignee}
+          onCancel={() => { setShowAdd(false); setNewText(""); setNewAssignee(""); }}
+          onSubmit={handleAdd}
+        />
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -283,6 +275,86 @@ export default function ActionItems({ heading = "Tasks", showHeader = true }: { 
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function NewTaskModal({
+  text, priority, assignee,
+  onTextChange, onPriorityChange, onAssigneeChange,
+  onCancel, onSubmit,
+}: {
+  text: string;
+  priority: string;
+  assignee: string;
+  onTextChange: (v: string) => void;
+  onPriorityChange: (v: string) => void;
+  onAssigneeChange: (v: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") onCancel();
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSubmit();
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg shadow-xl w-full max-w-md p-5"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">New task</p>
+
+        <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">What needs doing?</label>
+        <textarea
+          autoFocus
+          value={text}
+          onChange={(e) => onTextChange(e.target.value)}
+          rows={3}
+          placeholder="e.g. Review tax accrual entries with PM before close"
+          className="w-full text-[12px] bg-white dark:bg-[#09090b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2 text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] dark:placeholder-[#52525b] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] resize-none mb-3"
+        />
+
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <div>
+            <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Priority</label>
+            <select
+              value={priority}
+              onChange={(e) => onPriorityChange(e.target.value)}
+              className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            >
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Assign to</label>
+            <AssigneeSelect value={assignee} onChange={onAssigneeChange} placeholder="Unassigned" fullWidth />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] px-3 py-1.5 rounded cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={!text.trim()}
+            className="text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-3 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add task
+          </button>
+        </div>
       </div>
     </div>
   );
