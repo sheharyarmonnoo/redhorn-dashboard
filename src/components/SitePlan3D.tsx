@@ -14,34 +14,43 @@ function statusColor(status: TenantStatus) {
   }
 }
 
+function compactUnit(unit: string): string {
+  // Compress combined unit codes like "A-103, A-112, A-85" → "A-103 +2" so the
+  // label fits a uniform box without wrapping.
+  if (!unit) return "";
+  const parts = unit.split(/[,/]\s*/).filter(Boolean);
+  if (parts.length <= 1) return unit;
+  return `${parts[0]} +${parts.length - 1}`;
+}
+
 function UnitBlock({ tenant, onSelect, isSelected }: {
   tenant: Tenant;
   onSelect: (t: Tenant) => void;
   isSelected: boolean;
 }) {
   const c = statusColor(tenant.status);
+  const label = compactUnit(tenant.unit || "");
+  const fullUnit = tenant.unit || "";
   return (
     <button
       onClick={() => onSelect(tenant)}
+      title={fullUnit !== label ? fullUnit : undefined}
       className={`
         w-full ${c.bg} ${c.text} rounded flex flex-col items-center justify-center
-        transition-all duration-100 cursor-pointer relative
-        ${tenant.sqft > 5000 ? "h-[68px] sm:h-[76px]" : "h-[52px] sm:h-[60px]"}
+        transition-all duration-100 cursor-pointer relative px-1
+        h-[56px] sm:h-[64px]
         ${isSelected ? "ring-2 ring-[#18181b] dark:ring-[#fafafa] ring-offset-1 ring-offset-white dark:ring-offset-[#18181b] z-10" : "hover:opacity-90"}
       `}
     >
-      <span className="text-[11px] font-semibold leading-none">{tenant.unit}</span>
+      <span className="text-[11px] font-semibold leading-none truncate max-w-full">{label}</span>
       {tenant.tenant && !tenant.tenant.includes("Owner") ? (
-        <span className="text-[7px] opacity-75 leading-tight px-1 text-center truncate max-w-full mt-0.5">
+        <span className="text-[7px] opacity-75 leading-tight text-center truncate max-w-full mt-0.5">
           {tenant.tenant.split(" ").slice(0, 2).join(" ")}
         </span>
       ) : tenant.status === "vacant" ? (
         <span className="text-[7px] opacity-50 mt-0.5 uppercase tracking-wide">Vacant</span>
       ) : (
         <span className="text-[7px] opacity-50 mt-0.5">Owner</span>
-      )}
-      {tenant.sqft > 5000 && (
-        <span className="text-[7px] opacity-50 mt-0.5">{(tenant.sqft / 1000).toFixed(0)}K SF</span>
       )}
       {tenant.pastDueAmount > 0 && (
         <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#dc2626] rounded-full border-2 border-white dark:border-[#18181b]" />
