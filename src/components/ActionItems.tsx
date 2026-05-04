@@ -8,16 +8,22 @@ type KanbanColumn = "todo" | "in_progress" | "done";
 
 // Visible Redhorn assignees. Sheharyar / Matt / Dillon are operational accounts
 // for setup + delivery — they're "silent users" and don't appear in the
-// assignee dropdown. Anyone else signing in with a @redhorncapital.com email
-// gets added to the dropdown automatically without a code change.
+// assignee dropdown even if they happen to sign in. Anyone else with a
+// @redhorncapital.com email gets added to the dropdown automatically.
 const TEAM_ASSIGNEES = ["Ori", "Max"];
 const REDHORN_DOMAIN = "redhorncapital.com";
+const SILENT_EMAILS = new Set<string>([
+  "sheharyarmonnoo@gmail.com",
+  "mattyellin1@gmail.com",
+  // Dillon: add when his login email is known
+]);
 
 function useAssigneeOptions() {
   const { user } = useUser();
   const meName = user?.firstName?.trim();
   const meEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() || "";
-  const isRedhornUser = meEmail.endsWith(`@${REDHORN_DOMAIN}`);
+  const isSilent = SILENT_EMAILS.has(meEmail);
+  const isRedhornUser = !isSilent && meEmail.endsWith(`@${REDHORN_DOMAIN}`);
   const options = isRedhornUser && meName && !TEAM_ASSIGNEES.includes(meName)
     ? [...TEAM_ASSIGNEES, meName]
     : TEAM_ASSIGNEES;
