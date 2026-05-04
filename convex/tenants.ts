@@ -380,6 +380,8 @@ export const enrichRentByCode = mutation({
         securityDeposit: v.optional(v.number()),
         leaseFrom: v.optional(v.string()),
         leaseTo: v.optional(v.string()),
+        leaseType: v.optional(v.string()),
+        sqft: v.optional(v.number()),
       })
     ),
   },
@@ -424,6 +426,12 @@ export const enrichRentByCode = mutation({
       if (typeof hit.securityDeposit === "number" && hit.securityDeposit > 0) patch.securityDeposit = hit.securityDeposit;
       if (hit.leaseFrom && hit.leaseFrom.trim()) patch.leaseFrom = hit.leaseFrom;
       if (hit.leaseTo && hit.leaseTo.trim()) patch.leaseTo = hit.leaseTo;
+      if (hit.leaseType && hit.leaseType.trim() && (!t.leaseType || t.leaseType.trim() === "")) {
+        patch.leaseType = hit.leaseType;
+      }
+      if (typeof hit.sqft === "number" && hit.sqft > 0 && (!t.sqft || t.sqft === 0)) {
+        patch.sqft = hit.sqft;
+      }
       if (Object.keys(patch).length > 0) {
         await ctx.db.patch(t._id, patch);
         matched++;

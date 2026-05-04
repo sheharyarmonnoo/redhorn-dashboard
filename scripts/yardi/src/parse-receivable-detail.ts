@@ -13,6 +13,18 @@ export interface ParsedReceivableDetail {
     receipts: number;
     balance: number;
   }>;
+  // Per-lease metadata extracted from each "Lease Information" block. The
+  // Lease Ledger carries lease term + monthly rent + sqft data the rent-roll
+  // dashboard panel doesn't expose — use this to enrich tenant rows on ingest.
+  leases: Array<{
+    tenantName: string;
+    unit?: string;
+    leaseType?: string;
+    sqft?: number;
+    leaseFrom?: string;
+    leaseTo?: string;
+    monthlyRent?: number;
+  }>;
 }
 
 /**
@@ -36,12 +48,24 @@ export function parseReceivableDetail(filePath: string): ParsedReceivableDetail 
   const grid = xlsx.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: "" });
 
   const rows: ParsedReceivableDetail["rows"] = [];
+  const leases: ParsedReceivableDetail["leases"] = [];
   let i = 0;
   while (i < grid.length) {
     const row = grid[i] || [];
     const c1 = (row[1] || "").toString().trim();
     if (c1 === "Lease Information") {
       const meta = readLeaseMetadata(grid, i);
+      if (meta.tenantName) {
+        leases.push({
+          tenantName: meta.tenantName,
+          unit: meta.unit || undefined,
+          leaseType: meta.leaseType || undefined,
+          sqft: meta.sqft || undefined,
+          leaseFrom: meta.leaseFrom || undefined,
+          leaseTo: meta.leaseTo || undefined,
+          monthlyRent: meta.monthlyRent || undefined,
+        });
+      }
       const tx = readTransactions(grid, meta.nextRow, meta.tenantName, meta.unit);
       rows.push(...tx.rows);
       i = tx.nextRow;
@@ -49,19 +73,38 @@ export function parseReceivableDetail(filePath: string): ParsedReceivableDetail 
       i++;
     }
   }
-  return { rows };
+  return { rows, leases };
 }
 
-function readLeaseMetadata(grid: any[][], startIdx: number): { tenantName: string; unit: string; nextRow: number } {
+interface LeaseMeta {
+  tenantName: string;
+  unit: string;
+  leaseType: string;
+  sqft: number;
+  leaseFrom: string;
+  leaseTo: string;
+  monthlyRent: number;
+  nextRow: number;
+}
+
+function readLeaseMetadata(grid: any[][], startIdx: number): LeaseMeta {
   let tenantName = "";
   let unit = "";
+  let leaseType = "";
+  let sqft = 0;
+  let leaseFrom = "";
+  let leaseTo = "";
+  let monthlyRent = 0;
   let i = startIdx + 1;
   const limit = Math.min(grid.length, startIdx + 25);
   while (i < limit) {
     const row = grid[i] || [];
     const c1 = (row[1] || "").toString();
     const c8 = (row[8] || "").toString().trim();
+    const c11 = (row[11] || "").toString().trim();
     const c12 = (row[12] || "").toString().trim();
+    const c13 = (row[13] || "").toString().trim();
+    const c20 = (row[20] || "").toString().trim();
     const c2 = (row[2] || "").toString().trim();
 
     // Tenant name lives in col 1 as a multi-line cell; first line is the name.
@@ -73,13 +116,35 @@ function readLeaseMetadata(grid: any[][], startIdx: number): { tenantName: strin
     // Assigned Space(s) → unit
     if (c8 === "Assigned Space(s)" && c12) unit = c12;
 
+    // Lease Type (col 11) — e.g. "Office Net Lease", "Office Gross Lease"
+    if (c8 === "Lease Type" && c11) leaseType = c11;
+
+    // Lease Term — From (col 13) … To (col 20). Both MM/DD/YYYY.
+    if (c8 === "Lease Term") {
+      if (c13) leaseFrom = formatDate(c13);
+      if (c20) leaseTo = formatDate(c20);
+    }
+
+    // Lease Area (col 11) — e.g. "3,600(Net Lease)" → 3600
+    if (c8 === "Lease Area" && c11) {
+      const m = c11.replace(/,/g, "").match(/(\d+)/);
+      if (m) sqft = Number(m[1]) || 0;
+    }
+
+    // Monthly Rent (col 11) — numeric or numeric-string
+    if (c8 === "Monthly Rent" && c11) {
+      const cleaned = c11.replace(/[$,]/g, "").trim();
+      const n = Number(cleaned);
+      if (Number.isFinite(n)) monthlyRent = n;
+    }
+
     // Transaction header marks the boundary
     if (c1.trim() === "Date" && c2.startsWith("Description")) {
-      return { tenantName, unit, nextRow: i + 1 };
+      return { tenantName, unit, leaseType, sqft, leaseFrom, leaseTo, monthlyRent, nextRow: i + 1 };
     }
     i++;
   }
-  return { tenantName, unit, nextRow: i };
+  return { tenantName, unit, leaseType, sqft, leaseFrom, leaseTo, monthlyRent, nextRow: i };
 }
 
 function readTransactions(

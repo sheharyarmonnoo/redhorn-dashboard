@@ -203,7 +203,7 @@ export async function uploadRunToConvex(
         totalRowsIngested += result.inserted;
       } else if (u.reportType === "receivable_detail") {
         const parsed = parseReceivableDetail(u.filePath);
-        console.log(`   parsed RD ${u.fileName}: ${parsed.rows.length} transactions`);
+        console.log(`   parsed RD ${u.fileName}: ${parsed.rows.length} transactions, ${parsed.leases.length} lease blocks`);
         if (parsed.rows.length === 0) {
           console.warn(`   warning: receivable detail parser returned 0 rows — header likely didn't match expected columns`);
         }
@@ -217,6 +217,36 @@ export async function uploadRunToConvex(
         console.log(`   ingested RD → ${result.inserted} rows · replaced ${result.replaced}`);
         perFileRows = result.inserted;
         totalRowsIngested += result.inserted;
+
+        // Enrich tenants from the lease metadata in the Lease Ledger. The
+        // rent-roll dashboard panel doesn't carry monthly rent or sqft, but
+        // the Lease Ledger does — this is the single source for that data
+        // until Yardi gives us a richer rent-roll export.
+        if (parsed.leases.length > 0) {
+          const enrichRows = parsed.leases
+            .filter(l => l.unit || l.tenantName)
+            .map(l => ({
+              unit: (l.unit || "").trim(),
+              tenant: l.tenantName,
+              monthlyRent: l.monthlyRent,
+              leaseType: l.leaseType,
+              sqft: l.sqft,
+              leaseFrom: l.leaseFrom,
+              leaseTo: l.leaseTo,
+            }))
+            .filter(r => r.unit.length > 0);
+          if (enrichRows.length > 0) {
+            try {
+              const er: any = await client.mutation(FN.enrichRent as any, {
+                propertyCode: u.propertyCode,
+                rows: enrichRows,
+              });
+              console.log(`   enriched RR from RD → matched ${er.matched}/${er.tenants} tenants (lease type, term, sqft, rent)`);
+            } catch (err: any) {
+              console.error(`   enrich-from-RD failed: ${err?.message || err}`);
+            }
+          }
+        }
       }
       await client.mutation(FN.setFileRecords as any, {
         id: jobId,
