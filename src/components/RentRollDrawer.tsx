@@ -44,19 +44,24 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
     if (!draft || !tenant.propertyId || !tenant.unit) return;
     setSaving(true);
     try {
+      // Only persist fields the user actually changed. Sending the full draft
+      // would freeze every field as an override (including ones the user
+      // didn't touch like lease expiration), which then blocks future Yardi
+      // syncs from updating that field until "Revert to pipeline" is clicked.
+      const fields: Record<string, any> = {};
+      if (draft.monthlyRent !== tenant.monthlyRent) fields.monthlyRent = numOrUndef(draft.monthlyRent);
+      if (draft.monthlyElectric !== tenant.monthlyElectric) fields.monthlyElectric = numOrUndef(draft.monthlyElectric);
+      if (draft.securityDeposit !== tenant.securityDeposit) fields.securityDeposit = numOrUndef(draft.securityDeposit);
+      if (draft.leaseFrom !== tenant.leaseFrom) fields.leaseFrom = strOrUndef(draft.leaseFrom);
+      if (draft.leaseTo !== tenant.leaseTo) fields.leaseTo = strOrUndef(draft.leaseTo);
+      if (draft.status !== tenant.status) fields.status = strOrUndef(draft.status);
+      if ((draft.notes || "") !== (tenant.notes || "")) fields.notes = strOrUndef(draft.notes);
+      if (draft.pastDueAmount !== tenant.pastDueAmount) fields.pastDueAmount = numOrUndef(draft.pastDueAmount);
+      if (Object.keys(fields).length === 0) return;
       await setOverride({
         propertyId: tenant.propertyId as any,
         unit: tenant.unit,
-        fields: {
-          monthlyRent: numOrUndef(draft.monthlyRent),
-          monthlyElectric: numOrUndef(draft.monthlyElectric),
-          securityDeposit: numOrUndef(draft.securityDeposit),
-          leaseFrom: strOrUndef(draft.leaseFrom),
-          leaseTo: strOrUndef(draft.leaseTo),
-          status: strOrUndef(draft.status),
-          notes: strOrUndef(draft.notes),
-          pastDueAmount: numOrUndef(draft.pastDueAmount),
-        },
+        fields,
         updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
       });
     } finally { setSaving(false); }
