@@ -287,7 +287,9 @@ function InsightRow({ insight, dotClass, onFlag, index = 0 }: {
       </button>
       {expanded && (
         <div className="px-3 pb-3 pl-[1.625rem]">
-          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed">{insight.body}</p>
+          <div className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed space-y-1.5">
+            {renderMarkdown(insight.body || "")}
+          </div>
           {insight.dataContext?.lineItem && (
             <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">
               <span className="uppercase tracking-wide font-medium">Line item:</span> {insight.dataContext.lineItem}
