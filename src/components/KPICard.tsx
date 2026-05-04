@@ -41,14 +41,14 @@ export default function KPICard({
   return (
     <div
       onClick={onClick}
-      className={`bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4 ${onClick ? "cursor-pointer hover:border-[#a1a1aa] dark:hover:border-[#52525b] transition-colors" : ""}`}
+      className={`bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4 rh-card-mount ${onClick ? "cursor-pointer hover:border-[#a1a1aa] dark:hover:border-[#52525b] rh-hover-lift" : ""}`}
     >
       <div className="flex items-start justify-between">
         <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] font-medium uppercase tracking-wide">{title}</p>
         {sparkline && <Sparkline data={sparkline} up={trendUp} />}
       </div>
       <div className="flex items-baseline gap-2 mt-1">
-        <p className={`text-[20px] sm:text-[24px] font-semibold tracking-tight leading-none ${color}`}>{value}</p>
+        <p className={`text-[20px] sm:text-[24px] font-semibold tracking-tight leading-none rh-value-in ${color}`}>{value}</p>
         {trend && (
           <span className={`text-[11px] font-medium ${trendUp ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
             {trendUp ? "+" : ""}{trend}

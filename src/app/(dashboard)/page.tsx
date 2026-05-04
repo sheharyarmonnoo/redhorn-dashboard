@@ -264,14 +264,15 @@ export default function DashboardPage() {
   );
 }
 
-function InsightRow({ insight, dotClass, onFlag }: {
+function InsightRow({ insight, dotClass, onFlag, index = 0 }: {
   insight: any;
   dotClass: string;
   onFlag: () => void;
+  index?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div>
+    <div className="rh-row-in" style={{ animationDelay: `${index * 40}ms` }}>
       <button
         onClick={() => setExpanded(e => !e)}
         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#fafafa] dark:hover:bg-[#27272a] cursor-pointer text-left transition-colors"
@@ -460,8 +461,8 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
       )}
       {active.length > 0 ? (
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46]">
-          {active.map(ins => (
-            <InsightRow key={ins._id} insight={ins} dotClass={sevDot[ins.severity] || sevDot.info} onFlag={() => openFlag(ins)} />
+          {active.map((ins, i) => (
+            <InsightRow key={ins._id} insight={ins} dotClass={sevDot[ins.severity] || sevDot.info} onFlag={() => openFlag(ins)} index={i} />
           ))}
         </div>
       ) : (
@@ -577,7 +578,7 @@ function SummaryCard({ summary, updatedAt, expanded, onToggle }: {
   const ts = updatedAt ? formatRelativeTime(updatedAt) : "";
 
   return (
-    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 mb-3">
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 mb-3 rh-card-mount">
       <div className="flex items-baseline justify-between mb-2">
         <p className="text-[11px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide">Summary</p>
         {ts && <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">Updated {ts}</p>}
