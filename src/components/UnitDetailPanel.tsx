@@ -1,22 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
-import { X, ChevronRight } from "lucide-react";
+import { X } from "lucide-react";
 import { useUnitNotes, useTenantMutations, formatCurrency } from "@/hooks/useConvexData";
-
-type DelinquencyStage = "none" | "past_due" | "default_notice" | "lockout_pending" | "locked_out" | "auction_pending" | "auction";
 
 interface Props {
   tenant: any | null;
   onClose: () => void;
   onUpdated?: () => void;
 }
-
-const stageLabels: Record<string, string> = {
-  none: "None", past_due: "Past Due", default_notice: "Default Notice",
-  lockout_pending: "Lockout Pending", locked_out: "Locked Out",
-  auction_pending: "Auction Pending", auction: "Auction",
-};
-const stageOrder: DelinquencyStage[] = ["none", "past_due", "default_notice", "lockout_pending", "locked_out", "auction_pending", "auction"];
 
 export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated }: Props) {
   const [cached, setCached] = useState<any>(tenantProp);
@@ -31,7 +22,7 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
     tenant?.propertyId,
     tenant?.unit
   );
-  const { updateDelinquency, updateElectricPosted } = useTenantMutations();
+  const { updateElectricPosted } = useTenantMutations();
 
   useEffect(() => {
     if (tenantProp) {
@@ -58,8 +49,6 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
 
   // M4: ledger hidden until real ledger entries are wired to Convex
   const ledger: any[] = [];
-
-  const delinqStage: DelinquencyStage = (tenant.delinquencyStage as DelinquencyStage) || "none";
 
   // Seed note from tenant data if no log entries exist
   const seedNote = tenant.notes && notesLog.length === 0 ? tenant.notes : null;
@@ -91,16 +80,6 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
   async function toggleElectric() {
     if (!tenant) return;
     await updateElectricPosted({ id: tenant._id as any, electricPosted: !tenant.electricPosted });
-    onUpdated?.();
-  }
-
-  async function setDelinquency(stage: DelinquencyStage) {
-    if (!tenant) return;
-    await updateDelinquency({
-      id: tenant._id as any,
-      delinquencyStage: stage,
-      delinquencyDate: new Date().toISOString().slice(0, 10),
-    });
     onUpdated?.();
   }
 
@@ -209,32 +188,6 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
                 </div>
               )}
 
-              {/* Delinquency Workflow — clickable stages */}
-              <div>
-                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Delinquency Stage</p>
-                <div className="flex flex-wrap gap-1">
-                  {stageOrder.map((stage, i) => {
-                    const isCurrent = stage === delinqStage;
-                    const isActive = stageOrder.indexOf(stage) <= stageOrder.indexOf(delinqStage);
-                    return (
-                      <button
-                        key={stage}
-                        onClick={() => setDelinquency(stage)}
-                        className={`flex items-center gap-0.5 text-[10px] px-2 py-1 rounded font-medium cursor-pointer transition-colors ${
-                          isCurrent ? "bg-[#dc2626] text-white" :
-                          isActive ? "bg-red-100 dark:bg-red-950/50 text-[#dc2626]" :
-                          "bg-[#f4f4f5] dark:bg-[#27272a] text-[#a1a1aa] dark:text-[#71717a] hover:bg-[#e4e4e7] dark:hover:bg-[#3f3f46] hover:text-[#71717a] dark:hover:text-[#a1a1aa]"
-                        }`}
-                      >
-                        {stageLabels[stage]}
-                        {i < stageOrder.length - 1 && <ChevronRight size={10} className="ml-0.5 opacity-50" />}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1">Click to manually adjust stage</p>
-              </div>
-
               {/* Posting Status — electric is the only toggle backed by Convex today */}
               {tenant.leaseType === "Office Net Lease" && (
                 <div>
@@ -317,11 +270,13 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
                               <span className="ml-1.5 text-[#d4d4d8] dark:text-[#52525b]">· edited {formatTimestamp(entry.updatedAt)}</span>
                             )}
                           </div>
-                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex gap-2">
                             <button onClick={() => { setEditingNoteId(entry._id); setEditDraft(entry.text); }}
-                              className="text-[9px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer">Edit</button>
-                            <button onClick={() => handleDeleteNote(entry._id)}
-                              className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer">Delete</button>
+                              className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer">Edit</button>
+                            <button onClick={() => {
+                              if (window.confirm("Delete this note? This cannot be undone.")) handleDeleteNote(entry._id);
+                            }}
+                              className="text-[10px] font-medium text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer">Delete</button>
                           </div>
                         </div>
                       </>
