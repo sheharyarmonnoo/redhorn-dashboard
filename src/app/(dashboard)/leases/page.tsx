@@ -109,15 +109,14 @@ export default function LeasesPage() {
     return [
       { field: "unit", headerName: "Unit", width: 110 },
       { field: "tenant", headerName: "Tenant", minWidth: 180, flex: 1 },
-      { field: "building", headerName: "Bldg", width: 70 },
-      { field: "sqft", headerName: "Sq Ft", width: 90, type: "numericColumn",
+      { field: "sqft", headerName: "Sq Ft", width: 100, type: "numericColumn",
         valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
-      { field: "leaseFrom", headerName: "Start", width: 110 },
-      { field: "leaseTo", headerName: "End", width: 110 },
-      { field: "daysLeft", headerName: "Days Left", width: 100, type: "numericColumn", sort: "asc", cellRenderer: DaysRenderer },
-      { field: "monthlyRent", headerName: "Rent/Mo", width: 110, type: "numericColumn",
+      { field: "leaseFrom", headerName: "Start", width: 120 },
+      { field: "leaseTo", headerName: "End", width: 120 },
+      { field: "daysLeft", headerName: "Days Left", width: 110, type: "numericColumn", sort: "asc", cellRenderer: DaysRenderer },
+      { field: "monthlyRent", headerName: "Rent/Mo", width: 120, type: "numericColumn",
         valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
-      { field: "urgency", headerName: "Urgency", width: 150, cellRenderer: UrgencyRenderer, filter: true },
+      { field: "urgency", headerName: "Urgency", width: 160, cellRenderer: UrgencyRenderer, filter: true },
     ];
   }, [isMobile]);
 

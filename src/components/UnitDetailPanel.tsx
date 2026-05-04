@@ -91,12 +91,36 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
       <div className="absolute inset-0 bg-black/20 dark:bg-black/60" onClick={onClose} />
       <div className="relative w-full sm:w-[520px] bg-white dark:bg-[#18181b] h-full overflow-y-auto border-l border-[#e4e4e7] dark:border-[#3f3f46]">
         {/* Header */}
-        <div className="sticky top-0 bg-white dark:bg-[#18181b] border-b border-[#e4e4e7] dark:border-[#3f3f46] px-5 py-4 flex items-center justify-between z-10">
-          <div>
-            <h2 className="text-[16px] font-semibold text-[#18181b] dark:text-[#fafafa]">Unit {tenant.unit}</h2>
-            <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">Building {tenant.building} · {tenant.sqft.toLocaleString()} SF · {tenant.leaseType.replace("Office ", "")}</p>
+        <div className="sticky top-0 bg-white dark:bg-[#18181b] border-b border-[#e4e4e7] dark:border-[#3f3f46] px-5 py-4 flex items-start justify-between gap-3 z-10">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-[16px] font-semibold text-[#18181b] dark:text-[#fafafa]">Unit {tenant.unit}</h2>
+              {tenant.urgency && (() => {
+                const u = tenant.urgency as string;
+                const styles: Record<string, string> = {
+                  "Expired": "bg-[#7f1d1d] text-white",
+                  "Critical (<90d)": "bg-[#dc2626] text-white",
+                  "Warning (90-180d)": "bg-[#d97706] text-white",
+                  "OK (180d+)": "bg-[#16a34a] text-white",
+                };
+                const label = u === "Expired" ? `Expired${typeof tenant.daysLeft === "number" ? ` ${Math.abs(tenant.daysLeft)}d ago` : ""}` :
+                  typeof tenant.daysLeft === "number" ? `${u} · ${tenant.daysLeft}d left` : u;
+                return (
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wide ${styles[u] || "bg-[#71717a] text-white"}`}>
+                    {label}
+                  </span>
+                );
+              })()}
+            </div>
+            <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">
+              {[
+                tenant.building ? `Building ${tenant.building}` : null,
+                tenant.sqft ? `${tenant.sqft.toLocaleString()} SF` : null,
+                tenant.leaseType ? tenant.leaseType.replace("Office ", "") : null,
+              ].filter(Boolean).join(" · ")}
+            </p>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] rounded cursor-pointer">
+          <button onClick={onClose} className="p-1.5 hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] rounded cursor-pointer flex-shrink-0">
             <X size={16} className="text-[#a1a1aa]" />
           </button>
         </div>
