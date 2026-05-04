@@ -23,35 +23,7 @@ export default function DashboardPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
-  const allOccupiedUnits = useMemo(() =>
-    new Set(tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")).map(t => t.unit)),
-  [tenants]);
   const [kpiDrawer, setKpiDrawer] = useState<string | null>(null);
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filteredUnits, setFilteredUnits] = useState<Set<string>>(new Set());
-  const [filterInitialized, setFilterInitialized] = useState(false);
-
-  // Initialize filter from localStorage after tenants load
-  useEffect(() => {
-    if (allOccupiedUnits.size > 0 && !filterInitialized) {
-      try {
-        const saved = localStorage.getItem("redhorn_revenue_filter");
-        if (saved) {
-          const arr = JSON.parse(saved) as string[];
-          if (arr.length > 0) { setFilteredUnits(new Set(arr)); setFilterInitialized(true); return; }
-        }
-      } catch {}
-      setFilteredUnits(allOccupiedUnits);
-      setFilterInitialized(true);
-    }
-  }, [allOccupiedUnits, filterInitialized]);
-
-  const isFiltered = filterInitialized && filteredUnits.size !== allOccupiedUnits.size;
-
-  const handleFilterApply = useCallback((units: Set<string>) => {
-    setFilteredUnits(units);
-    localStorage.setItem("redhorn_revenue_filter", JSON.stringify(Array.from(units)));
-  }, []);
 
   if (!property) {
     return <div className="text-[13px] text-[#a1a1aa] dark:text-[#71717a] py-12 text-center">Loading dashboard data...</div>;
@@ -113,19 +85,10 @@ export default function DashboardPage() {
     dataLabels: { enabled: false },
   };
 
-  // Scale chart data based on filtered units
-  const activeFilterUnits = filterInitialized ? filteredUnits : allOccupiedUnits;
-  const filteredRent = tenants.filter(t => activeFilterUnits.has(t.unit)).reduce((s, t) => s + t.monthlyRent, 0);
-  const filteredElectric = tenants.filter(t => activeFilterUnits.has(t.unit)).reduce((s, t) => s + t.monthlyElectric, 0);
-  const totalRentAll = tenants.filter(t => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")).reduce((s, t) => s + t.monthlyRent, 0);
-  const totalElectricAll = tenants.filter(t => t.status !== "vacant" && t.monthlyElectric > 0 && !t.tenant.includes("Owner")).reduce((s, t) => s + t.monthlyElectric, 0);
-  const rentRatio = totalRentAll > 0 ? filteredRent / totalRentAll : 1;
-  const electricRatio = totalElectricAll > 0 ? filteredElectric / totalElectricAll : 1;
-
   const revenueSeries = [
-    { name: "Rent", data: monthlyRevenue.map(m => Math.round(m.rent * rentRatio)) },
-    { name: "Electric", data: monthlyRevenue.map(m => Math.round(m.electric * electricRatio)) },
-    { name: "CAM", data: monthlyRevenue.map(m => Math.round(m.cam * rentRatio)) },
+    { name: "Rent", data: monthlyRevenue.map(m => Math.round(m.rent)) },
+    { name: "Electric", data: monthlyRevenue.map(m => Math.round(m.electric)) },
+    { name: "CAM", data: monthlyRevenue.map(m => Math.round(m.cam)) },
   ];
 
   const occupancyChartOptions: ApexCharts.ApexOptions = {
@@ -172,42 +135,10 @@ export default function DashboardPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 gap-3 mb-6">
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Revenue Breakdown</p>
-            <div className="flex items-center gap-1.5">
-              {isFiltered && (
-                <button
-                  onClick={() => { setFilteredUnits(allOccupiedUnits); localStorage.removeItem("redhorn_revenue_filter"); }}
-                  className="text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] border border-[#e4e4e7] dark:border-[#3f3f46] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a]"
-                >
-                  Clear Filter
-                </button>
-              )}
-              <button
-                onClick={() => setFilterOpen(true)}
-                className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
-                  isFiltered ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]" : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a]"
-                }`}
-              >
-                <Filter size={12} />
-                {isFiltered ? `${filteredUnits.size} units` : "Filter"}
-              </button>
-            </div>
-          </div>
-          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mb-3">
-            {isFiltered
-              ? `Showing ${filteredUnits.size} of ${allOccupiedUnits.size} units — ${formatCurrency(tenants.filter(t => filteredUnits.has(t.unit)).reduce((s, t) => s + t.monthlyRent, 0))}/mo`
-              : `Last ${monthlyRevenue.length} months by category`}
-          </p>
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-1">Revenue Breakdown</p>
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mb-3">Last {monthlyRevenue.length} months by category</p>
           {monthlyRevenue.length > 0 && <Chart options={revenueChartOptions} series={revenueSeries} type="bar" height={260} />}
         </div>
-
-        <RevenueFilter
-          open={filterOpen}
-          onClose={() => setFilterOpen(false)}
-          selectedUnits={activeFilterUnits}
-          onApply={handleFilterApply}
-        />
       </div>
 
       <LatestInsights propertyId={property._id} />

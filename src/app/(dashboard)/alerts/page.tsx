@@ -97,6 +97,18 @@ function useIsMobile() {
 }
 
 const ARCHIVED_KEY = "redhorn_archived_alerts";
+const HIDDEN_KEY = "redhorn_hidden_handled_alerts";
+const HANDLED_PAGE_SIZE = 10;
+
+function loadHidden(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]")); }
+  catch { return new Set(); }
+}
+function saveHidden(ids: Set<string>) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(ids)));
+}
 
 function loadArchived(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -106,18 +118,6 @@ function loadArchived(): Set<string> {
 function saveArchived(ids: Set<string>) {
   if (typeof window === "undefined") return;
   localStorage.setItem(ARCHIVED_KEY, JSON.stringify(Array.from(ids)));
-}
-
-const CUSTOM_ALERTS_KEY = "redhorn_custom_alerts";
-
-function loadCustomAlerts(): AlertRow[] {
-  if (typeof window === "undefined") return [];
-  try { return JSON.parse(localStorage.getItem(CUSTOM_ALERTS_KEY) || "[]"); }
-  catch { return []; }
-}
-function saveCustomAlerts(alerts: AlertRow[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(CUSTOM_ALERTS_KEY, JSON.stringify(alerts));
 }
 
 export default function AlertsPage() {
@@ -130,55 +130,75 @@ export default function AlertsPage() {
   const updateAlertStatus = useMutation(api.alerts.updateStatus);
   const markFalseFlag = useMutation(api.alerts.markFalseFlag);
   const undoFalseFlag = useMutation(api.alerts.undoFalseFlag);
+  const createAlert = useMutation(api.alerts.create);
+  const updateAlert = useMutation(api.alerts.updateAlert);
+  const removeAlert = useMutation(api.alerts.remove);
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
-  const [customAlerts, setCustomAlerts] = useState<AlertRow[]>([]);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [showAddAlert, setShowAddAlert] = useState(false);
   const [newAlert, setNewAlert] = useState({ unit: "", category: "General", severity: "Warning" as AlertRow["severity"], detail: "" });
   const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const [flagging, setFlagging] = useState<{ row: AlertRow } | null>(null);
+  const [handledPage, setHandledPage] = useState(0);
 
-  useEffect(() => { setArchivedIds(loadArchived()); setCustomAlerts(loadCustomAlerts()); }, []);
+  useEffect(() => { setArchivedIds(loadArchived()); setHiddenIds(loadHidden()); }, []);
 
-  function addAlert() {
-    if (!newAlert.detail.trim()) return;
-    const alert: AlertRow = {
-      id: `custom-${Date.now()}`,
-      unit: newAlert.unit.trim() || "—",
-      tenant: tenants.find((t: any) => t.unit === newAlert.unit.trim())?.tenant || "",
-      building: tenants.find((t: any) => t.unit === newAlert.unit.trim())?.building || "",
-      category: newAlert.category,
-      severity: newAlert.severity,
-      detail: newAlert.detail.trim(),
-      amount: 0,
-      date: new Date().toISOString().slice(0, 10),
-    };
-    const updated = [alert, ...customAlerts];
-    setCustomAlerts(updated);
-    saveCustomAlerts(updated);
+  // User-created alerts now live in Convex with alertType="custom" so they
+  // share the same schema as AI insights — title, body, severity, status,
+  // propertyId, unit, date. localStorage no longer holds alert content; only
+  // the per-browser "hidden from UI" + "archived" state lives there.
+  const customAlerts = useMemo<AlertRow[]>(() => {
+    return (convexAlerts as any[])
+      .filter(a => a.alertType === "custom" && a.propertyId === activeProperty?._id)
+      .map(a => ({
+        id: `custom-${a._id}`,
+        unit: a.unit || "—",
+        tenant: tenants.find((t: any) => t.unit === a.unit)?.tenant || "",
+        building: tenants.find((t: any) => t.unit === a.unit)?.building || "",
+        category: (a.dataContext as any)?.category || "General",
+        severity: (a.severity?.[0]?.toUpperCase() + a.severity?.slice(1)) as AlertRow["severity"] || "Warning",
+        title: a.title,
+        detail: a.body || "",
+        amount: 0,
+        date: (a.date || "").slice(0, 10),
+        convexAlertId: a._id,
+        isAIInsight: false,
+      }));
+  }, [convexAlerts, activeProperty?._id, tenants]);
+
+  async function addAlert() {
+    if (!newAlert.detail.trim() || !activeProperty?._id) return;
+    await createAlert({
+      propertyId: activeProperty._id as any,
+      alertType: "custom",
+      severity: newAlert.severity.toLowerCase(),
+      title: newAlert.detail.trim().slice(0, 120),
+      body: newAlert.detail.trim(),
+      status: "new",
+      unit: newAlert.unit.trim() || undefined,
+      date: new Date().toISOString(),
+      dataContext: { category: newAlert.category },
+    });
     setNewAlert({ unit: "", category: "General", severity: "Warning", detail: "" });
     setShowAddAlert(false);
   }
 
-  function removeCustomAlert(id: string) {
-    const updated = customAlerts.filter(a => a.id !== id);
-    setCustomAlerts(updated);
-    saveCustomAlerts(updated);
+  async function removeCustomAlert(rowId: string) {
+    const convexId = rowId.replace(/^custom-/, "");
+    await removeAlert({ id: convexId as any });
   }
 
-  function saveEditAlert() {
+  async function saveEditAlert() {
     if (!editingAlertId || !newAlert.detail.trim()) return;
-    const updated = customAlerts.map(a => a.id === editingAlertId ? {
-      ...a,
-      unit: newAlert.unit.trim() || "—",
-      tenant: tenants.find((t: any) => t.unit === newAlert.unit.trim())?.tenant || "",
-      building: tenants.find((t: any) => t.unit === newAlert.unit.trim())?.building || "",
-      category: newAlert.category,
-      severity: newAlert.severity,
-      detail: newAlert.detail.trim(),
-    } : a);
-    setCustomAlerts(updated);
-    saveCustomAlerts(updated);
+    const convexId = editingAlertId.replace(/^custom-/, "");
+    await updateAlert({
+      id: convexId as any,
+      title: newAlert.detail.trim().slice(0, 120),
+      body: newAlert.detail.trim(),
+      severity: newAlert.severity.toLowerCase(),
+      unit: newAlert.unit.trim() || undefined,
+    });
     setNewAlert({ unit: "", category: "General", severity: "Warning", detail: "" });
     setShowAddAlert(false);
     setEditingAlertId(null);
@@ -303,10 +323,21 @@ export default function AlertsPage() {
   const allAlerts = [...customAlerts, ...alertData];
   const activeAlerts = allAlerts.filter(a => !archivedIds.has(a.id));
   // Handled = locally archived custom/rule rows + Convex-resolved AI insights.
+  // Hidden ids are filtered out client-side only — the underlying data stays
+  // in Convex so syncs and continuity aren't affected.
   const archivedAlerts = [
     ...allAlerts.filter(a => archivedIds.has(a.id)),
     ...resolvedAIInsights,
-  ];
+  ].filter(a => !hiddenIds.has(a.id));
+  const handledTotalPages = Math.max(1, Math.ceil(archivedAlerts.length / HANDLED_PAGE_SIZE));
+  const handledPageRows = archivedAlerts.slice(handledPage * HANDLED_PAGE_SIZE, (handledPage + 1) * HANDLED_PAGE_SIZE);
+
+  function hideHandled(id: string) {
+    const next = new Set(hiddenIds);
+    next.add(id);
+    setHiddenIds(next);
+    saveHidden(next);
+  }
 
   async function handleMarkCompleted(row: AlertRow) {
     if (row.isAIInsight && row.convexAlertId) {
@@ -417,7 +448,7 @@ export default function AlertsPage() {
           }}
         />
       </div>
-      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] dark:border-[#3f3f46] shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8" style={{ height: "calc(100vh - 280px)", minHeight: 480 }}>
+      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] dark:border-[#3f3f46] shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8" style={{ height: "calc(80vh - 224px)", minHeight: 384 }}>
         <AgGridReact
           ref={gridRef}
           rowData={activeAlerts}
@@ -441,13 +472,17 @@ export default function AlertsPage() {
       <AlertDrawer
         alert={activeAlerts.find(a => a.id === selectedAlertId) ?? null}
         onClose={() => setSelectedAlertId(null)}
-        onSave={(updates) => {
+        onSave={async (updates) => {
           if (!selectedAlertId) return;
-          const isCustom = selectedAlertId.startsWith("custom-");
-          if (!isCustom) return;
-          const updated = customAlerts.map(a => a.id === selectedAlertId ? { ...a, ...updates } : a);
-          setCustomAlerts(updated);
-          saveCustomAlerts(updated);
+          if (!selectedAlertId.startsWith("custom-")) return;
+          const convexId = selectedAlertId.replace(/^custom-/, "");
+          await updateAlert({
+            id: convexId as any,
+            title: updates.detail?.slice(0, 120),
+            body: updates.detail,
+            severity: updates.severity?.toLowerCase(),
+            unit: updates.unit,
+          });
         }}
         onMarkCompleted={handleMarkCompleted}
         onMarkFalseFlag={(row) => setFlagging({ row })}
@@ -464,10 +499,27 @@ export default function AlertsPage() {
       {/* Archived / Handled */}
       {archivedAlerts.length > 0 && (
         <div className="mb-8">
-          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">Handled ({archivedAlerts.length})</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Handled ({archivedAlerts.length})</p>
+            {handledTotalPages > 1 && (
+              <div className="flex items-center gap-2 text-[11px] text-[#71717a] dark:text-[#a1a1aa]">
+                <button
+                  onClick={() => setHandledPage(p => Math.max(0, p - 1))}
+                  disabled={handledPage === 0}
+                  className="px-2 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded hover:bg-white dark:hover:bg-[#18181b] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                >‹</button>
+                <span>Page {Math.min(handledPage, handledTotalPages - 1) + 1} of {handledTotalPages}</span>
+                <button
+                  onClick={() => setHandledPage(p => Math.min(handledTotalPages - 1, p + 1))}
+                  disabled={handledPage >= handledTotalPages - 1}
+                  className="px-2 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded hover:bg-white dark:hover:bg-[#18181b] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                >›</button>
+              </div>
+            )}
+          </div>
           <div className="space-y-0 border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
-            {archivedAlerts.map(a => (
-              <div key={a.id} className="flex items-center gap-3 px-3 py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 bg-[#fafafa] dark:bg-[#27272a]">
+            {handledPageRows.map(a => (
+              <div key={a.id} className="group flex items-center gap-3 px-3 py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 bg-[#fafafa] dark:bg-[#27272a]">
                 <span className={`text-[11px] font-medium ${a.resolution === "false_flag" ? "text-[#d97706]" : "text-[#16a34a]"}`}>
                   {a.resolution === "false_flag" ? "⚑" : "✓"}
                 </span>
@@ -486,6 +538,11 @@ export default function AlertsPage() {
                 <button onClick={() => handleRestore(a)}
                   className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded hover:bg-white dark:hover:bg-[#18181b] transition-colors flex-shrink-0">
                   Restore
+                </button>
+                <button onClick={() => hideHandled(a.id)}
+                  title="Delete (UI only — backend record is preserved)"
+                  className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] dark:hover:text-[#dc2626] cursor-pointer px-1.5 py-0.5 rounded transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100">
+                  Delete
                 </button>
               </div>
             ))}
