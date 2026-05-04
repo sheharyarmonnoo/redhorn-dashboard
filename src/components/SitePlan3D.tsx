@@ -144,12 +144,14 @@ export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: T
         ) : (
           buildingGroups.map(([building, units]) => (
             <div key={building} className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4">
-              <BuildingHeader
-                label={building === "—" ? "Unassigned" : `Building ${building}`}
-                sub={`${units.length} unit${units.length === 1 ? "" : "s"}`}
-                occ={units.filter(u => u.status !== "vacant").length}
-                vac={units.filter(u => u.status === "vacant").length}
-              />
+              {building !== "—" && (
+                <BuildingHeader
+                  label={`Building ${building}`}
+                  sub={`${units.length} unit${units.length === 1 ? "" : "s"}`}
+                  occ={units.filter(u => u.status !== "vacant").length}
+                  vac={units.filter(u => u.status === "vacant").length}
+                />
+              )}
               <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-1.5">
                 {units.map(t => (
                   <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />

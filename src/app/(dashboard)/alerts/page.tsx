@@ -2,10 +2,10 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef } from "ag-grid-community";
-import { useActiveProperty, useTenants, useActivityLog, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import PageHeader from "@/components/PageHeader";
-import { Zap, DollarSign, CalendarClock, AlertTriangle, Clock } from "lucide-react";
+import { Zap, DollarSign, CalendarClock, AlertTriangle } from "lucide-react";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -89,7 +89,6 @@ function saveCustomAlerts(alerts: AlertRow[]) {
 
 export default function AlertsPage() {
   const gridRef = useRef<AgGridReact>(null);
-  const historyGridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const activeProperty = useActiveProperty();
   const tenants = useTenants(activeProperty?._id);
@@ -265,48 +264,6 @@ export default function AlertsPage() {
   }), []);
 
   const persistence = useAgGridPersistence({ storageKey: "redhorn_grid_alerts" });
-  const historyPersistence = useAgGridPersistence({ storageKey: "redhorn_grid_alert_history" });
-
-  // Pull alert-relevant activity from the real audit log so the history reflects the live system.
-  const activityLog = useActivityLog(100) as any[];
-  const alertHistory = useMemo(() => {
-    const keepTypes = new Set(["alert_created", "alert_resolved", "status_change", "sync"]);
-    const typeToLabel: Record<string, string> = {
-      alert_created: "Alert",
-      alert_resolved: "Action",
-      status_change: "Action",
-      sync: "System",
-    };
-    return activityLog
-      .filter((a: any) => keepTypes.has(a.type))
-      .slice(0, 50)
-      .map((a: any) => ({
-        date: (a.createdAt || "").slice(0, 10),
-        message: a.description,
-        type: typeToLabel[a.type] || "System",
-        category: a.type.replace("_", " "),
-      }));
-  }, [activityLog]);
-
-  const historyColDefs = useMemo<ColDef[]>(() => {
-    const typeRenderer = (p: { value: string }) => {
-      const c: Record<string, string> = { Alert: "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300", Action: "bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300", System: "bg-gray-100 dark:bg-[#27272a] text-gray-500 dark:text-[#a1a1aa]" };
-      return <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${c[p.value] || ""}`}>{p.value}</span>;
-    };
-    if (isMobile) {
-      return [
-        { field: "date", headerName: "Date", width: 90, sort: "desc" },
-        { field: "type", headerName: "Type", width: 75, cellRenderer: typeRenderer },
-        { field: "message", headerName: "Description", minWidth: 180, flex: 1 },
-      ];
-    }
-    return [
-      { field: "date", headerName: "Date", width: 110, sort: "desc" },
-      { field: "type", headerName: "Type", width: 90, cellRenderer: typeRenderer },
-      { field: "category", headerName: "Category", width: 100 },
-      { field: "message", headerName: "Description", minWidth: 300, flex: 1 },
-    ];
-  }, [isMobile]);
 
   const criticalCount = activeAlerts.filter(a => a.severity === "Critical").length;
   const warningCount = activeAlerts.filter(a => a.severity === "Warning").length;
@@ -375,7 +332,7 @@ export default function AlertsPage() {
           }}
         />
       </div>
-      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] dark:border-[#3f3f46] shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8" style={{ height: 340 }}>
+      <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] dark:border-[#3f3f46] shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8" style={{ height: "calc(100vh - 280px)", minHeight: 480 }}>
         <AgGridReact
           ref={gridRef}
           rowData={activeAlerts}
@@ -414,33 +371,6 @@ export default function AlertsPage() {
         </div>
       )}
 
-      {/* Alert History */}
-      <div className="flex items-center gap-2 mb-3">
-        <Clock size={16} className="text-[#a1a1aa] dark:text-[#71717a]" />
-        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Alert History Log</p>
-      </div>
-      {alertHistory.length === 0 ? (
-        <div className="w-full border border-dashed border-[#e4e4e7] dark:border-[#3f3f46] rounded p-8 text-center bg-white dark:bg-[#18181b]">
-          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">No alert history yet.</p>
-          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mt-1">Created, resolved, and sync events will appear here as the system runs.</p>
-        </div>
-      ) : (
-        <div className="ag-theme-alpine w-full rounded-2xl overflow-hidden border border-[#e8eaef] dark:border-[#3f3f46] shadow-[0_1px_3px_rgba(0,0,0,0.04)]" style={{ height: 340 }}>
-          <AgGridReact
-            ref={historyGridRef}
-            rowData={alertHistory}
-            columnDefs={historyColDefs}
-            defaultColDef={defaultColDef}
-            onGridReady={historyPersistence.onGridReady}
-            onColumnResized={historyPersistence.onColumnResized}
-            onColumnMoved={historyPersistence.onColumnMoved}
-            onColumnVisible={historyPersistence.onColumnVisible}
-            onColumnPinned={historyPersistence.onColumnPinned}
-            onSortChanged={historyPersistence.onSortChanged}
-            animateRows={true}
-          />
-        </div>
-      )}
     </div>
   );
 }
