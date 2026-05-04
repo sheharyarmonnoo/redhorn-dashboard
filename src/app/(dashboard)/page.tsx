@@ -5,7 +5,7 @@ import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
 import RevenueFilter from "@/components/RevenueFilter";
 import ActionItems from "@/components/ActionItems";
-import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, formatCurrency, useDashboardLoading, isExpiringWithin } from "@/hooks/useConvexData";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
@@ -20,13 +20,14 @@ export default function DashboardPage() {
   const tenants = useTenants(property?._id);
   const units = useUnits(property?._id);
   const monthlyRevenue = useMonthlyRevenue(property?._id);
+  const loading = useDashboardLoading(property?._id);
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
   const [kpiDrawer, setKpiDrawer] = useState<string | null>(null);
 
-  if (!property) {
-    return <div className="text-[13px] text-[#a1a1aa] dark:text-[#71717a] py-12 text-center">Loading dashboard data...</div>;
+  if (!property || loading) {
+    return <DashboardSkeleton />;
   }
 
   const occupied = tenants.filter(t => t.status !== "vacant");
@@ -46,7 +47,11 @@ export default function DashboardPage() {
   const latestRollup = monthlyRevenue.length > 0 ? monthlyRevenue[monthlyRevenue.length - 1] : null;
   const totalMonthlyRent = latestRollup && latestRollup.total > 0 ? latestRollup.total : tenantRentSum;
   const totalPastDue = tenants.reduce((sum, t) => sum + t.pastDueAmount, 0);
-  const expiringCount = tenants.filter(t => t.status === "expiring_soon").length;
+  // Date-based filter — don't trust tenant.status alone since the synced
+  // status field can lag behind reality (it's only refreshed at ingest, and
+  // the rent-roll panel doesn't always set "expiring_soon" even when the
+  // lease term we now pull from the Lease Ledger crosses the 90-day window).
+  const expiringCount = tenants.filter(t => t.status !== "vacant" && isExpiringWithin(t.leaseTo, 90)).length;
 
   // Generate alerts from tenant data
   const today = new Date().toISOString().slice(0, 10);
@@ -644,4 +649,44 @@ function formatRelativeTime(ts: number): string {
   const d = Math.floor(hr / 24);
   if (d < 7) return `${d}d ago`;
   return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function DashboardSkeleton() {
+  return (
+    <div>
+      <div className="rh-progress-bar" aria-hidden="true">
+        <div className="rh-progress-bar-inner" />
+      </div>
+      <div className="space-y-3 animate-pulse">
+        <div className="h-7 w-48 bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+        <div className="h-4 w-64 bg-[#f4f4f5] dark:bg-[#27272a] rounded mb-6" />
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 mb-6">
+          {[0, 1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
+              <div className="h-3 w-20 bg-[#f4f4f5] dark:bg-[#27272a] rounded mb-3" />
+              <div className="h-7 w-24 bg-[#f4f4f5] dark:bg-[#27272a] rounded mb-2" />
+              <div className="h-2 w-full bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="h-72 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded mb-6 p-4">
+          <div className="h-3 w-36 bg-[#f4f4f5] dark:bg-[#27272a] rounded mb-2" />
+          <div className="h-3 w-48 bg-[#f4f4f5] dark:bg-[#27272a] rounded mb-6" />
+          <div className="flex items-end gap-2 h-40">
+            {[40, 65, 50, 80, 70, 90, 55].map((h, i) => (
+              <div key={i} className="flex-1 bg-[#f4f4f5] dark:bg-[#27272a] rounded-t" style={{ height: `${h}%` }} />
+            ))}
+          </div>
+        </div>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 mb-3">
+          <div className="h-3 w-20 bg-[#f4f4f5] dark:bg-[#27272a] rounded mb-3" />
+          <div className="space-y-2">
+            <div className="h-3 w-full bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+            <div className="h-3 w-11/12 bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+            <div className="h-3 w-10/12 bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

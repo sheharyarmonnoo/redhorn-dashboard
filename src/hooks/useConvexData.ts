@@ -82,6 +82,41 @@ export function useMonthlyRevenue(propertyId: string | undefined) {
   return revenue ?? [];
 }
 
+// True while any of the dashboard's primary queries are still streaming in.
+// Convex deduplicates identical queries from the same client so calling these
+// here in addition to the individual hooks is essentially free at runtime.
+export function useDashboardLoading(propertyId: string | undefined) {
+  const tenants = useQuery(
+    api.tenants.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  const units = useQuery(
+    api.units.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  const revenue = useQuery(
+    api.monthlyRevenue.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  if (!propertyId) return true;
+  return tenants === undefined || units === undefined || revenue === undefined;
+}
+
+// Pure helper — does this lease end within the next N days (default 90)?
+// Used in both the KPI count on the dashboard and the drawer detail so the
+// two never disagree. Range is inclusive of today, exclusive of holdovers
+// (already-past lease ends).
+export function isExpiringWithin(leaseTo: string | undefined, days = 90): boolean {
+  if (!leaseTo) return false;
+  const lease = new Date(leaseTo);
+  if (Number.isNaN(lease.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() + days);
+  return lease >= today && lease <= cutoff;
+}
+
 // ===== DEALS =====
 
 export function useDeals() {

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, formatCurrency, isExpiringWithin } from "@/hooks/useConvexData";
 
 function useKpiData() {
   const property = useActiveProperty();
@@ -202,7 +202,7 @@ function ElectricDetail() {
 
 function ExpiringDetail() {
   const { tenants } = useKpiData();
-  const expiring = tenants.filter((t: any) => t.status === "expiring_soon");
+  const expiring = tenants.filter((t: any) => t.status !== "vacant" && isExpiringWithin(t.leaseTo, 90));
   const totalRent = expiring.reduce((s: number, t: any) => s + t.monthlyRent, 0);
   return (
     <div className="space-y-5">
