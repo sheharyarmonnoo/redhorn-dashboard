@@ -1,6 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
+import { useMutation } from "convex/react";
+import { useUser } from "@clerk/nextjs";
+import { api } from "../../convex/_generated/api";
 import { useUnitNotes, useTenantMutations, formatCurrency } from "@/hooks/useConvexData";
 
 interface Props {
@@ -23,6 +26,8 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
     tenant?.unit
   );
   const { updateElectricPosted } = useTenantMutations();
+  const setOverride = useMutation(api.tenantOverrides.setOverride);
+  const { user } = useUser();
 
   useEffect(() => {
     if (tenantProp) {
@@ -179,6 +184,24 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
                 </div>
               )}
 
+              {/* Status toggle — Current ↔ Past Due (manual). Expiring is
+                  read-only, derived from leaseTo (set during Yardi ingest if
+                  the lease ends within 90 days). User overrides persist
+                  across syncs via tenantOverrides. */}
+              <StatusToggle
+                tenant={tenant}
+                onSet={async (next) => {
+                  if (!tenant.propertyId || !tenant.unit) return;
+                  await setOverride({
+                    propertyId: tenant.propertyId,
+                    unit: tenant.unit,
+                    fields: { status: next },
+                    updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
+                  });
+                  onUpdated?.();
+                }}
+              />
+
               {/* Past Due */}
               {tenant.pastDueAmount > 0 && (
                 <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded p-3">
@@ -291,6 +314,67 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
 
         </div>
       </div>
+    </div>
+  );
+}
+
+function StatusToggle({ tenant, onSet }: {
+  tenant: any;
+  onSet: (next: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const status = (tenant.status as string) || "current";
+  const isExpiring = status === "expiring_soon";
+  // We let the user toggle Current ↔ Past Due. Expiring shows as a passive
+  // chip when the lease end date triggered it during ingest — clicking it
+  // doesn't make sense (the data, not the user, decides expiration).
+  const opts = [
+    { value: "current", label: "Current" },
+    { value: "past_due", label: "Past Due" },
+  ];
+
+  async function setStatus(next: string) {
+    if (busy || status === next) return;
+    setBusy(true);
+    try { await onSet(next); } finally { setBusy(false); }
+  }
+
+  return (
+    <div>
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Status</p>
+      <div className="flex flex-wrap gap-1.5">
+        {opts.map(o => {
+          const active = status === o.value;
+          const isPastDue = o.value === "past_due";
+          return (
+            <button
+              key={o.value}
+              onClick={() => setStatus(o.value)}
+              disabled={busy}
+              className={`text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors disabled:opacity-50 ${
+                active
+                  ? (isPastDue ? "bg-[#dc2626] text-white" : "bg-[#16a34a] text-white")
+                  : "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa] hover:bg-[#e4e4e7] dark:hover:bg-[#3f3f46]"
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+        <span
+          title="Set automatically when the lease ends within 90 days"
+          className={`text-[11px] font-medium px-2.5 py-1 rounded cursor-default border ${
+            isExpiring
+              ? "bg-[#2563eb] text-white border-[#2563eb]"
+              : "bg-transparent text-[#a1a1aa] dark:text-[#52525b] border-[#e4e4e7] dark:border-[#3f3f46]"
+          }`}
+        >
+          Expiring
+        </span>
+      </div>
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">
+        Current ↔ Past Due is manual. Expiring is auto-set from lease end date.
+      </p>
     </div>
   );
 }
