@@ -1,15 +1,49 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
+// Apply manual overrides on top of a synced tenant row. Only defined override
+// fields win; the synced value falls through otherwise. Adds `hasOverride`
+// + `overrideFields` so the UI can show a "modified" badge and revert.
+function mergeOverride(tenant: any, override: any): any {
+  if (!override) return { ...tenant, hasOverride: false };
+  const merged: any = { ...tenant };
+  const applied: string[] = [];
+  const fieldKeys = [
+    "monthlyRent", "monthlyElectric", "securityDeposit",
+    "leaseFrom", "leaseTo", "status", "notes",
+    "pastDueAmount", "delinquencyStage",
+  ];
+  for (const k of fieldKeys) {
+    if (override[k] !== undefined && override[k] !== null) {
+      merged[k] = override[k];
+      applied.push(k);
+    }
+  }
+  return {
+    ...merged,
+    hasOverride: applied.length > 0,
+    overrideFields: applied,
+    overrideUpdatedAt: override.updatedAt,
+    overrideUpdatedBy: override.updatedBy,
+  };
+}
+
 export const listByProperty = query({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const tenants = await ctx.db
       .query("tenants")
       .withIndex("by_property_latest", (q) =>
         q.eq("propertyId", args.propertyId).eq("isLatest", true)
       )
       .collect();
+    const overrides = await ctx.db
+      .query("tenant_overrides")
+      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const byUnit: Record<string, any> = {};
+    for (const o of overrides) byUnit[(o.unit || "").trim().toLowerCase()] = o;
+    return tenants.map((t) => mergeOverride(t, byUnit[(t.unit || "").trim().toLowerCase()]));
   },
 });
 
@@ -20,15 +54,22 @@ export const listAll = query({
       .filter((q) => q.eq(q.field("isLatest"), true))
       .collect();
     const properties = await ctx.db.query("properties").collect();
+    const overrides = await ctx.db.query("tenant_overrides").collect();
     const propMap: Record<string, { name: string; code: string }> = {};
     for (const p of properties) {
       propMap[p._id] = { name: p.name, code: p.code };
     }
-    return tenants.map((t) => ({
-      ...t,
-      propertyName: propMap[t.propertyId]?.name || "Unknown",
-      propertyCode: propMap[t.propertyId]?.code || "",
-    }));
+    const overrideKey = (propId: string, unit: string) => `${propId}:${(unit || "").trim().toLowerCase()}`;
+    const overrideMap: Record<string, any> = {};
+    for (const o of overrides) overrideMap[overrideKey(o.propertyId, o.unit)] = o;
+    return tenants.map((t) => {
+      const merged = mergeOverride(t, overrideMap[overrideKey(t.propertyId, t.unit)]);
+      return {
+        ...merged,
+        propertyName: propMap[t.propertyId]?.name || "Unknown",
+        propertyCode: propMap[t.propertyId]?.code || "",
+      };
+    });
   },
 });
 

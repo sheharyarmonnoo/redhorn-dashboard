@@ -4,7 +4,7 @@ import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import { useAllTenants, formatCurrency } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
-import UnitDetailPanel from "@/components/UnitDetailPanel";
+import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
 import { Download } from "lucide-react";
 
@@ -55,10 +55,17 @@ function useIsMobile() {
 }
 
 export default function RentRollPage() {
-  const [selected, setSelected] = useState<any>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const tenants = useAllTenants();
+
+  // Re-resolve the selected tenant from the live list each render so the
+  // drawer reflects the latest override state from Convex without a re-click.
+  const selected = useMemo(() => {
+    if (!selectedKey) return null;
+    return tenants.find((t: any) => `${t.propertyCode || "x"}-${t.unit}` === selectedKey) || null;
+  }, [tenants, selectedKey]);
 
   const columnDefs = useMemo<ColDef[]>(() => {
     const unitWidth = isMobile ? 90 : 120;
@@ -109,7 +116,8 @@ export default function RentRollPage() {
     // Ignore clicks on group rows — only open the detail panel for leaf tenant rows
     if (event.node?.group) return;
     if (!event.data) return;
-    setSelected(event.data);
+    const key = `${event.data.propertyCode || "x"}-${event.data.unit}`;
+    setSelectedKey(key);
   }, []);
 
   const totalRent = tenants.filter((t: any) => t.status !== "vacant").reduce((s: number, t: any) => s + t.monthlyRent, 0);
@@ -183,7 +191,7 @@ export default function RentRollPage() {
         />
       </div>
 
-      <UnitDetailPanel tenant={selected} onClose={() => setSelected(null)} />
+      <RentRollDrawer tenant={selected} onClose={() => setSelectedKey(null)} />
     </div>
   );
 }

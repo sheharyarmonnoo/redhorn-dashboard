@@ -14,6 +14,29 @@ export default defineSchema({
     isActive: v.boolean(),
   }).index("by_code", ["code"]),
 
+  // ===== TENANT OVERRIDES =====
+  // Manual edits persist across syncs. Keyed by propertyId + unit so they
+  // survive tenant row churn (sync replaces tenant docs each time). Each
+  // override field is optional; only set fields apply. "Revert to pipeline"
+  // = delete the override row for that unit.
+  tenant_overrides: defineTable({
+    propertyId: v.id("properties"),
+    unit: v.string(),
+    monthlyRent: v.optional(v.number()),
+    monthlyElectric: v.optional(v.number()),
+    securityDeposit: v.optional(v.number()),
+    leaseFrom: v.optional(v.string()),
+    leaseTo: v.optional(v.string()),
+    status: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    pastDueAmount: v.optional(v.number()),
+    delinquencyStage: v.optional(v.string()),
+    updatedAt: v.string(),
+    updatedBy: v.optional(v.string()),
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_property_unit", ["propertyId", "unit"]),
+
   // ===== UNITS (physical attributes) =====
   units: defineTable({
     propertyId: v.id("properties"),
