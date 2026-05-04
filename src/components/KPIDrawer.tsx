@@ -109,8 +109,10 @@ function OccupancyDetail() {
 
 function PastDueDetail() {
   const { tenants } = useKpiData();
-  const pastDue = tenants.filter((t: any) => t.pastDueAmount > 0);
-  const total = pastDue.reduce((s: number, t: any) => s + t.pastDueAmount, 0);
+  // Status-driven so the site plan drawer's manual Past Due toggle flows
+  // through here without needing the synced pastDueAmount to be non-zero.
+  const pastDue = tenants.filter((t: any) => t.status === "past_due");
+  const total = pastDue.reduce((s: number, t: any) => s + (t.pastDueAmount || 0), 0);
   return (
     <div className="space-y-5">
       <div>

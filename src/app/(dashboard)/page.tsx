@@ -46,7 +46,12 @@ export default function DashboardPage() {
   const tenantRentSum = occupied.reduce((sum, t) => sum + t.monthlyRent, 0);
   const latestRollup = monthlyRevenue.length > 0 ? monthlyRevenue[monthlyRevenue.length - 1] : null;
   const totalMonthlyRent = latestRollup && latestRollup.total > 0 ? latestRollup.total : tenantRentSum;
-  const totalPastDue = tenants.reduce((sum, t) => sum + t.pastDueAmount, 0);
+  // Past-due is now driven by the tenant status field (overrides flow from
+  // the site plan drawer's status toggle through tenantOverrides). Count
+  // matches the Vacant card pattern — number of units in that state.
+  const pastDueTenants = tenants.filter(t => t.status === "past_due");
+  const pastDueCount = pastDueTenants.length;
+  const pastDueAmount = pastDueTenants.reduce((sum, t) => sum + (t.pastDueAmount || 0), 0);
   // Date-based filter — don't trust tenant.status alone since the synced
   // status field can lag behind reality (it's only refreshed at ingest, and
   // the rent-roll panel doesn't always set "expiring_soon" even when the
@@ -132,7 +137,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 mb-6">
         <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} sparkline={monthlyRevenue.map(m => m.total)} onClick={() => setKpiDrawer("revenue")} />
         <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${totalUnits} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
-        <KPICard title="Past Due" value={formatCurrency(totalPastDue)} color={totalPastDue > 0 ? "text-[#dc2626]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("pastdue")} />
+        <KPICard title="Past Due" value={String(pastDueCount)} subtitle={pastDueAmount > 0 ? `${formatCurrency(pastDueAmount)} owed` : `${pastDueCount === 1 ? "unit" : "units"} past due`} color={pastDueCount > 0 ? "text-[#dc2626]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("pastdue")} />
         <KPICard title="Vacant" value={String(vacantUnits.length)} subtitle={`${totalVacantSqft.toLocaleString()} SF`} onClick={() => setKpiDrawer("vacant")} />
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
       </div>
