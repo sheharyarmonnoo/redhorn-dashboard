@@ -214,6 +214,20 @@ body {
   animation: rh-row-in 240ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
+/* List rows leave — fade + collapse vertically. Pair with a state flag
+   on the row so we can play this before the data refresh removes it.
+   max-height drops to 0 to avoid the snap when the row disappears. */
+@keyframes rh-row-leave {
+  0%   { opacity: 1; transform: translateX(0); max-height: 200px; padding-top: var(--rh-row-pt, 0); padding-bottom: var(--rh-row-pb, 0); }
+  60%  { opacity: 0; transform: translateX(8px); }
+  100% { opacity: 0; transform: translateX(8px); max-height: 0; padding-top: 0; padding-bottom: 0; margin: 0; border: 0; }
+}
+.rh-row-leave {
+  animation: rh-row-leave 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 /* Hover lift — tiny translate + ring, no shadow shift to keep it crisp. */
 .rh-hover-lift {
   transition: transform 160ms cubic-bezier(0.32, 0.72, 0, 1),

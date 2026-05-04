@@ -4,6 +4,9 @@ import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef } from "ag-grid-community";
 import { useActiveProperty, useTenants, useAlerts, formatCurrency } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
+import { useMutation } from "convex/react";
+import { useUser } from "@clerk/nextjs";
+import { api } from "../../../../convex/_generated/api";
 import PageHeader from "@/components/PageHeader";
 import { Zap, DollarSign, CalendarClock, AlertTriangle } from "lucide-react";
 
@@ -20,6 +23,12 @@ interface AlertRow {
   detail: string;
   amount: number;
   date: string;
+  // AI insight integration: when set, this row is backed by a Convex alert and
+  // the action buttons hit Convex mutations instead of the localStorage archive.
+  convexAlertId?: string;
+  isAIInsight?: boolean;
+  resolution?: "resolved" | "false_flag"; // populated for AI insights already actioned
+  falseFlagReason?: string;
 }
 
 function SeverityCellRenderer(props: { value: string }) {
@@ -117,12 +126,17 @@ export default function AlertsPage() {
   const activeProperty = useActiveProperty();
   const tenants = useTenants(activeProperty?._id);
   const { alerts: convexAlerts } = useAlerts();
+  const { user } = useUser();
+  const updateAlertStatus = useMutation(api.alerts.updateStatus);
+  const markFalseFlag = useMutation(api.alerts.markFalseFlag);
+  const undoFalseFlag = useMutation(api.alerts.undoFalseFlag);
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
   const [customAlerts, setCustomAlerts] = useState<AlertRow[]>([]);
   const [showAddAlert, setShowAddAlert] = useState(false);
   const [newAlert, setNewAlert] = useState({ unit: "", category: "General", severity: "Warning" as AlertRow["severity"], detail: "" });
   const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
+  const [flagging, setFlagging] = useState<{ row: AlertRow } | null>(null);
 
   useEffect(() => { setArchivedIds(loadArchived()); setCustomAlerts(loadCustomAlerts()); }, []);
 
@@ -247,15 +261,89 @@ export default function AlertsPage() {
           detail: a.body || "",
           amount: 0,
           date: (a.date || "").slice(0, 10),
+          convexAlertId: a._id,
+          isAIInsight: true,
         });
       });
 
     return alerts;
   }, [tenants, convexAlerts, activeProperty?._id]);
 
+  // AI insights resolved or false-flagged via Convex (e.g. from the dashboard's
+  // Mark as Completed action) — surface them in the Handled section so the
+  // alerts page mirrors the dashboard's state without a refresh.
+  const resolvedAIInsights = useMemo<AlertRow[]>(() => {
+    const sevTitle: Record<string, AlertRow["severity"]> = {
+      critical: "Critical",
+      warning: "Warning",
+      info: "Info",
+    };
+    return (convexAlerts as any[])
+      .filter(a => a.alertType === "income_insight"
+        && a.propertyId === activeProperty?._id
+        && (a.status === "resolved" || a.status === "false_flag"))
+      .map(a => ({
+        id: `aii-${a._id}`,
+        unit: a.unit || "—",
+        tenant: a.dataContext?.lineItem || "",
+        building: "",
+        category: "AI Insight",
+        severity: sevTitle[a.severity] || "Warning",
+        title: a.title || "",
+        detail: a.body || "",
+        amount: 0,
+        date: (a.date || "").slice(0, 10),
+        convexAlertId: a._id,
+        isAIInsight: true,
+        resolution: a.status as "resolved" | "false_flag",
+        falseFlagReason: a.dataContext?.falseFlagReason,
+      }));
+  }, [convexAlerts, activeProperty?._id]);
+
   const allAlerts = [...customAlerts, ...alertData];
   const activeAlerts = allAlerts.filter(a => !archivedIds.has(a.id));
-  const archivedAlerts = allAlerts.filter(a => archivedIds.has(a.id));
+  // Handled = locally archived custom/rule rows + Convex-resolved AI insights.
+  const archivedAlerts = [
+    ...allAlerts.filter(a => archivedIds.has(a.id)),
+    ...resolvedAIInsights,
+  ];
+
+  async function handleMarkCompleted(row: AlertRow) {
+    if (row.isAIInsight && row.convexAlertId) {
+      await updateAlertStatus({
+        id: row.convexAlertId as any,
+        status: "resolved",
+        resolvedBy: user?.fullName || user?.firstName || "User",
+      });
+    } else {
+      archiveAlert(row.id);
+    }
+    setSelectedAlertId(null);
+  }
+
+  async function handleSubmitFalseFlag(reason: string) {
+    if (!flagging) return;
+    const row = flagging.row;
+    if (row.isAIInsight && row.convexAlertId) {
+      await markFalseFlag({
+        id: row.convexAlertId as any,
+        reason: reason.trim(),
+        markedBy: user?.fullName || user?.firstName || "User",
+      });
+    }
+    setFlagging(null);
+    setSelectedAlertId(null);
+  }
+
+  async function handleRestore(row: AlertRow) {
+    if (row.isAIInsight && row.convexAlertId) {
+      // undoFalseFlag also clears resolved status (sets back to "new") and
+      // strips any falseFlagReason — universal restore for AI insights.
+      await undoFalseFlag({ id: row.convexAlertId as any });
+    } else {
+      restoreAlert(row.id);
+    }
+  }
 
   function RestoreCell(props: { data: AlertRow }) {
     return (
@@ -361,12 +449,17 @@ export default function AlertsPage() {
           setCustomAlerts(updated);
           saveCustomAlerts(updated);
         }}
-        onMarkHandled={() => {
-          if (!selectedAlertId) return;
-          archiveAlert(selectedAlertId);
-          setSelectedAlertId(null);
-        }}
+        onMarkCompleted={handleMarkCompleted}
+        onMarkFalseFlag={(row) => setFlagging({ row })}
       />
+
+      {flagging && (
+        <FalseFlagModal
+          title={flagging.row.title || flagging.row.detail.slice(0, 80) || "this finding"}
+          onCancel={() => setFlagging(null)}
+          onSubmit={handleSubmitFalseFlag}
+        />
+      )}
 
       {/* Archived / Handled */}
       {archivedAlerts.length > 0 && (
@@ -375,10 +468,22 @@ export default function AlertsPage() {
           <div className="space-y-0 border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
             {archivedAlerts.map(a => (
               <div key={a.id} className="flex items-center gap-3 px-3 py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 bg-[#fafafa] dark:bg-[#27272a]">
-                <span className="text-[11px] text-[#16a34a] font-medium">✓</span>
+                <span className={`text-[11px] font-medium ${a.resolution === "false_flag" ? "text-[#d97706]" : "text-[#16a34a]"}`}>
+                  {a.resolution === "false_flag" ? "⚑" : "✓"}
+                </span>
                 <span className="text-[12px] font-medium text-[#71717a] dark:text-[#a1a1aa] w-14 flex-shrink-0">{a.unit}</span>
-                <p className="flex-1 text-[12px] text-[#a1a1aa] dark:text-[#71717a] line-through truncate">{a.detail}</p>
-                <button onClick={() => restoreAlert(a.id)}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a] line-through truncate">{a.title || a.detail}</p>
+                  {a.falseFlagReason && (
+                    <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] italic truncate mt-0.5">"{a.falseFlagReason}"</p>
+                  )}
+                </div>
+                {a.resolution && (
+                  <span className="text-[9px] uppercase tracking-wide font-medium text-[#a1a1aa] dark:text-[#71717a] flex-shrink-0">
+                    {a.resolution === "false_flag" ? "false flag" : "completed"}
+                  </span>
+                )}
+                <button onClick={() => handleRestore(a)}
                   className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer px-2 py-0.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded hover:bg-white dark:hover:bg-[#18181b] transition-colors flex-shrink-0">
                   Restore
                 </button>
@@ -490,12 +595,13 @@ function AlertModal({
 }
 
 function AlertDrawer({
-  alert: alertProp, onClose, onSave, onMarkHandled,
+  alert: alertProp, onClose, onSave, onMarkCompleted, onMarkFalseFlag,
 }: {
   alert: AlertRow | null;
   onClose: () => void;
   onSave: (updates: Partial<AlertRow>) => void;
-  onMarkHandled: () => void;
+  onMarkCompleted: (row: AlertRow) => void | Promise<void>;
+  onMarkFalseFlag: (row: AlertRow) => void;
 }) {
   const [cached, setCached] = useState<AlertRow | null>(alertProp);
   const [closing, setClosing] = useState(false);
@@ -619,20 +725,37 @@ function AlertDrawer({
             </div>
           </div>
 
-          {!isCustom && (
+          {!isCustom && !alert.isAIInsight && (
             <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] italic leading-relaxed">
-              This alert is auto-generated from sync data. To suppress it, use "Mark as handled". The system will regenerate it on the next sync if the underlying condition still applies.
+              This alert is auto-generated from sync data. Marking it as completed archives it locally; the system will regenerate it on the next sync if the underlying condition still applies.
+            </p>
+          )}
+          {alert.isAIInsight && (
+            <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] italic leading-relaxed">
+              <strong className="not-italic">Mark as Completed</strong> — addressed; resolves the finding.
+              {" "}
+              <strong className="not-italic">Mark as False Flag</strong> — not actually an issue; suppresses the same pattern in the next sync's prompt.
             </p>
           )}
         </div>
 
         <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46] sticky bottom-0 bg-white dark:bg-[#18181b]">
-          <button
-            onClick={onMarkHandled}
-            className="text-[12px] font-medium bg-[#16a34a] text-white hover:bg-[#15803d] px-3 py-1.5 rounded cursor-pointer"
-          >
-            Mark as handled
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onMarkCompleted(alert)}
+              className="text-[12px] font-medium bg-[#16a34a] text-white hover:bg-[#15803d] px-3 py-1.5 rounded cursor-pointer"
+            >
+              Mark as Completed
+            </button>
+            {alert.isAIInsight && (
+              <button
+                onClick={() => onMarkFalseFlag(alert)}
+                className="text-[12px] font-medium border border-[#d97706] text-[#d97706] hover:bg-[#fffbeb] dark:hover:bg-[#451a03] px-3 py-1.5 rounded cursor-pointer"
+              >
+                Mark as False Flag
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
@@ -650,6 +773,68 @@ function AlertDrawer({
               </button>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FalseFlagModal({ title, onCancel, onSubmit }: {
+  title: string;
+  onCancel: () => void;
+  onSubmit: (reason: string) => void | Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit() {
+    if (!reason.trim() || submitting) return;
+    setSubmitting(true);
+    try { await onSubmit(reason); } finally { setSubmitting(false); }
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") onCancel();
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 p-4 rh-backdrop"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg shadow-xl w-full max-w-md p-5 rh-modal"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-1">Mark as False Flag</p>
+        <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mb-3 truncate">"{title}"</p>
+        <p className="text-[12px] text-[#52525b] dark:text-[#a1a1aa] mb-2 leading-relaxed">
+          Why isn't this an issue? Your explanation gets saved so the next sync won't re-flag the same finding.
+        </p>
+        <textarea
+          autoFocus
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={4}
+          placeholder="e.g. Annual real-estate tax accrual is recorded as a lump sum in Q1 — this is expected."
+          className="w-full text-[12px] bg-white dark:bg-[#09090b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2 text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] dark:placeholder-[#52525b] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] resize-none"
+        />
+        <div className="flex items-center justify-end gap-2 mt-3">
+          <button
+            onClick={onCancel}
+            className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] px-3 py-1.5 rounded cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!reason.trim() || submitting}
+            className="text-[12px] font-medium bg-[#d97706] text-white hover:bg-[#b45309] px-3 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {submitting ? "Saving…" : "Mark as False Flag"}
+          </button>
         </div>
       </div>
     </div>

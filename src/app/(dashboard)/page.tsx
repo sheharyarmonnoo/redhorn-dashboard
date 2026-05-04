@@ -264,22 +264,33 @@ export default function DashboardPage() {
   );
 }
 
-function InsightRow({ insight, dotClass, onFlag, onComplete, index = 0 }: {
+function InsightRow({ insight, dotClass, onFlag, onComplete, leaving, index = 0 }: {
   insight: any;
   dotClass: string;
   onFlag: () => void;
   onComplete: () => void | Promise<void>;
+  leaving?: boolean;
   index?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [localLeaving, setLocalLeaving] = useState(false);
+  const isLeaving = leaving || localLeaving;
   const handleComplete = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (completing) return;
     setCompleting(true);
+    setLocalLeaving(true);
+    // Let the leave animation play before the Convex mutation removes the row;
+    // this prevents the jarring snap when the data refresh fires immediately.
+    await new Promise(r => setTimeout(r, 280));
     try { await onComplete(); } finally { setCompleting(false); }
   };
   return (
-    <div className="rh-row-in" style={{ animationDelay: `${index * 40}ms` }}>
+    <div
+      className={`${isLeaving ? "rh-row-leave" : "rh-row-in"}`}
+      style={!isLeaving ? { animationDelay: `${index * 40}ms` } : undefined}
+    >
       <button
         onClick={() => setExpanded(e => !e)}
         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#fafafa] dark:hover:bg-[#27272a] cursor-pointer text-left transition-colors"
@@ -422,6 +433,9 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
   const updateStatus = useMutation(api.alerts.updateStatus);
   const [showSuppressed, setShowSuppressed] = useState(false);
   const [flagging, setFlagging] = useState<{ id: any; title: string } | null>(null);
+  // Track which rows are mid-removal so the leave animation plays before the
+  // Convex subscription removes them. Avoids the jarring snap on action.
+  const [leavingIds, setLeavingIds] = useState<Set<string>>(new Set());
   // Persist the summary card's expand state per property in localStorage so the
   // user lands back where they left off across page reloads / property switches.
   const summaryKey = `redhorn_summary_expanded_${propertyId}`;
@@ -472,8 +486,13 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
 
   async function submitFlag(reason: string) {
     if (!flagging) return;
-    await markFalseFlag({ id: flagging.id, reason: reason.trim(), markedBy: user?.fullName || user?.firstName || "User" });
+    const id = flagging.id;
+    // Animate the row out first, THEN mutate. Mirrors the smoothness of the
+    // Mark-as-Completed flow.
+    setLeavingIds(prev => new Set(prev).add(String(id)));
     setFlagging(null);
+    await new Promise(r => setTimeout(r, 280));
+    await markFalseFlag({ id, reason: reason.trim(), markedBy: user?.fullName || user?.firstName || "User" });
   }
 
   async function unflag(id: any) {
@@ -496,7 +515,7 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
         />
       )}
       {active.length > 0 ? (
-        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46]">
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46] max-h-[360px] overflow-y-auto">
           {active.map((ins, i) => (
             <InsightRow
               key={ins._id}
@@ -504,6 +523,7 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
               dotClass={sevDot[ins.severity] || sevDot.info}
               onFlag={() => openFlag(ins)}
               onComplete={async () => { await updateStatus({ id: ins._id, status: "resolved", resolvedBy: user?.fullName || user?.firstName || "User" }); }}
+              leaving={leavingIds.has(String(ins._id))}
               index={i}
             />
           ))}
