@@ -150,6 +150,16 @@ body {
   box-shadow: none !important;
 }
 
+/* Sign-in / sign-up pages — force Clerk's inner card to fill and center */
+.auth-clerk-wrapper .cl-rootBox,
+.auth-clerk-wrapper .cl-cardBox,
+.auth-clerk-wrapper .cl-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
 /* Account page Clerk widget — center the inner content area */
 .account-clerk-wrapper .cl-rootBox,
 .account-clerk-wrapper .cl-cardBox,

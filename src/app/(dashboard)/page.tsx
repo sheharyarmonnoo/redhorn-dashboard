@@ -4,6 +4,7 @@ import KPICard from "@/components/KPICard";
 import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
 import RevenueFilter from "@/components/RevenueFilter";
+import ActionItems from "@/components/ActionItems";
 import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, formatCurrency } from "@/hooks/useConvexData";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -167,6 +168,8 @@ export default function DashboardPage() {
         <KPICard title="Vacant" value={String(vacantUnits.length)} subtitle={`${totalVacantSqft.toLocaleString()} SF`} onClick={() => setKpiDrawer("vacant")} />
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
       </div>
+
+      <ActionItems heading="Tasks" />
 
       <LatestInsights propertyId={property._id} />
 

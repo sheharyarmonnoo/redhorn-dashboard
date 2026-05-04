@@ -11,7 +11,7 @@ export default function SignInPage() {
           className="h-10 w-auto brightness-0 invert opacity-90"
         />
       </div>
-      <div className="w-full max-w-[400px]">
+      <div className="w-full max-w-[400px] mx-auto auth-clerk-wrapper">
         <SignIn
           appearance={{
             baseTheme: dark,
@@ -26,7 +26,9 @@ export default function SignInPage() {
               borderRadius: "6px",
             },
             elements: {
-              card: "shadow-none border border-white/10",
+              rootBox: "w-full mx-auto",
+              cardBox: "w-full mx-auto",
+              card: "shadow-none border border-white/10 mx-auto",
               headerTitle: "!text-white",
               headerSubtitle: "!text-white/60",
               formFieldLabel: "!text-white/70",

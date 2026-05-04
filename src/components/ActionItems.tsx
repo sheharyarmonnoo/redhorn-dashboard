@@ -6,17 +6,22 @@ import { useActionItems } from "@/hooks/useConvexData";
 
 type KanbanColumn = "todo" | "in_progress" | "done";
 
-// Core Redhorn team today — rendered alongside the signed-in user so any new
-// Clerk account gets their name in the dropdown without a code change.
+// Visible Redhorn assignees. Sheharyar / Matt / Dillon are operational accounts
+// for setup + delivery — they're "silent users" and don't appear in the
+// assignee dropdown. Anyone else signing in with a @redhorncapital.com email
+// gets added to the dropdown automatically without a code change.
 const TEAM_ASSIGNEES = ["Ori", "Max"];
+const REDHORN_DOMAIN = "redhorncapital.com";
 
 function useAssigneeOptions() {
   const { user } = useUser();
   const meName = user?.firstName?.trim();
-  const options = meName && !TEAM_ASSIGNEES.includes(meName)
+  const meEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() || "";
+  const isRedhornUser = meEmail.endsWith(`@${REDHORN_DOMAIN}`);
+  const options = isRedhornUser && meName && !TEAM_ASSIGNEES.includes(meName)
     ? [...TEAM_ASSIGNEES, meName]
     : TEAM_ASSIGNEES;
-  return { options, meName };
+  return { options, meName: isRedhornUser ? meName : undefined };
 }
 
 function AssigneeSelect({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
@@ -141,7 +146,7 @@ function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging
   );
 }
 
-export default function ActionItems() {
+export default function ActionItems({ heading = "Tasks", showHeader = true }: { heading?: string; showHeader?: boolean } = {}) {
   const { items, createItem, moveItem, updateItem, removeItem } = useActionItems();
   const [showAdd, setShowAdd] = useState(false);
   const [newText, setNewText] = useState("");
@@ -194,13 +199,23 @@ export default function ActionItems() {
 
   return (
     <div className="mb-6">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Action Items</p>
-        <button onClick={() => setShowAdd(!showAdd)}
-          className="flex items-center gap-1 text-[11px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer">
-          <Plus size={14} /> New
-        </button>
-      </div>
+      {showHeader && (
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">{heading}</p>
+          <button onClick={() => setShowAdd(!showAdd)}
+            className="flex items-center gap-1 text-[11px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer">
+            <Plus size={14} /> New
+          </button>
+        </div>
+      )}
+      {!showHeader && (
+        <div className="flex justify-end mb-3">
+          <button onClick={() => setShowAdd(!showAdd)}
+            className="flex items-center gap-1 text-[11px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer">
+            <Plus size={14} /> New
+          </button>
+        </div>
+      )}
 
       {showAdd && (
         <div className="flex flex-col sm:flex-row gap-2 mb-3 p-3 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded">
