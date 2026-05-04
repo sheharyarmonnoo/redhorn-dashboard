@@ -2,7 +2,7 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef } from "ag-grid-community";
-import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useAlerts, formatCurrency } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import PageHeader from "@/components/PageHeader";
 import { Zap, DollarSign, CalendarClock, AlertTriangle } from "lucide-react";
@@ -41,6 +41,7 @@ function CategoryCellRenderer(props: { value: string }) {
     "Past Due": { icon: DollarSign, color: "text-red-500" },
     "Lease Expiring": { icon: CalendarClock, color: "text-blue-500" },
     "Holdover": { icon: AlertTriangle, color: "text-orange-500" },
+    "AI Insight": { icon: AlertTriangle, color: "text-violet-500" },
   };
   const item = icons[props.value] || { icon: AlertTriangle, color: "text-gray-500" };
   const Icon = item.icon;
@@ -92,6 +93,7 @@ export default function AlertsPage() {
   const isMobile = useIsMobile();
   const activeProperty = useActiveProperty();
   const tenants = useTenants(activeProperty?._id);
+  const { alerts: convexAlerts } = useAlerts();
   const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
   const [customAlerts, setCustomAlerts] = useState<AlertRow[]>([]);
   const [showAddAlert, setShowAddAlert] = useState(false);
@@ -196,8 +198,36 @@ export default function AlertsPage() {
         });
       });
 
+    // AI-generated income/AR insights from Convex (alertType === "income_insight")
+    // for the current property. These are the rich findings Claude produces
+    // each sync (delinquency, missed postings, NOI compression, etc.).
+    const sevTitle: Record<string, AlertRow["severity"]> = {
+      critical: "Critical",
+      warning: "Warning",
+      info: "Info",
+    };
+    (convexAlerts as any[])
+      .filter(a => a.alertType === "income_insight"
+        && a.propertyId === activeProperty?._id
+        && a.status !== "false_flag"
+        && a.status !== "resolved"
+        && a.status !== "dismissed")
+      .forEach(a => {
+        alerts.push({
+          id: `aii-${a._id}`,
+          unit: a.unit || "—",
+          tenant: a.dataContext?.lineItem || "",
+          building: "",
+          category: "AI Insight",
+          severity: sevTitle[a.severity] || "Warning",
+          detail: a.body || "",
+          amount: 0,
+          date: (a.date || "").slice(0, 10),
+        });
+      });
+
     return alerts;
-  }, [tenants]);
+  }, [tenants, convexAlerts, activeProperty?._id]);
 
   const allAlerts = [...customAlerts, ...alertData];
   const activeAlerts = allAlerts.filter(a => !archivedIds.has(a.id));
