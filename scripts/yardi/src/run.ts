@@ -2,14 +2,11 @@ import { openAuthenticatedSession } from "./auth.js";
 import { getProperties } from "./properties.js";
 import { runIncomeStatementForProperty } from "./reports/income-statement.js";
 import { runRentRollForProperty, runTotalUnitsForProperty } from "./reports/rent-roll.js";
-// Held back — code lives in scripts/yardi/src/reports/ but Yardi's delivery
-// mechanisms (server-side queue, popup-blocked window.open, fragile SSRS
-// ReportViewer export) made each one too expensive to chase. Re-enable when
-// we have a clear v2 mandate.
+import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
+// Held back:
 //   import { runPastDueForProperty } from "./reports/rent-roll.js";
 //   import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
 //   import { runGlDetailForProperty } from "./reports/gl-detail.js";
-//   import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
 import { latestClosedMonth } from "./paths.js";
 import { uploadRunToConvex } from "./convex-upload.js";
 
@@ -86,12 +83,19 @@ async function main() {
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "total_units", ok: false, error: msg });
       }
 
-      // Past Due / Rent Roll (full) / GL Detail / Receivable Detail are
-      // intentionally held back at v1 scope. Their scrapers + parsers + Convex
-      // mutations exist in the codebase. Re-enable when there's a v2 mandate
-      // worth the engineering cost — Yardi's report-export mechanisms (server
-      // queue, popup blockers, fragile SSRS ReportViewer) each need bespoke
-      // handling.
+      // Receivable Detail (Lease Ledger SSRS) — per-tenant charges + receipts
+      // + balance + aging. Drives the "who's late on rent" question. Uses the
+      // SSRS Screen viewer + exportReport JS API + context-level download
+      // listener. Soft-fails if the export capture misses so the rest of the
+      // sync still completes.
+      try {
+        const path = await runReceivableDetailForProperty(voyager, property, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "receivable_detail", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   RD FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "receivable_detail", ok: false, error: msg });
+      }
     }
 
     console.log("\n=== Download Summary ===");
