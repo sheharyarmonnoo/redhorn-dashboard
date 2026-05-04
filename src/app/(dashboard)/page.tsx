@@ -304,9 +304,9 @@ function InsightRow({ insight, dotClass, onFlag, index = 0 }: {
             <button
               onClick={(e) => { e.stopPropagation(); onFlag(); }}
               className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
-              title="Mark as false flag — won't re-flag this next sync"
+              title="Mark as handled — won't re-flag this next sync"
             >
-              Mark as false flag
+              Mark as Handled
             </button>
           </div>
         </div>
@@ -537,7 +537,7 @@ function FalseFlagModal({ title, onCancel, onSubmit }: {
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
       >
-        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-1">Mark as false flag</p>
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-1">Mark as Handled</p>
         <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mb-3 truncate">"{title}"</p>
         <p className="text-[12px] text-[#52525b] dark:text-[#a1a1aa] mb-2 leading-relaxed">
           Why isn't this an issue? Your explanation gets saved so the next sync won't re-flag the same finding.
@@ -562,7 +562,7 @@ function FalseFlagModal({ title, onCancel, onSubmit }: {
             disabled={!reason.trim() || submitting}
             className="text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-3 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {submitting ? "Saving…" : "Mark as false flag"}
+            {submitting ? "Saving…" : "Mark as Handled"}
           </button>
         </div>
       </div>

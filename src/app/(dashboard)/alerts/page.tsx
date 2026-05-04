@@ -221,15 +221,12 @@ export default function AlertsPage() {
         { field: "detail", headerName: "Details", minWidth: 140, flex: 1 },
       ];
     }
+    // Mirrors the Add Alert modal fields: severity / category / unit / details.
     return [
       { field: "severity", headerName: "Severity", width: 110, cellRenderer: SeverityCellRenderer, filter: true },
       { field: "category", headerName: "Category", width: 160, cellRenderer: CategoryCellRenderer, filter: true },
-      { field: "unit", headerName: "Unit", width: 90 },
-      { field: "tenant", headerName: "Tenant", width: 200 },
+      { field: "unit", headerName: "Unit", width: 100 },
       { field: "detail", headerName: "Details", minWidth: 320, flex: 1 },
-      { field: "amount", headerName: "Amount", width: 110, type: "numericColumn",
-        valueFormatter: (p: { value: number }) => p.value > 0 ? formatCurrency(p.value) : "—" },
-      { field: "date", headerName: "Date", width: 110 },
     ];
   }, [isMobile]);
 
@@ -439,15 +436,32 @@ function AlertModal({
 }
 
 function AlertDrawer({
-  alert, onClose, onSave, onMarkHandled,
+  alert: alertProp, onClose, onSave, onMarkHandled,
 }: {
   alert: AlertRow | null;
   onClose: () => void;
   onSave: (updates: Partial<AlertRow>) => void;
   onMarkHandled: () => void;
 }) {
+  const [cached, setCached] = useState<AlertRow | null>(alertProp);
+  const [closing, setClosing] = useState(false);
+  const alert = alertProp ?? cached;
   const [draft, setDraft] = useState<AlertRow | null>(alert);
   useEffect(() => { setDraft(alert); }, [alert?.id]);
+
+  useEffect(() => {
+    if (alertProp) {
+      setCached(alertProp);
+      setClosing(false);
+    } else if (cached) {
+      setClosing(true);
+      const t = setTimeout(() => {
+        setCached(null);
+        setClosing(false);
+      }, 220);
+      return () => clearTimeout(t);
+    }
+  }, [alertProp, cached]);
 
   if (!alert || !draft) return null;
   const isCustom = alert.id.startsWith("custom-");
@@ -459,9 +473,9 @@ function AlertDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40 dark:bg-black/60 rh-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 z-50 flex justify-end bg-black/40 dark:bg-black/60 rh-backdrop${closing ? " is-closing" : ""}`} onClick={onClose}>
       <div
-        className="bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-xl w-full max-w-md h-full overflow-y-auto rh-drawer"
+        className={`bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-xl w-full max-w-md h-full overflow-y-auto rh-drawer${closing ? " is-closing" : ""}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#e4e4e7] dark:border-[#3f3f46] sticky top-0 bg-white dark:bg-[#18181b]">

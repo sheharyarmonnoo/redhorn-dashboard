@@ -132,8 +132,8 @@ export default function RentRollPage() {
   return (
     <div>
       <PageHeader title="Rent Roll" subtitle={`All units as of ${new Date().toLocaleString("en-US", { month: "long", year: "numeric" })} — Tap any row for details`}>
-        <button onClick={exportRentRollReal} disabled={tenants.length === 0} className="flex items-center gap-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] hover:border-[#4f6ef7] text-[#5a5e73] dark:text-[#a1a1aa] hover:text-[#4f6ef7] text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-          <Download size={13} /> Export .csv
+        <button onClick={exportRentRollReal} disabled={tenants.length === 0} title="Export .csv" aria-label="Export .csv" className="flex items-center justify-center bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] hover:border-[#4f6ef7] text-[#5a5e73] dark:text-[#a1a1aa] hover:text-[#4f6ef7] w-8 h-8 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+          <Download size={14} />
         </button>
       </PageHeader>
 
