@@ -149,3 +149,30 @@ body {
   max-width: 100% !important;
   box-shadow: none !important;
 }
+
+/* Dark mode contrast fix for Clerk widget text (labels/headings render too dim) */
+.dark .account-clerk-wrapper .cl-headerTitle,
+.dark .account-clerk-wrapper .cl-profileSectionTitleText,
+.dark .account-clerk-wrapper .cl-profileSectionTitle,
+.dark .account-clerk-wrapper .cl-formFieldLabel,
+.dark .account-clerk-wrapper .cl-accordionTriggerButton,
+.dark .account-clerk-wrapper [class*="cl-profileSectionTitle"],
+.dark .account-clerk-wrapper [class*="cl-headerTitle"] {
+  color: #fafafa !important;
+}
+.dark .account-clerk-wrapper .cl-headerSubtitle,
+.dark .account-clerk-wrapper .cl-profileSectionContent,
+.dark .account-clerk-wrapper .cl-profileSectionPrimaryButton,
+.dark .account-clerk-wrapper .cl-profileSection__profile,
+.dark .account-clerk-wrapper [class*="cl-profileSectionContent"],
+.dark .account-clerk-wrapper [class*="cl-headerSubtitle"] {
+  color: #d4d4d8 !important;
+}
+.dark .account-clerk-wrapper .cl-dividerLine {
+  background-color: #3f3f46 !important;
+}
+.dark .account-clerk-wrapper .cl-badge {
+  background-color: #27272a !important;
+  color: #fafafa !important;
+  border-color: #3f3f46 !important;
+}

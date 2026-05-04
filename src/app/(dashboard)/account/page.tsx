@@ -42,7 +42,7 @@ export default function AccountPage() {
     <div>
       <PageHeader title="Account" subtitle="Profile & preferences" />
 
-      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-5 mb-6 max-w-2xl">
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-5 mb-6 max-w-2xl mx-auto">
         <div className="mb-4">
           <h2 className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Preferences</h2>
           <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5">
@@ -70,7 +70,7 @@ export default function AccountPage() {
         )}
       </div>
 
-      <div className="max-w-3xl account-clerk-wrapper">
+      <div className="max-w-3xl mx-auto account-clerk-wrapper">
         <UserProfile
           appearance={{
             elements: {
