@@ -126,16 +126,13 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
             <Field label="Monthly Rent" overridden={tenant.overrideFields?.includes("monthlyRent")}>
               <NumberInput value={draft.monthlyRent ?? 0} onChange={v => setDraft({ ...draft, monthlyRent: v })} />
             </Field>
-            <Field label="Monthly Electric" overridden={tenant.overrideFields?.includes("monthlyElectric")}>
-              <NumberInput value={draft.monthlyElectric ?? 0} onChange={v => setDraft({ ...draft, monthlyElectric: v })} />
-            </Field>
-
-            <Field label="Past Due" overridden={tenant.overrideFields?.includes("pastDueAmount")}>
-              <NumberInput value={draft.pastDueAmount ?? 0} onChange={v => setDraft({ ...draft, pastDueAmount: v })} />
-            </Field>
             <Field label="Security Deposit" overridden={tenant.overrideFields?.includes("securityDeposit")}>
               <NumberInput value={draft.securityDeposit ?? 0} onChange={v => setDraft({ ...draft, securityDeposit: v })} />
             </Field>
+
+            {/* Monthly Electric + Past Due intentionally hidden — billback
+                values aren't stable; the synced data still flows through
+                Convex but isn't surfaced here. */}
 
             <Field label="Sqft">
               <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{(tenant.sqft || 0).toLocaleString()}</p>
