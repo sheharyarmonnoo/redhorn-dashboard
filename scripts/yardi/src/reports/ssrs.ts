@@ -122,34 +122,53 @@ export async function runSsrsReportForProperty(
   // dataset until the viewer has finished its initial paint).
   await viewerPopup.waitForTimeout(2000);
 
-  // Trigger Excel export and capture the resulting download. SSRS opens a
-  // throwaway popup to deliver the file; the download event bubbles up to
-  // the context, so listen there.
-  const [download] = await Promise.all([
-    context.waitForEvent("page", { timeout: 60_000 })
-      .then(p => p.waitForEvent("download", { timeout: 60_000 })
-        .then(d => { p.close().catch(() => {}); return d; }))
-      .catch(() => null),
-    viewerPopup.evaluate(() => {
+  // Trigger Excel export and capture the resulting download. SSRS may deliver
+  // the file via the viewer page itself, OR via a throwaway popup, OR via a
+  // nested popup-of-a-popup. We attach a download listener to every existing
+  // page in the context and to every new page that opens, then race the
+  // first download to fire across all of them.
+  let captured: import("playwright").Download | null = null;
+  const downloadResolve: { resolve?: (d: import("playwright").Download) => void } = {};
+  const downloadPromise = new Promise<import("playwright").Download>(r => {
+    downloadResolve.resolve = r;
+  });
+  const onDownload = (d: import("playwright").Download) => {
+    if (!captured) {
+      captured = d;
+      downloadResolve.resolve?.(d);
+    }
+  };
+  for (const p of context.pages()) {
+    p.on("download", onDownload);
+  }
+  const onNewPage = (p: import("playwright").Page) => {
+    p.on("download", onDownload);
+  };
+  context.on("page", onNewPage);
+
+  try {
+    await viewerPopup.evaluate(() => {
       const w = window as any;
       w.$find("ReportViewer1").exportReport("EXCELOPENXML");
-    }),
-  ]);
+    });
 
-  // Some SSRS configs deliver the download directly on the viewer page
-  // instead of a child popup; if the popup race didn't catch it, try the
-  // viewer page's download event as a fallback.
-  let final = download;
-  if (!final) {
-    console.log(`   no popup download; checking viewer page directly…`);
-    final = await viewerPopup.waitForEvent("download", { timeout: 60_000 }).catch(() => null);
-  }
-  if (!final) {
-    throw new Error(`SSRS export download never fired for ${opts.reportLabel}`);
-  }
+    const download = await Promise.race([
+      downloadPromise,
+      new Promise<null>(r => setTimeout(() => r(null), 90_000)),
+    ]);
 
-  await final.saveAs(outPath);
-  await viewerPopup.close().catch(() => {});
+    if (!download) {
+      throw new Error(`SSRS export download never fired for ${opts.reportLabel}`);
+    }
+
+    await download.saveAs(outPath);
+  } finally {
+    context.off("page", onNewPage);
+    for (const p of context.pages()) {
+      p.off("download", onDownload);
+    }
+    await viewerPopup.close().catch(() => {});
+  }
 
   console.log(`   saved → ${outPath}`);
   return outPath;
