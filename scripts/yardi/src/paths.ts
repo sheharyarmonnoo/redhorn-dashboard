@@ -10,13 +10,12 @@ export const scraperRoot = resolve(__dirname, "..");
 export const storageStateFile = resolve(scraperRoot, "storageState.json");
 export const downloadsRoot = resolve(scraperRoot, "downloads");
 
-// "Latest closed month" — assume today's month if we're past the 5th, else previous month.
-// Covers the common case: Yardi reports are usually finalized in the first week of the next month.
+// "Latest closed month" = the most recent month that has fully ended. On any
+// day in May, that's April (the prior calendar month). The previous version
+// double-stepped early in the month and ended up returning prior-prior month
+// (March on May 1-4), which made every default sync pull stale data.
 export function latestClosedMonth(now: Date = new Date()): string {
   const d = new Date(now);
-  if (d.getDate() < 5) d.setMonth(d.getMonth() - 1);
-  // Otherwise we want the *previous* month's close — Income Statement is always reported for a completed month.
-  // So regardless of day, step one month back.
   d.setMonth(d.getMonth() - 1);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
