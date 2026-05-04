@@ -345,8 +345,8 @@ function SmartUploadModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30 dark:bg-black/60" onClick={onClose} />
-      <div className="relative bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded w-full max-w-[480px] mx-4 overflow-hidden">
+      <div className="absolute inset-0 bg-black/30 dark:bg-black/60 rh-backdrop" onClick={onClose} />
+      <div className="relative bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded w-full max-w-[480px] mx-4 overflow-hidden rh-modal">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
           <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">Upload File</p>
           <button onClick={onClose} className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"><X size={16} /></button>

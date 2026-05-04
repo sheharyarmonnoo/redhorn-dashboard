@@ -69,8 +69,8 @@ export default function RevenueFilter({ open, onClose, selectedUnits, onApply }:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30 dark:bg-black/60" onClick={onClose} />
-      <div className="relative bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded w-full max-w-[520px] mx-4 max-h-[80vh] flex flex-col overflow-hidden">
+      <div className="absolute inset-0 bg-black/30 dark:bg-black/60 rh-backdrop" onClick={onClose} />
+      <div className="relative bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded w-full max-w-[520px] mx-4 max-h-[80vh] flex flex-col overflow-hidden rh-modal">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
           <div>

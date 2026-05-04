@@ -167,8 +167,8 @@ export function DealDetail({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/30 dark:bg-black/60 backdrop-blur-[2px] z-40 animate-in fade-in" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-screen w-full max-w-[600px] bg-white dark:bg-[#18181b] z-50 flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right">
+      <div className="fixed inset-0 bg-black/30 dark:bg-black/60 backdrop-blur-[2px] z-40 rh-backdrop" onClick={onClose} />
+      <div className="fixed right-0 top-0 h-screen w-full max-w-[600px] bg-white dark:bg-[#18181b] z-50 flex flex-col shadow-2xl overflow-hidden rh-drawer">
         {/* Header */}
         <div className="px-5 py-4 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex items-start justify-between bg-gradient-to-br from-white to-[#fafafa] dark:from-[#18181b] dark:to-[#27272a]">
           <div className="flex-1 min-w-0">
