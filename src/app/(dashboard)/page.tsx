@@ -264,13 +264,20 @@ export default function DashboardPage() {
   );
 }
 
-function InsightRow({ insight, dotClass, onFlag, index = 0 }: {
+function InsightRow({ insight, dotClass, onFlag, onComplete, index = 0 }: {
   insight: any;
   dotClass: string;
   onFlag: () => void;
+  onComplete: () => void | Promise<void>;
   index?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const handleComplete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCompleting(true);
+    try { await onComplete(); } finally { setCompleting(false); }
+  };
   return (
     <div className="rh-row-in" style={{ animationDelay: `${index * 40}ms` }}>
       <button
@@ -301,13 +308,21 @@ function InsightRow({ insight, dotClass, onFlag, index = 0 }: {
                 <span className="uppercase tracking-wide font-medium">MoM:</span> {insight.dataContext.mom}
               </p>
             )}
-            <div className="mt-2 flex items-center justify-end">
+            <div className="mt-2 flex items-center justify-end gap-3">
               <button
                 onClick={(e) => { e.stopPropagation(); onFlag(); }}
-                className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
-                title="Mark as handled — won't re-flag this next sync"
+                className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#d97706] cursor-pointer"
+                title="Not actually an issue — Claude won't re-flag this pattern next sync"
               >
-                Mark as Handled
+                Mark as False Flag
+              </button>
+              <button
+                onClick={handleComplete}
+                disabled={completing}
+                className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#16a34a] cursor-pointer disabled:opacity-50"
+                title="Resolved — this finding has been addressed"
+              >
+                {completing ? "Marking…" : "Mark as Completed"}
               </button>
             </div>
           </div>
@@ -404,6 +419,7 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
   const markFalseFlag = useMutation(api.alerts.markFalseFlag);
   const undoFalseFlag = useMutation(api.alerts.undoFalseFlag);
   const addComment = useMutation(api.alerts.addComment);
+  const updateStatus = useMutation(api.alerts.updateStatus);
   const [showSuppressed, setShowSuppressed] = useState(false);
   const [flagging, setFlagging] = useState<{ id: any; title: string } | null>(null);
   // Persist the summary card's expand state per property in localStorage so the
@@ -482,7 +498,14 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
       {active.length > 0 ? (
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46]">
           {active.map((ins, i) => (
-            <InsightRow key={ins._id} insight={ins} dotClass={sevDot[ins.severity] || sevDot.info} onFlag={() => openFlag(ins)} index={i} />
+            <InsightRow
+              key={ins._id}
+              insight={ins}
+              dotClass={sevDot[ins.severity] || sevDot.info}
+              onFlag={() => openFlag(ins)}
+              onComplete={async () => { await updateStatus({ id: ins._id, status: "resolved", resolvedBy: user?.fullName || user?.firstName || "User" }); }}
+              index={i}
+            />
           ))}
         </div>
       ) : (
