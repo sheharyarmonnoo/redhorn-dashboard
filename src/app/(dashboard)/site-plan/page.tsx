@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useActiveProperty, useTenants } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits } from "@/hooks/useConvexData";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import SitePlan3D from "@/components/SitePlan3D";
@@ -8,11 +8,31 @@ import SitePlan3D from "@/components/SitePlan3D";
 export default function SitePlanPage() {
   const property = useActiveProperty();
   const tenantsList = useTenants(property?._id) as any[];
+  const units = useUnits(property?._id) as any[];
   const [selected, setSelected] = useState<any | null>(null);
 
   const occupied = tenantsList.filter((t: any) => t.status !== "vacant");
   const pastDue = tenantsList.filter((t: any) => t.status === "past_due");
-  const vacant = tenantsList.filter((t: any) => t.status === "vacant");
+  // Vacancy = units in the Total Units listing without an active lease.
+  const tenantUnitKeys = new Set(tenantsList.map((t: any) => (t.unit || "").trim().toLowerCase()));
+  const vacant = units.filter((u: any) => !tenantUnitKeys.has((u.unit || "").trim().toLowerCase()));
+  const totalUnits = units.length > 0 ? units.length : tenantsList.length;
+  // Combined list for the Unit Index (shows all units including vacants).
+  const allSlots: any[] = [
+    ...tenantsList,
+    ...vacant.map((u: any) => ({
+      unit: u.unit,
+      building: u.building || "",
+      sqft: u.sqft || 0,
+      tenant: "",
+      status: "vacant",
+      leaseType: "",
+      monthlyRent: 0,
+      monthlyElectric: 0,
+      pastDueAmount: 0,
+      electricPosted: false,
+    })),
+  ];
 
   return (
     <div>
@@ -23,7 +43,7 @@ export default function SitePlanPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-4">
         {[
-          { label: "Total Units", value: tenantsList.length, color: "text-[#18181b] dark:text-[#fafafa]" },
+          { label: "Total Units", value: totalUnits, color: "text-[#18181b] dark:text-[#fafafa]" },
           { label: "Occupied", value: occupied.length, color: "text-[#16a34a]" },
           { label: "Past Due", value: pastDue.length, color: "text-[#dc2626]" },
           { label: "Vacant", value: vacant.length, color: "text-[#71717a] dark:text-[#a1a1aa]" },
@@ -39,7 +59,7 @@ export default function SitePlanPage() {
       <div className="mt-4 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
         <p className="text-[12px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">All Units</p>
         <div className="flex flex-wrap gap-1">
-          {tenantsList.map((t: any) => (
+          {allSlots.map((t: any) => (
             <button
               key={t.unit}
               onClick={() => setSelected(t)}

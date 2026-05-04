@@ -1,5 +1,5 @@
 "use client";
-import { useActiveProperty, useTenants } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits } from "@/hooks/useConvexData";
 
 type TenantStatus = "current" | "past_due" | "locked_out" | "vacant" | "expiring_soon";
 type Tenant = any;
@@ -71,18 +71,42 @@ function BuildingHeader({ label, sub, occ, vac }: { label: string; sub: string; 
 export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: Tenant) => void; selectedUnit: string | null }) {
   const property = useActiveProperty();
   const tenants = useTenants(property?._id) as Tenant[];
+  const units = useUnits(property?._id) as any[];
 
-  // Group units dynamically by the `building` field on each unit, so this works
-  // for any property — not just Hollister's A / C (lower) / C (upper) / D layout.
+  // Merge tenants (active leases) with the full units list so vacant slots
+  // render alongside leased ones. Tenants are canonical for status/lease info;
+  // units fill in the empty space.
+  const tenantByUnit: Record<string, Tenant> = {};
+  for (const t of tenants) tenantByUnit[(t.unit || "").trim().toLowerCase()] = t;
+  const merged: Tenant[] = [...tenants];
+  for (const u of units) {
+    const key = (u.unit || "").trim().toLowerCase();
+    if (!tenantByUnit[key]) {
+      merged.push({
+        unit: u.unit,
+        building: u.building || "",
+        sqft: u.sqft || 0,
+        tenant: "",
+        status: "vacant",
+        leaseType: "",
+        monthlyRent: 0,
+        monthlyElectric: 0,
+        pastDueAmount: 0,
+        electricPosted: false,
+      } as any);
+    }
+  }
+
+  // Group by building so each property's layout reflects its own structure.
   const byBuilding: Record<string, Tenant[]> = {};
-  for (const t of tenants) {
+  for (const t of merged) {
     const key = t.building || "—";
     if (!byBuilding[key]) byBuilding[key] = [];
     byBuilding[key].push(t);
   }
   const buildingGroups = Object.entries(byBuilding).sort(([a], [b]) => a.localeCompare(b));
 
-  const totalSqft = tenants.reduce((s, t) => s + (t.sqft || 0), 0);
+  const totalSqft = merged.reduce((s, t) => s + (t.sqft || 0), 0);
   const sqftLabel = totalSqft > 0 ? `~${Math.round(totalSqft / 1000)}K SF` : "";
 
   return (

@@ -62,6 +62,16 @@ export function useAllTenants() {
   return tenants ?? [];
 }
 
+// ===== UNITS =====
+
+export function useUnits(propertyId: string | undefined) {
+  const units = useQuery(
+    api.units.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  return units ?? [];
+}
+
 // ===== MONTHLY REVENUE =====
 
 export function useMonthlyRevenue(propertyId: string | undefined) {

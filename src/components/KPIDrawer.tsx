@@ -1,12 +1,21 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useActiveProperty, useTenants, useMonthlyRevenue, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, formatCurrency } from "@/hooks/useConvexData";
 
 function useKpiData() {
   const property = useActiveProperty();
   const tenants = useTenants(property?._id) as any[];
+  const units = useUnits(property?._id) as any[];
   const monthlyRevenue = useMonthlyRevenue(property?._id) as any[];
-  return { tenants, monthlyRevenue };
+  return { tenants, units, monthlyRevenue };
+}
+
+// Derive vacant units from the diff: units in the Total Units listing that
+// don't have a matching tenant in the Current Leases panel. The tenants table
+// only carries active leases — vacancy is what's left of the unit list.
+function deriveVacantUnits(tenants: any[], units: any[]): any[] {
+  const tenantUnitKeys = new Set(tenants.map(t => (t.unit || "").trim().toLowerCase()));
+  return units.filter((u: any) => !tenantUnitKeys.has((u.unit || "").trim().toLowerCase()));
 }
 
 interface KPIDrawerProps {
@@ -58,36 +67,40 @@ function RevenueDetail() {
 }
 
 function OccupancyDetail() {
-  const { tenants } = useKpiData();
+  const { tenants, units } = useKpiData();
   const occupied = tenants.filter((t: any) => t.status !== "vacant");
-  const vacant = tenants.filter((t: any) => t.status === "vacant");
-  const totalSqft = tenants.reduce((s: number, t: any) => s + t.sqft, 0);
-  const occSqft = occupied.reduce((s: number, t: any) => s + t.sqft, 0);
-  const buildings = Array.from(new Set(tenants.map((t: any) => t.building).filter(Boolean))).sort() as string[];
+  const vacantUnits = deriveVacantUnits(tenants, units);
+  const totalUnitsCount = units.length > 0 ? units.length : tenants.length;
+  const totalSqft = units.length > 0
+    ? units.reduce((s: number, u: any) => s + (u.sqft || 0), 0)
+    : tenants.reduce((s: number, t: any) => s + (t.sqft || 0), 0);
+  const occSqft = occupied.reduce((s: number, t: any) => s + (t.sqft || 0), 0);
+  const buildings = Array.from(new Set(units.map((u: any) => u.building).filter(Boolean))).sort() as string[];
+  const tenantUnitKeys = new Set(tenants.map((t: any) => (t.unit || "").trim().toLowerCase()));
   return (
     <div className="space-y-5">
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Occupancy Summary</p>
-        <Field label="Occupied Units" value={`${occupied.length} of ${tenants.length}`} />
+        <Field label="Occupied Units" value={`${occupied.length} of ${totalUnitsCount}`} />
         <Field label="Occupied SF" value={`${occSqft.toLocaleString()} of ${totalSqft.toLocaleString()}`} />
-        <Field label="Occupancy Rate" value={totalSqft > 0 ? `${Math.round((occSqft / totalSqft) * 100)}%` : "—"} color="text-[#16a34a]" />
+        <Field label="Occupancy Rate" value={totalUnitsCount > 0 ? `${Math.round((occupied.length / totalUnitsCount) * 100)}%` : "—"} color="text-[#16a34a]" />
       </div>
       {buildings.length > 0 && (
         <div>
           <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">By Building</p>
           {buildings.map(b => {
-            const all = tenants.filter((t: any) => t.building === b);
-            const occ = all.filter((t: any) => t.status !== "vacant");
+            const all = units.filter((u: any) => u.building === b);
+            const occ = all.filter((u: any) => tenantUnitKeys.has((u.unit || "").trim().toLowerCase()));
             return <Field key={b} label={`Building ${b}`} value={`${occ.length}/${all.length} units`} />;
           })}
         </div>
       )}
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Vacant Units</p>
-        {vacant.length === 0 ? (
+        {vacantUnits.length === 0 ? (
           <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No vacant units.</p>
-        ) : vacant.map((t: any) => (
-          <Field key={t.unit} label={t.unit} value={`${t.sqft.toLocaleString()} SF${t.notes ? ` — ${t.notes}` : ""}`} />
+        ) : vacantUnits.map((u: any) => (
+          <Field key={u.unit} label={u.unit} value={`${(u.sqft || 0).toLocaleString()} SF`} />
         ))}
       </div>
     </div>
@@ -125,29 +138,28 @@ function PastDueDetail() {
 }
 
 function VacantDetail() {
-  const { tenants } = useKpiData();
-  const vacant = tenants.filter((t: any) => t.status === "vacant");
-  const totalSF = vacant.reduce((s: number, t: any) => s + t.sqft, 0);
+  const { tenants, units } = useKpiData();
+  const vacantUnits = deriveVacantUnits(tenants, units);
+  const totalSF = vacantUnits.reduce((s: number, u: any) => s + (u.sqft || 0), 0);
   return (
     <div className="space-y-5">
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Vacant Units</p>
-        <Field label="Total Vacant" value={`${vacant.length} units`} />
+        <Field label="Total Vacant" value={`${vacantUnits.length} units`} />
         <Field label="Total Available SF" value={totalSF.toLocaleString()} />
       </div>
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Unit Details</p>
-        {vacant.length === 0 ? (
+        {vacantUnits.length === 0 ? (
           <p className="text-[11px] text-[#16a34a]">Fully occupied.</p>
-        ) : vacant.map((t: any) => (
-          <div key={t.unit} className="py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
+        ) : vacantUnits.map((u: any) => (
+          <div key={u.unit} className="py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
             <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} (Bldg {t.building})</span>
-              <span className="text-[12px] text-[#71717a]">{t.sqft.toLocaleString()} SF</span>
+              <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{u.unit}{u.building ? ` (Bldg ${u.building})` : ""}</span>
+              <span className="text-[12px] text-[#71717a]">{(u.sqft || 0).toLocaleString()} SF</span>
             </div>
-            {t.makeReady && <p className="text-[10px] text-[#d97706] mt-0.5">Make-ready required</p>}
-            {t.splittable && <p className="text-[10px] text-[#2563eb] mt-0.5">Splittable: {t.splitDetail}</p>}
-            {t.notes && <p className="text-[10px] text-[#a1a1aa] mt-0.5">{t.notes}</p>}
+            {u.makeReady && <p className="text-[10px] text-[#d97706] mt-0.5">Make-ready required</p>}
+            {u.splittable && <p className="text-[10px] text-[#2563eb] mt-0.5">Splittable: {u.splitDetail}</p>}
           </div>
         ))}
       </div>

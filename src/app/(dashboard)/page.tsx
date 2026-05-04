@@ -4,7 +4,7 @@ import KPICard from "@/components/KPICard";
 import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
 import RevenueFilter from "@/components/RevenueFilter";
-import { useActiveProperty, useTenants, useMonthlyRevenue, useAlerts, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, formatCurrency } from "@/hooks/useConvexData";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
@@ -17,6 +17,7 @@ const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 export default function DashboardPage() {
   const property = useActiveProperty();
   const tenants = useTenants(property?._id);
+  const units = useUnits(property?._id);
   const monthlyRevenue = useMonthlyRevenue(property?._id);
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -56,10 +57,14 @@ export default function DashboardPage() {
   }
 
   const occupied = tenants.filter(t => t.status !== "vacant");
-  const vacant = tenants.filter(t => t.status === "vacant");
-  const totalSqft = tenants.reduce((sum, t) => sum + t.sqft, 0);
-  const occupiedSqft = occupied.reduce((sum, t) => sum + t.sqft, 0);
-  const occupancyPct = totalSqft > 0 ? Math.round((occupiedSqft / totalSqft) * 100) : 0;
+  // Vacancy is units the rent roll doesn't cover. Tenants come from the
+  // Current Leases panel (active leases only); units come from the Total Units
+  // listing (all space, leased or not). The diff is what's actually vacant.
+  const tenantUnitKeys = new Set(tenants.map(t => (t.unit || "").trim().toLowerCase()));
+  const vacantUnits = units.filter((u: any) => !tenantUnitKeys.has((u.unit || "").trim().toLowerCase()));
+  const totalUnits = units.length > 0 ? units.length : tenants.length;
+  const occupancyPct = totalUnits > 0 ? Math.round((occupied.length / totalUnits) * 100) : 0;
+  const totalVacantSqft = vacantUnits.reduce((s: number, u: any) => s + (u.sqft || 0), 0);
   // Prefer the monthly_revenue rollup (derived from the income statement) when
   // present — Yardi's dashboard rent-roll panel doesn't carry rent figures, so
   // summing tenant.monthlyRent yields $0 on real data. Fall back to the tenant
@@ -161,9 +166,9 @@ export default function DashboardPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3 mb-6">
         <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} sparkline={monthlyRevenue.map(m => m.total)} onClick={() => setKpiDrawer("revenue")} />
-        <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${tenants.length} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
+        <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${totalUnits} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
         <KPICard title="Past Due" value={formatCurrency(totalPastDue)} color={totalPastDue > 0 ? "text-[#dc2626]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("pastdue")} />
-        <KPICard title="Vacant" value={String(vacant.length)} subtitle={`${vacant.reduce((s, t) => s + t.sqft, 0).toLocaleString()} SF`} onClick={() => setKpiDrawer("vacant")} />
+        <KPICard title="Vacant" value={String(vacantUnits.length)} subtitle={`${totalVacantSqft.toLocaleString()} SF`} onClick={() => setKpiDrawer("vacant")} />
         <KPICard title="Electric Posting" value={electricMissing.length > 0 ? `${electricMissing.length} Missing` : "All Posted"} color={electricMissing.length > 0 ? "text-[#d97706]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("electric")} />
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
       </div>
