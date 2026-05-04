@@ -91,41 +91,22 @@ export async function runSsrsReportForProperty(
   const submitBtn = frame.locator('input[type="submit"]').first();
   const context = voyagerPage.context();
 
-  // The form's response contains a `window.open(viewerUrl, ...)` call that
-  // headless Chromium silently blocks. Intercept it from inside the iframe
-  // before submitting so we capture the viewer URL and navigate Playwright to
-  // it ourselves.
+  // Yardi's form has target="filter" which matches the iframe we loaded the
+  // form into — so submit normally posts back INTO the iframe, no new window.
+  // In manual usage outside an iframe, target="filter" has no match and the
+  // browser opens a new window. We need that new-window behavior in Playwright
+  // too, so we retarget to "_blank" right before submit.
   await frame.evaluate(() => {
-    (window as any).__capturedOpen = null;
-    const origOpen = window.open;
-    (window as any).open = function (url: string, ...rest: any[]) {
-      (window as any).__capturedOpen = url;
-      try { return origOpen.call(window, url, ...rest); } catch { return null; }
-    };
+    const form = document.querySelector("form");
+    if (form) form.setAttribute("target", "_blank");
   });
 
-  const popupRace = context.waitForEvent("page", { timeout: 8_000 }).catch(() => null);
-  await submitBtn.click();
-  let viewerPopup = await popupRace;
+  const [viewerPopup] = await Promise.all([
+    context.waitForEvent("page", { timeout: 60_000 }),
+    submitBtn.click(),
+  ]);
 
-  if (!viewerPopup) {
-    // Popup was blocked. Pull the URL window.open tried to use, and open it
-    // ourselves in a new page.
-    const capturedUrl: string | null = await frame
-      .evaluate(() => (window as any).__capturedOpen || null)
-      .catch(() => null);
-    if (!capturedUrl) {
-      throw new Error(`SSRS submit fired but no popup opened and no captured viewer URL — ${opts.reportLabel}`);
-    }
-    const absoluteUrl = capturedUrl.startsWith("http")
-      ? capturedUrl
-      : new URL(capturedUrl, voyagerPage.url()).toString();
-    console.log(`   popup blocked; opening captured viewer URL ourselves: ${absoluteUrl.split("?")[0]}`);
-    viewerPopup = await context.newPage();
-    await viewerPopup.goto(absoluteUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  } else {
-    console.log(`   ${opts.reportLabel} viewer popup opened`);
-  }
+  console.log(`   ${opts.reportLabel} viewer popup opened`);
 
   // Wait until the SSRS ReportViewer JS object is alive in the popup.
   await viewerPopup.waitForFunction(
