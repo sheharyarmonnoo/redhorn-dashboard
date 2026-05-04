@@ -129,7 +129,7 @@ export function useActionItems() {
 export function useAlerts(status?: string) {
   const alerts = useQuery(api.alerts.list, status ? { status } : {});
   const updateAlertStatus = useMutation(api.alerts.updateStatus);
-  return { alerts: alerts ?? [], updateAlertStatus };
+  return { alerts: alerts ?? [], loading: alerts === undefined, updateAlertStatus };
 }
 
 // ===== ACTIVITY LOG =====

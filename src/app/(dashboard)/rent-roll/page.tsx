@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
-import { useAllTenants, formatCurrency } from "@/hooks/useConvexData";
+import { useTenants, useActiveProperty, formatCurrency } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
@@ -58,19 +58,19 @@ export default function RentRollPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
-  const tenants = useAllTenants();
+  const activeProperty = useActiveProperty();
+  const tenants = useTenants(activeProperty?._id);
 
   // Re-resolve the selected tenant from the live list each render so the
   // drawer reflects the latest override state from Convex without a re-click.
   const selected = useMemo(() => {
     if (!selectedKey) return null;
-    return tenants.find((t: any) => `${t.propertyCode || "x"}-${t.unit}` === selectedKey) || null;
+    return tenants.find((t: any) => `${activeProperty?.code || "x"}-${t.unit}` === selectedKey) || null;
   }, [tenants, selectedKey]);
 
   const columnDefs = useMemo<ColDef[]>(() => {
     const unitWidth = isMobile ? 90 : 120;
     return [
-      { field: "propertyName", headerName: "Property", rowGroup: true, hide: true },
       { field: "building", headerName: "Bldg", rowGroup: true, hide: true, filter: true },
       { field: "unit", headerName: "Unit", width: unitWidth, pinned: "left", sort: "asc" },
       { field: "tenant", headerName: "Tenant", minWidth: 180, flex: isMobile ? 0 : 1, width: isMobile ? 180 : undefined,
@@ -94,8 +94,8 @@ export default function RentRollPage() {
   }, [isMobile]);
 
   const autoGroupColumnDef = useMemo<ColDef>(() => ({
-    headerName: "Property / Building",
-    minWidth: 250,
+    headerName: "Building",
+    minWidth: 200,
     pinned: "left",
     cellRendererParams: { suppressCount: false },
   }), []);
@@ -116,7 +116,7 @@ export default function RentRollPage() {
     // Ignore clicks on group rows — only open the detail panel for leaf tenant rows
     if (event.node?.group) return;
     if (!event.data) return;
-    const key = `${event.data.propertyCode || "x"}-${event.data.unit}`;
+    const key = `${activeProperty?.code || "x"}-${event.data.unit}`;
     setSelectedKey(key);
   }, []);
 
@@ -131,7 +131,7 @@ export default function RentRollPage() {
 
   return (
     <div>
-      <PageHeader title="Rent Roll" subtitle={`All units as of ${new Date().toLocaleString("en-US", { month: "long", year: "numeric" })} — Tap any row for details`}>
+      <PageHeader title="Rent Roll" subtitle={`${activeProperty?.name || ""} — Tap any row for details`}>
         <button onClick={exportRentRollReal} disabled={tenants.length === 0} title="Export .csv" aria-label="Export .csv" className="flex items-center justify-center bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] hover:border-[#4f6ef7] text-[#5a5e73] dark:text-[#a1a1aa] hover:text-[#4f6ef7] w-8 h-8 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
           <Download size={14} />
         </button>
@@ -187,7 +187,7 @@ export default function RentRollPage() {
           suppressRowHoverHighlight={false}
           rowBuffer={20}
           cacheBlockSize={500}
-          getRowId={(params) => `${params.data.propertyCode || "x"}-${params.data.unit}`}
+          getRowId={(params) => `${activeProperty?.code || "x"}-${params.data.unit}`}
         />
       </div>
 

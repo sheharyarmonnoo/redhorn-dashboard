@@ -53,7 +53,7 @@ export default function DashboardPage() {
     localStorage.setItem("redhorn_revenue_filter", JSON.stringify(Array.from(units)));
   }, []);
 
-  if (!property || tenants.length === 0) {
+  if (!property) {
     return <div className="text-[13px] text-[#a1a1aa] dark:text-[#71717a] py-12 text-center">Loading dashboard data...</div>;
   }
 
@@ -174,7 +174,7 @@ export default function DashboardPage() {
       <LatestInsights propertyId={property._id} />
 
       {/* Charts */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mb-6">
+      <div className="grid grid-cols-1 gap-3 mb-6">
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
           <div className="flex items-center justify-between mb-1">
             <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Revenue Breakdown</p>
@@ -212,51 +212,6 @@ export default function DashboardPage() {
           selectedUnits={activeFilterUnits}
           onApply={handleFilterApply}
         />
-        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
-          <div className="flex items-baseline justify-between mb-3">
-            <div>
-              <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Occupancy Trend</p>
-              <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">Portfolio-wide rate</p>
-            </div>
-            <p className="text-[12px] font-medium text-[#16a34a]">{occupancyPct}%</p>
-          </div>
-          {monthlyRevenue.length > 0 && <Chart options={occupancyChartOptions} series={occupancySeries} type="area" height={260} />}
-        </div>
-      </div>
-
-      {/* PM Call Prep */}
-      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
-        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-4">Weekly PM Call Prep</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <p className="text-[11px] font-medium text-[#dc2626] uppercase tracking-wide mb-2">Past Due</p>
-            <div className="space-y-2">
-              {tenants.filter(t => t.pastDueAmount > 0).map(t => (
-                <div key={t._id} className="text-[12px]">
-                  <p className="font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} — {t.tenant}</p>
-                  <p className="text-[#dc2626]">{formatCurrency(t.pastDueAmount)}</p>
-                </div>
-              ))}
-              {tenants.filter(t => t.pastDueAmount > 0).length === 0 && (
-                <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No past due tenants</p>
-              )}
-            </div>
-          </div>
-          <div>
-            <p className="text-[11px] font-medium text-[#2563eb] uppercase tracking-wide mb-2">Expiring Soon</p>
-            <div className="space-y-2">
-              {tenants.filter(t => t.status === "expiring_soon").slice(0, 5).map(t => (
-                <div key={t._id} className="text-[12px]">
-                  <p className="font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} — {t.tenant}</p>
-                  <p className="text-[#71717a] dark:text-[#a1a1aa]">Expires {t.leaseTo}</p>
-                </div>
-              ))}
-              {tenants.filter(t => t.status === "expiring_soon").length === 0 && (
-                <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No leases expiring within 90 days</p>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
 
       <KPIDrawer open={!!kpiDrawer} kpiKey={kpiDrawer} onClose={() => setKpiDrawer(null)} />
@@ -425,7 +380,7 @@ function FalseFlagCard({ insight, onUnflag, onAddComment }: {
 }
 
 function LatestInsights({ propertyId }: { propertyId: string }) {
-  const { alerts } = useAlerts();
+  const { alerts, loading } = useAlerts();
   const { user } = useUser();
   const markFalseFlag = useMutation(api.alerts.markFalseFlag);
   const undoFalseFlag = useMutation(api.alerts.undoFalseFlag);
@@ -469,6 +424,36 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
       hasAnyHistory: all.length > 0,
     };
   }, [alerts, propertyId]);
+
+  // While alerts are still streaming in from Convex, show a skeleton so the
+  // section doesn't pop in late after the rest of the dashboard renders.
+  if (loading) {
+    return (
+      <div className="mb-6 mt-6">
+        <div className="flex items-baseline justify-between mb-3">
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Latest AI Insights</p>
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">Loading…</p>
+        </div>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 mb-3 animate-pulse">
+          <div className="h-3 w-20 bg-[#f4f4f5] dark:bg-[#27272a] rounded mb-3" />
+          <div className="space-y-1.5">
+            <div className="h-3 w-full bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+            <div className="h-3 w-11/12 bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+            <div className="h-3 w-10/12 bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+          </div>
+        </div>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46]">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="flex items-center gap-3 px-3 py-2.5 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#e4e4e7] dark:bg-[#3f3f46]" />
+              <span className="flex-1 h-3 bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+              <span className="h-3 w-12 bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   // No insights ever generated for this property — hide entirely so the
   // empty state doesn't dominate before the first sync runs.
