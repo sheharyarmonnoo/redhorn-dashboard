@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { GoogleTagManagerHead, GoogleTagManagerNoscript } from "@/components/GoogleTagManager";
 
 export const metadata: Metadata = {
   title: "Redhorn Capital — Deal Manager AI",
@@ -24,8 +25,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <GoogleTagManagerHead />
       </head>
       <body className="flex min-h-screen bg-[#f7f7f8] dark:bg-[#09090b]">
+        <GoogleTagManagerNoscript />
         <ConvexClientProvider>
           <ThemeProvider>{children}</ThemeProvider>
         </ConvexClientProvider>
