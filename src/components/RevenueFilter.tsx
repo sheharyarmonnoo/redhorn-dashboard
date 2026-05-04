@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
 import { X } from "lucide-react";
 
@@ -10,10 +10,29 @@ interface Props {
   onApply: (units: Set<string>) => void;
 }
 
+const CLOSE_MS = 220;
+
 export default function RevenueFilter({ open, onClose, selectedUnits, onApply }: Props) {
   const [local, setLocal] = useState<Set<string>>(new Set(selectedUnits));
   const property = useActiveProperty();
   const tenants = useTenants(property?._id);
+
+  const [mounted, setMounted] = useState(open);
+  const [closing, setClosing] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      setClosing(false);
+    } else if (mounted) {
+      setClosing(true);
+      const t = setTimeout(() => {
+        setMounted(false);
+        setClosing(false);
+      }, CLOSE_MS);
+      return () => clearTimeout(t);
+    }
+  }, [open, mounted]);
 
   const occupiedTenants = useMemo(() =>
     tenants.filter((t: any) => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant.includes("Owner")),
@@ -28,7 +47,7 @@ export default function RevenueFilter({ open, onClose, selectedUnits, onApply }:
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [occupiedTenants]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   const allUnits = new Set(occupiedTenants.map(t => t.unit));
   const allSelected = allUnits.size === local.size;
@@ -69,8 +88,8 @@ export default function RevenueFilter({ open, onClose, selectedUnits, onApply }:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30 dark:bg-black/60 rh-backdrop" onClick={onClose} />
-      <div className="relative bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded w-full max-w-[520px] mx-4 max-h-[80vh] flex flex-col overflow-hidden rh-modal">
+      <div className={`absolute inset-0 bg-black/30 dark:bg-black/60 rh-backdrop${closing ? " is-closing" : ""}`} onClick={onClose} />
+      <div className={`relative bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded w-full max-w-[520px] mx-4 max-h-[80vh] flex flex-col overflow-hidden rh-modal${closing ? " is-closing" : ""}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
           <div>

@@ -18,10 +18,14 @@ const stageLabels: Record<string, string> = {
 };
 const stageOrder: DelinquencyStage[] = ["none", "past_due", "default_notice", "lockout_pending", "locked_out", "auction_pending", "auction"];
 
-export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
+export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated }: Props) {
+  const [cached, setCached] = useState<any>(tenantProp);
+  const [closing, setClosing] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+
+  const tenant = tenantProp ?? cached;
 
   const { notes: notesLog, createNote, updateNote, removeNote } = useUnitNotes(
     tenant?.propertyId,
@@ -30,11 +34,25 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
   const { updateDelinquency, updateElectricPosted } = useTenantMutations();
 
   useEffect(() => {
-    if (tenant) {
+    if (tenantProp) {
+      setCached(tenantProp);
+      setClosing(false);
+    } else if (cached) {
+      setClosing(true);
+      const t = setTimeout(() => {
+        setCached(null);
+        setClosing(false);
+      }, 220);
+      return () => clearTimeout(t);
+    }
+  }, [tenantProp, cached]);
+
+  useEffect(() => {
+    if (tenantProp) {
       setNotesDraft("");
       setEditingNoteId(null);
     }
-  }, [tenant?._id]);
+  }, [tenantProp?._id]);
 
   if (!tenant) return null;
 
@@ -88,8 +106,8 @@ export default function UnitDetailPanel({ tenant, onClose, onUpdated }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/20 dark:bg-black/60 rh-backdrop" onClick={onClose} />
-      <div className="relative w-full sm:w-[520px] bg-white dark:bg-[#18181b] h-full overflow-y-auto border-l border-[#e4e4e7] dark:border-[#3f3f46] rh-drawer">
+      <div className={`absolute inset-0 bg-black/20 dark:bg-black/60 rh-backdrop${closing ? " is-closing" : ""}`} onClick={onClose} />
+      <div className={`relative w-full sm:w-[520px] bg-white dark:bg-[#18181b] h-full overflow-y-auto border-l border-[#e4e4e7] dark:border-[#3f3f46] rh-drawer${closing ? " is-closing" : ""}`}>
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-[#18181b] border-b border-[#e4e4e7] dark:border-[#3f3f46] px-5 py-4 flex items-start justify-between gap-3 z-10">
           <div className="min-w-0">

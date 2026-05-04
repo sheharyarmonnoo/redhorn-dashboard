@@ -16,6 +16,7 @@ interface AlertRow {
   building: string;
   category: string;
   severity: "Critical" | "Warning" | "Info";
+  title?: string;        // headline action — present on AI insights, optional otherwise
   detail: string;
   amount: number;
   date: string;
@@ -32,6 +33,28 @@ function SeverityCellRenderer(props: { value: string }) {
       <span className={`w-1.5 h-1.5 rounded-full ${dots[props.value] || "bg-[#a1a1aa]"}`} />
       {props.value}
     </span>
+  );
+}
+
+// Renders the Details column. For AI-generated alerts (which carry a title),
+// shows the title bold above a one-line truncated detail so each row reads
+// like a single insight unit. For rule-based alerts (no title), just shows
+// the detail. Combined with autoHeight=true on the column, the row sizes
+// itself to fit the title + body.
+function DetailCellRenderer(props: { value: string; data: AlertRow }) {
+  const title = (props.data?.title || "").trim();
+  const body = (props.value || "").trim();
+  // Strip simple markdown bold markers for the grid view (drawer renders full markdown).
+  const stripBold = (s: string) => s.replace(/\*\*([^*]+)\*\*/g, "$1");
+  const firstLine = stripBold(body.split("\n").find(l => l.trim().length > 0) || "");
+  if (!title) {
+    return <span className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-snug">{stripBold(body)}</span>;
+  }
+  return (
+    <div className="py-1.5 leading-snug">
+      <p className="text-[12px] font-semibold text-[#18181b] dark:text-[#fafafa] truncate">{title}</p>
+      <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5 line-clamp-1">{firstLine}</p>
+    </div>
   );
 }
 
@@ -220,6 +243,7 @@ export default function AlertsPage() {
           building: "",
           category: "AI Insight",
           severity: sevTitle[a.severity] || "Warning",
+          title: a.title || "",
           detail: a.body || "",
           amount: 0,
           date: (a.date || "").slice(0, 10),
@@ -248,7 +272,7 @@ export default function AlertsPage() {
         { field: "severity", headerName: "Sev", width: 80, cellRenderer: SeverityCellRenderer },
         { field: "unit", headerName: "Unit", width: 80 },
         { field: "category", headerName: "Type", width: 130, cellRenderer: CategoryCellRenderer },
-        { field: "detail", headerName: "Details", minWidth: 140, flex: 1 },
+        { field: "detail", headerName: "Details", flex: 1, autoHeight: true, wrapText: true, cellRenderer: DetailCellRenderer },
       ];
     }
     // Mirrors the Add Alert modal fields: severity / category / unit / details.
@@ -256,7 +280,7 @@ export default function AlertsPage() {
       { field: "severity", headerName: "Severity", width: 110, cellRenderer: SeverityCellRenderer, filter: true },
       { field: "category", headerName: "Category", width: 160, cellRenderer: CategoryCellRenderer, filter: true },
       { field: "unit", headerName: "Unit", width: 100 },
-      { field: "detail", headerName: "Details", minWidth: 320, flex: 1 },
+      { field: "detail", headerName: "Details", flex: 1, autoHeight: true, wrapText: true, cellRenderer: DetailCellRenderer },
     ];
   }, [isMobile]);
 
@@ -321,7 +345,7 @@ export default function AlertsPage() {
           rowClass="cursor-pointer"
           animateRows={true}
           pagination={true}
-          paginationPageSize={500}
+          paginationPageSize={20}
           getRowId={(params) => params.data.id}
         />
       </div>

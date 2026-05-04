@@ -406,7 +406,23 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
   const addComment = useMutation(api.alerts.addComment);
   const [showSuppressed, setShowSuppressed] = useState(false);
   const [flagging, setFlagging] = useState<{ id: any; title: string } | null>(null);
+  // Persist the summary card's expand state per property in localStorage so the
+  // user lands back where they left off across page reloads / property switches.
+  const summaryKey = `redhorn_summary_expanded_${propertyId}`;
   const [summaryExpanded, setSummaryExpanded] = useState(false);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(summaryKey);
+      setSummaryExpanded(v === "1");
+    } catch {}
+  }, [summaryKey]);
+  const toggleSummary = () => {
+    setSummaryExpanded(prev => {
+      const next = !prev;
+      try { localStorage.setItem(summaryKey, next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
 
   const { active, suppressed, latestSummary, latestSummaryAt, hasAnyHistory } = useMemo(() => {
     const all = (alerts as any[])
@@ -460,7 +476,7 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
           summary={latestSummary}
           updatedAt={latestSummaryAt}
           expanded={summaryExpanded}
-          onToggle={() => setSummaryExpanded(s => !s)}
+          onToggle={toggleSummary}
         />
       )}
       {active.length > 0 ? (
