@@ -2,6 +2,7 @@ import { Page } from "playwright";
 import { resolve } from "node:path";
 import { YardiProperty } from "../properties.js";
 import { downloadDirFor, slugForProperty } from "../paths.js";
+import { fetchYardiReportAttachment } from "../gmail.js";
 
 /**
  * Generic Yardi SSRS report scraper.
@@ -24,6 +25,7 @@ export interface SsrsRunOptions {
   reportFile: string;            // e.g. "rs_Comm_Lease_Ledger.SSRS.txt"
   outputFilename: string;        // local filename to save (within month dir)
   reportLabel: string;           // human label for logs
+  emailSubjectKeywords: string[]; // keywords to match the Yardi report email subject
   setMonthRange?: boolean;       // default true — fill begmonth/endmonth
   setBegDate?: boolean;          // default false — fill begdate to end-of-period
 }
@@ -75,47 +77,33 @@ export async function runSsrsReportForProperty(
     await setSsrsField(frame, "begdate", mmddyyyy);
   }
 
-  // Output to Excel file (downloads as .xlsx)
-  await setSsrsSelect(frame, "RptOutput", "Filexlsx");
+  // Output: email the report. Yardi will mail the .xlsx as an attachment to
+  // the Yardi user's email (forwards to GMAIL_USER). We then IMAP-fetch it.
+  // This bypasses the unreliable Save-to-Excel-File popup behavior.
+  await setSsrsSelect(frame, "RptOutput", "Emailxlsx");
 
-  // Submit — first <input type="submit"> in the form
-  const outPath = resolve(downloadDirFor(monthIso), opts.outputFilename || `${slugForProperty(property.code)}-${opts.reportFile.replace(/\.SSRS\.txt$/i, "")}.xlsx`);
+  const outPath = resolve(
+    downloadDirFor(monthIso),
+    opts.outputFilename || `${slugForProperty(property.code)}-${opts.reportFile.replace(/\.SSRS\.txt$/i, "")}.xlsx`
+  );
 
-  // Yardi's "Save to Excel File" submits the form's target="filter" through to
-  // the server which streams the .xlsx back. Depending on browser/popup state
-  // the download fires either on the parent page (when iframe target matches)
-  // OR on a freshly-opened popup window. Listen for both — whichever fires
-  // first wins.
+  // Anchor the email-arrival window slightly before submit so we don't race
+  // a stale earlier email.
+  const submittedAt = new Date();
   const submitBtn = frame.locator('input[type="submit"]').first();
-  const context = voyagerPage.context();
-
-  const popupPromise = context.waitForEvent("page", { timeout: 240_000 }).catch(() => null);
-  const parentDownloadPromise = voyagerPage.waitForEvent("download", { timeout: 240_000 }).catch(() => null);
-
   await submitBtn.click();
+  console.log(`   submitted ${opts.reportLabel}; polling Gmail for the report email…`);
 
-  // Race: either the parent page captures the download directly, or a popup
-  // opens and we catch its download.
-  const winner = await Promise.race([
-    parentDownloadPromise.then(d => d ? { kind: "parent" as const, download: d } : null),
-    popupPromise.then(p => p ? { kind: "popup" as const, page: p } : null),
-  ]);
+  // Yardi typically delivers within 30-60s. Poll the inbox + REDHORN label
+  // for an email matching the report subject keywords with an .xlsx attachment.
+  await fetchYardiReportAttachment({
+    outPath,
+    subjectKeywords: opts.emailSubjectKeywords,
+    afterDate: submittedAt,
+    timeoutMs: 300_000,    // 5 min — generous; reports usually land in <60s
+    pollIntervalMs: 8_000,
+  });
 
-  if (!winner) {
-    throw new Error(`SSRS submit timed out — neither parent download nor popup fired for ${opts.reportLabel}`);
-  }
-
-  let download;
-  if (winner.kind === "parent") {
-    download = winner.download;
-  } else {
-    // Popup opened — wait for download on it
-    console.log(`   SSRS opened popup; waiting for its download…`);
-    download = await winner.page.waitForEvent("download", { timeout: 240_000 });
-    await winner.page.close().catch(() => {});
-  }
-
-  await download.saveAs(outPath);
   console.log(`   saved → ${outPath}`);
   return outPath;
 }

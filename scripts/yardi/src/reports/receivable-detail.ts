@@ -21,6 +21,7 @@ export async function runReceivableDetailForProperty(
     reportFile: "rs_Comm_Lease_Ledger.SSRS.txt",
     outputFilename: `${slugForProperty(property.code)}-receivable-detail.xlsx`,
     reportLabel: "Receivable Detail (Lease Ledger)",
+    emailSubjectKeywords: ["lease ledger", "commercial lease ledger"],
     setMonthRange: true,
     setBegDate: true,
   });
