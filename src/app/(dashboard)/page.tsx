@@ -169,10 +169,6 @@ export default function DashboardPage() {
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
       </div>
 
-      <ActionItems heading="Tasks" compact />
-
-      <LatestInsights propertyId={property._id} />
-
       {/* Charts */}
       <div className="grid grid-cols-1 gap-3 mb-6">
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
@@ -213,6 +209,10 @@ export default function DashboardPage() {
           onApply={handleFilterApply}
         />
       </div>
+
+      <LatestInsights propertyId={property._id} />
+
+      <ActionItems heading="Tasks" compact readOnly />
 
       <KPIDrawer open={!!kpiDrawer} kpiKey={kpiDrawer} onClose={() => setKpiDrawer(null)} />
     </div>
@@ -627,21 +627,21 @@ function SummaryCard({ summary, updatedAt, expanded, onToggle }: {
 
   return (
     <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 mb-3 rh-card-mount">
-      <div className="flex items-baseline justify-between mb-2">
-        <p className="text-[11px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide">Summary</p>
-        {ts && <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">Updated {ts}</p>}
-      </div>
+      <p className="text-[11px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide mb-2">Summary</p>
       <div className={`text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed space-y-2 ${!expanded && isLong ? "line-clamp-3" : ""}`}>
         {renderMarkdown(summary)}
       </div>
-      {isLong && (
-        <button
-          onClick={onToggle}
-          className="text-[11px] text-[#2563eb] dark:text-[#60a5fa] hover:underline mt-2 cursor-pointer"
-        >
-          {expanded ? "Show less" : "Read more"}
-        </button>
-      )}
+      <div className="flex items-center gap-3 mt-2">
+        {isLong && (
+          <button
+            onClick={onToggle}
+            className="text-[11px] text-[#2563eb] dark:text-[#60a5fa] hover:underline cursor-pointer"
+          >
+            {expanded ? "Show less" : "Read more"}
+          </button>
+        )}
+        {ts && <span className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">· updated {ts}</span>}
+      </div>
     </div>
   );
 }

@@ -85,10 +85,10 @@ export default function RentRollPage() {
         valueFormatter: (p: { value: string }) => p.value || "—" },
       { field: "monthlyRent", headerName: "Rent", width: 110, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
-      { field: "monthlyElectric", headerName: "Electric", width: 90, type: "numericColumn",
+      { field: "securityDeposit", headerName: "Security Deposit", width: 130, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
-      { field: "pastDueAmount", headerName: "Past Due", width: 100, type: "numericColumn",
-        cellRenderer: CurrencyCellRenderer },
+      // Monthly Electric + Past Due intentionally hidden — billback values
+      // aren't stable yet; the drawer still shows them per-unit when needed.
       { field: "status", headerName: "Status", width: 130, cellRenderer: StatusCellRenderer, filter: true },
     ];
   }, [isMobile]);

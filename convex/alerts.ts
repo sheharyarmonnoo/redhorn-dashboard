@@ -102,6 +102,24 @@ export const updateStatus = mutation({
  * yardi_sync sync_job. Removes the duplicate insights that piled up from
  * each iteration today, leaving only the freshest batch.
  */
+/**
+ * One-off: nuke all income_insight alerts for a property so they can be
+ * regenerated from scratch with the latest prompt format. Use sparingly —
+ * this breaks the continuity loop until the next insight extraction runs.
+ */
+export const deleteIncomeInsightsForProperty = mutation({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    const all = await ctx.db
+      .query("alerts")
+      .filter((q) => q.eq(q.field("propertyId"), args.propertyId))
+      .filter((q) => q.eq(q.field("alertType"), "income_insight"))
+      .collect();
+    for (const a of all) await ctx.db.delete(a._id);
+    return { deleted: all.length };
+  },
+});
+
 export const cleanForDemo = mutation({
   args: {},
   handler: async (ctx) => {

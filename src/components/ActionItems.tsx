@@ -64,13 +64,14 @@ const columnBorder: Record<KanbanColumn, string> = {
   done: "border-t-[#16a34a]",
 };
 
-function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging }: {
+function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging, readOnly = false }: {
   item: any;
   onRemove: (id: string) => void;
   onEdit: (id: string, updates: { text?: string; priority?: string; assignedTo?: string }) => void;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   isDragging: boolean;
+  readOnly?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
@@ -86,12 +87,12 @@ function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging
 
   return (
     <div
-      draggable={!editing}
-      onDragStart={() => onDragStart(item._id)}
-      onDragEnd={onDragEnd}
-      className={`group bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2.5 hover:border-[#a1a1aa] dark:hover:border-[#52525b] transition-all ${
+      draggable={!editing && !readOnly}
+      onDragStart={readOnly ? undefined : () => onDragStart(item._id)}
+      onDragEnd={readOnly ? undefined : onDragEnd}
+      className={`group bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2.5 ${readOnly ? "" : "hover:border-[#a1a1aa] dark:hover:border-[#52525b]"} transition-all ${
         isDragging ? "opacity-40 scale-[0.98]" : ""
-      } ${!editing ? "cursor-grab active:cursor-grabbing" : ""}`}
+      } ${!editing && !readOnly ? "cursor-grab active:cursor-grabbing" : ""}`}
     >
       <div className="flex items-start gap-2">
         <GripVertical size={12} className="text-[#d4d4d8] dark:text-[#52525b] mt-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -116,8 +117,8 @@ function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging
             </div>
           ) : (
             <>
-              <p onClick={() => setEditing(true)}
-                className={`text-[12px] leading-relaxed cursor-text hover:bg-[#fafafa] dark:hover:bg-[#27272a] rounded px-0.5 -mx-0.5 ${item.column === "done" ? "text-[#a1a1aa] line-through" : "text-[#18181b] dark:text-[#fafafa]"}`}>
+              <p onClick={readOnly ? undefined : () => setEditing(true)}
+                className={`text-[12px] leading-relaxed rounded px-0.5 -mx-0.5 ${readOnly ? "" : "cursor-text hover:bg-[#fafafa] dark:hover:bg-[#27272a]"} ${item.column === "done" ? "text-[#a1a1aa] line-through" : "text-[#18181b] dark:text-[#fafafa]"}`}>
                 {item.text}
               </p>
               <div className="flex items-center gap-2 mt-1.5">
@@ -141,7 +142,7 @@ function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging
             </>
           )}
         </div>
-        {!editing && (
+        {!editing && !readOnly && (
           <button onClick={(e) => { e.stopPropagation(); onRemove(item._id); }}
             className="opacity-0 group-hover:opacity-100 text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] dark:hover:text-[#dc2626] transition-all cursor-pointer">
             <X size={13} />
@@ -152,7 +153,7 @@ function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging
   );
 }
 
-export default function ActionItems({ heading = "Tasks", showHeader = true, compact = false }: { heading?: string; showHeader?: boolean; compact?: boolean } = {}) {
+export default function ActionItems({ heading = "Tasks", showHeader = true, compact = false, readOnly = false }: { heading?: string; showHeader?: boolean; compact?: boolean; readOnly?: boolean } = {}) {
   const { items, createItem, moveItem, updateItem, removeItem } = useActionItems();
   const [showAdd, setShowAdd] = useState(false);
   const [newText, setNewText] = useState("");
@@ -208,13 +209,19 @@ export default function ActionItems({ heading = "Tasks", showHeader = true, comp
       {showHeader && (
         <div className="flex items-center justify-between mb-3">
           <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">{heading}</p>
-          <button onClick={() => setShowAdd(!showAdd)}
-            className="flex items-center gap-1 text-[11px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer">
-            <Plus size={14} /> New
-          </button>
+          {readOnly ? (
+            <a href="/tasks" className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors">
+              Open task board →
+            </a>
+          ) : (
+            <button onClick={() => setShowAdd(!showAdd)}
+              className="flex items-center gap-1 text-[11px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer">
+              <Plus size={14} /> New
+            </button>
+          )}
         </div>
       )}
-      {!showHeader && (
+      {!showHeader && !readOnly && (
         <div className="flex justify-end mb-3">
           <button onClick={() => setShowAdd(!showAdd)}
             className="flex items-center gap-1 text-[11px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] transition-colors cursor-pointer">
@@ -223,7 +230,7 @@ export default function ActionItems({ heading = "Tasks", showHeader = true, comp
         </div>
       )}
 
-      {showAdd && (
+      {showAdd && !readOnly && (
         <NewTaskModal
           text={newText}
           priority={newPriority}
@@ -243,9 +250,9 @@ export default function ActionItems({ heading = "Tasks", showHeader = true, comp
           return (
             <div
               key={col.key}
-              onDragOver={(e) => handleDragOver(e, col.key)}
-              onDragLeave={() => setDragOverCol(null)}
-              onDrop={(e) => handleDrop(e, col.key)}
+              onDragOver={readOnly ? undefined : (e) => handleDragOver(e, col.key)}
+              onDragLeave={readOnly ? undefined : () => setDragOverCol(null)}
+              onDrop={readOnly ? undefined : (e) => handleDrop(e, col.key)}
               className={`bg-[#fafafa] dark:bg-[#27272a] border-2 border-t-2 ${columnBorder[col.key]} rounded p-2.5 min-h-[140px] transition-colors ${
                 isDropTarget ? "border-[#18181b] dark:border-[#fafafa] bg-[#f4f4f5] dark:bg-[#3f3f46]" : "border-[#e4e4e7] dark:border-[#3f3f46]"
               }`}
@@ -267,6 +274,7 @@ export default function ActionItems({ heading = "Tasks", showHeader = true, comp
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     isDragging={draggingId === item._id}
+                    readOnly={readOnly}
                   />
                 ))}
                 {colItems.length === 0 && (
