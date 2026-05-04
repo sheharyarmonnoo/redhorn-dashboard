@@ -137,7 +137,7 @@ export default function ActivityPage() {
       </div>
 
       {/* Timeline (scrollable, capped at 80vh) */}
-      <div className="space-y-6 overflow-y-auto pr-2" style={{ maxHeight: "80vh" }}>
+      <div className="space-y-6 overflow-y-auto pr-2" style={{ height: "60vh" }}>
         {Object.entries(grouped).map(([date, dayEntries]) => (
           <div key={date}>
             <p className="text-[11px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide mb-3 sticky top-0 bg-[#fafafa] dark:bg-[#09090b] py-1 z-10">{date}</p>
