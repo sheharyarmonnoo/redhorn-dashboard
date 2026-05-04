@@ -491,6 +491,18 @@ export default function DataPipelinePage() {
       manual_upload: "Manual Upload",
     };
     const labelSource = (s: string) => friendlySource[s] || s || "—";
+    const propertyByCode: Record<string, string> = {
+      hol: "Hollister",
+      hollister: "Hollister",
+      bel: "Belgold",
+      belgold: "Belgold",
+    };
+    const propertyFromCode = (code?: string) =>
+      code ? (propertyByCode[code.toLowerCase()] || code) : "";
+    const propertyFromFilename = (name: string) => {
+      const m = (name || "").toLowerCase().match(/^([a-z]+)[-_]/);
+      return m ? (propertyByCode[m[1]] || "") : "";
+    };
     const rows: any[] = [];
     for (const job of syncJobs as any[]) {
       const completedAt = job.completedAt || job.startedAt || "";
@@ -509,6 +521,7 @@ export default function DataPipelinePage() {
           jobId: job._id,
           storageId: undefined,
           filename: "(no files attached)",
+          property: propertyFromCode(job.propertyCode) || propertyFromFilename(""),
           source: labelSource(job.source),
           type: (job.reportTypes || []).map((t: string) => friendlyType[t] || t).join(", "),
           records: job.recordsCreated ?? 0,
@@ -525,6 +538,7 @@ export default function DataPipelinePage() {
           jobId: job._id,
           storageId: f.storageId,
           filename: f.fileName,
+          property: propertyFromFilename(f.fileName) || propertyFromCode(job.propertyCode) || "—",
           source: labelSource(job.source),
           type: friendlyType[f.reportType] || f.reportType || "",
           records: typeof f.rowsIngested === "number" ? f.rowsIngested : (job.recordsCreated ?? 0),
@@ -571,6 +585,7 @@ export default function DataPipelinePage() {
     }
     return [
       { field: "filename", headerName: "Filename", minWidth: 240, flex: 1 },
+      { field: "property", headerName: "Property", width: 120, filter: true },
       { field: "type", headerName: "Type", width: 160 },
       { field: "source", headerName: "Source", width: 130 },
       { field: "records", headerName: "Records", width: 95, type: "numericColumn" },
@@ -640,12 +655,33 @@ export default function DataPipelinePage() {
             {syncData.length} file{syncData.length === 1 ? "" : "s"} · {lastSyncLabel}
           </p>
         </div>
-        <input
-          type="text"
-          placeholder="Search files..."
-          className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded text-[12px] text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] focus:outline-none focus:border-[#71717a] w-full sm:w-48"
-          onChange={(e) => gridRef.current?.api?.setGridOption("quickFilterText", e.target.value)}
-        />
+        <div className="flex flex-col sm:flex-row gap-2">
+          <select
+            className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded text-[12px] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
+            onChange={(e) => {
+              const val = e.target.value;
+              const api = gridRef.current?.api;
+              if (!api) return;
+              if (val === "all") {
+                api.setColumnFilterModel("property", null).then(() => api.onFilterChanged());
+              } else {
+                api.setColumnFilterModel("property", { type: "equals", filter: val }).then(() => api.onFilterChanged());
+              }
+            }}
+            defaultValue="all"
+          >
+            <option value="all">All properties</option>
+            {Array.from(new Set(syncData.map((r: any) => r.property).filter((p: string) => p && p !== "—"))).sort().map((p: any) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            placeholder="Search files..."
+            className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded text-[12px] text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] focus:outline-none focus:border-[#71717a] w-full sm:w-48"
+            onChange={(e) => gridRef.current?.api?.setGridOption("quickFilterText", e.target.value)}
+          />
+        </div>
       </div>
 
       {syncData.length === 0 && (
@@ -657,7 +693,7 @@ export default function DataPipelinePage() {
           </p>
         </div>
       )}
-      <div className="ag-theme-alpine w-full rounded overflow-hidden border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: isMobile ? 450 : 480, display: syncData.length === 0 ? "none" : "block" }}>
+      <div className="ag-theme-alpine w-full rounded overflow-hidden border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: isMobile ? 520 : "calc(100vh - 320px)", minHeight: 520, display: syncData.length === 0 ? "none" : "block" }}>
         <AgGridReact
           ref={gridRef}
           rowData={syncData}
