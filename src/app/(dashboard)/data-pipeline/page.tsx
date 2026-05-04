@@ -63,51 +63,90 @@ function DownloadCell(props: { data: FileSyncRow }) {
 }
 
 function DetailPanel({ file, onClose }: { file: FileSyncRow; onClose: () => void }) {
-  const styleMap: Record<string, { border: string; bg: string; text: string }> = {
-    Success: { border: "border-[#16a34a]", bg: "bg-emerald-50 dark:bg-emerald-950/30", text: "text-[#16a34a]" },
-    Warning: { border: "border-[#d97706]", bg: "bg-amber-50 dark:bg-amber-950/30", text: "text-[#d97706]" },
-    Failed: { border: "border-[#dc2626]", bg: "bg-red-50 dark:bg-red-950/30", text: "text-[#dc2626]" },
+  const statusColor: Record<string, string> = {
+    Success: "text-[#16a34a]",
+    Warning: "text-[#d97706]",
+    Failed: "text-[#dc2626]",
   };
-  const s = styleMap[file.status] || styleMap.Failed;
-  const borderColor = s.border;
-  const bgColor = s.bg;
-  const textColor = s.text;
+  const sevText = statusColor[file.status] || statusColor.Failed;
+  const storageId = (file as any).storageId as string | undefined;
+
+  function downloadFile() {
+    if (!storageId) return;
+    const proxyUrl = `/api/files/${storageId}?name=${encodeURIComponent(file.filename)}`;
+    window.open(proxyUrl, "_blank", "noopener");
+  }
 
   return (
-    <div className={`mt-3 ${bgColor} border ${borderColor} rounded p-4`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2">
-            <span className={`text-[12px] font-semibold ${textColor} uppercase tracking-wide`}>{file.status}</span>
-            <span className="text-[11px] text-[#71717a]">{file.filename}</span>
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40 dark:bg-black/60 rh-backdrop" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-xl w-full max-w-md h-full overflow-y-auto rh-drawer"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#e4e4e7] dark:border-[#3f3f46] sticky top-0 bg-white dark:bg-[#18181b] z-10">
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] truncate">{file.filename}</p>
+            <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5">
+              <span className={`font-medium uppercase ${sevText}`}>{file.status}</span>
+              {file.type && <> · {file.type}</>}
+            </p>
           </div>
+          <button onClick={onClose} className="text-[16px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer leading-none">×</button>
+        </div>
 
-          <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{file.statusDetail}</p>
-
+        <div className="p-5 space-y-4">
+          <Field label="Source">{file.source || "—"}</Field>
+          <Field label="Records ingested">{file.records.toLocaleString()}</Field>
+          <Field label="Last synced">{formatSyncedAt(file.syncedAt)}</Field>
+          {file.statusDetail && <Field label="Status detail">{file.statusDetail}</Field>}
           {file.affectedUnits && file.affectedUnits.length > 0 && (
-            <div className="mt-3">
-              <p className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide font-medium mb-1">Affected Units</p>
+            <div>
+              <p className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide mb-1">Affected units</p>
               <div className="flex flex-wrap gap-1">
                 {file.affectedUnits.map(u => (
-                  <span key={u} className="text-[11px] font-medium text-[#18181b] dark:text-[#fafafa] bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded px-2 py-0.5">{u}</span>
+                  <span key={u} className="text-[11px] font-medium text-[#18181b] dark:text-[#fafafa] bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded px-2 py-0.5">{u}</span>
                 ))}
               </div>
             </div>
           )}
+          {file.resolution && <Field label="Recommended action">{file.resolution}</Field>}
+        </div>
 
-          {file.resolution && (
-            <div className="mt-3">
-              <p className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide font-medium mb-1">Recommended Action</p>
-              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{file.resolution}</p>
-            </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46] sticky bottom-0 bg-white dark:bg-[#18181b]">
+          <button
+            onClick={onClose}
+            className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] px-3 py-1.5 rounded cursor-pointer"
+          >
+            Close
+          </button>
+          {storageId && (
+            <button
+              onClick={downloadFile}
+              className="flex items-center gap-1.5 text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-3 py-1.5 rounded cursor-pointer"
+            >
+              <Download size={13} /> Download .xlsx
+            </button>
           )}
         </div>
-        <button onClick={onClose} className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer p-0.5 flex-shrink-0">
-          <X size={16} />
-        </button>
       </div>
     </div>
   );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide mb-1">{label}</p>
+      <div className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{children}</div>
+    </div>
+  );
+}
+
+function formatSyncedAt(iso: string): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  } catch { return iso; }
 }
 
 // --- Training Protocol (free-text checklist + notes) ---
