@@ -73,7 +73,6 @@ export default function DashboardPage() {
   const latestRollup = monthlyRevenue.length > 0 ? monthlyRevenue[monthlyRevenue.length - 1] : null;
   const totalMonthlyRent = latestRollup && latestRollup.total > 0 ? latestRollup.total : tenantRentSum;
   const totalPastDue = tenants.reduce((sum, t) => sum + t.pastDueAmount, 0);
-  const electricMissing = tenants.filter(t => !t.electricPosted && t.leaseType === "Office Net Lease" && t.tenant && !t.tenant.includes("Owner"));
   const expiringCount = tenants.filter(t => t.status === "expiring_soon").length;
 
   // Generate alerts from tenant data
@@ -85,9 +84,6 @@ export default function DashboardPage() {
   const alerts: { type: string; message: string; unit: string; date: string }[] = [];
   for (const t of tenants) {
     if (t.status === "vacant") continue;
-    if (t.leaseType === "Office Net Lease" && !t.electricPosted && t.tenant) {
-      alerts.push({ type: "critical", message: "Electric not posted", unit: t.unit, date: today });
-    }
     if (t.pastDueAmount > 0) {
       alerts.push({ type: "critical", message: `Past due: ${formatCurrency(t.pastDueAmount)}`, unit: t.unit, date: today });
     }
@@ -164,12 +160,11 @@ export default function DashboardPage() {
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 mb-6">
         <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} sparkline={monthlyRevenue.map(m => m.total)} onClick={() => setKpiDrawer("revenue")} />
         <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${totalUnits} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
         <KPICard title="Past Due" value={formatCurrency(totalPastDue)} color={totalPastDue > 0 ? "text-[#dc2626]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("pastdue")} />
         <KPICard title="Vacant" value={String(vacantUnits.length)} subtitle={`${totalVacantSqft.toLocaleString()} SF`} onClick={() => setKpiDrawer("vacant")} />
-        <KPICard title="Electric Posting" value={electricMissing.length > 0 ? `${electricMissing.length} Missing` : "All Posted"} color={electricMissing.length > 0 ? "text-[#d97706]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("electric")} />
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
       </div>
 
@@ -229,7 +224,7 @@ export default function DashboardPage() {
       {/* PM Call Prep */}
       <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
         <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-4">Weekly PM Call Prep</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <p className="text-[11px] font-medium text-[#dc2626] uppercase tracking-wide mb-2">Past Due</p>
             <div className="space-y-2">
@@ -241,20 +236,6 @@ export default function DashboardPage() {
               ))}
               {tenants.filter(t => t.pastDueAmount > 0).length === 0 && (
                 <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No past due tenants</p>
-              )}
-            </div>
-          </div>
-          <div>
-            <p className="text-[11px] font-medium text-[#d97706] uppercase tracking-wide mb-2">Electric Not Posted</p>
-            <div className="space-y-2">
-              {electricMissing.map(t => (
-                <div key={t._id} className="text-[12px]">
-                  <p className="font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} — {t.tenant}</p>
-                  <p className="text-[#71717a] dark:text-[#a1a1aa]">~{formatCurrency(t.monthlyElectric)}/mo expected</p>
-                </div>
-              ))}
-              {electricMissing.length === 0 && (
-                <p className="text-[11px] text-[#16a34a]">All electric charges posted</p>
               )}
             </div>
           </div>
@@ -317,7 +298,7 @@ function InsightRow({ insight, dotClass, onFlag }: {
             <button
               onClick={(e) => { e.stopPropagation(); onFlag(); }}
               className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
-              title="Mark as false flag — Claude won't re-flag this next sync"
+              title="Mark as false flag — won't re-flag this next sync"
             >
               Mark as false flag
             </button>
@@ -400,7 +381,7 @@ function FalseFlagCard({ insight, onUnflag, onAddComment }: {
         <button
           onClick={onUnflag}
           className="mt-1.5 text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#2563eb] cursor-pointer"
-          title="Reopen — Claude will see this finding again next sync"
+          title="Reopen — this finding will be re-evaluated next sync"
         >
           Reopen
         </button>
@@ -416,6 +397,7 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
   const undoFalseFlag = useMutation(api.alerts.undoFalseFlag);
   const addComment = useMutation(api.alerts.addComment);
   const [showSuppressed, setShowSuppressed] = useState(false);
+  const [flagging, setFlagging] = useState<{ id: any; title: string } | null>(null);
 
   const { active, suppressed, latestSummary, hasAnyHistory } = useMemo(() => {
     const all = (alerts as any[])
@@ -441,10 +423,14 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
     info: "bg-[#2563eb]",
   };
 
-  async function flag(id: any) {
-    const reason = window.prompt("Why is this a false flag? This explanation gets saved and the next sync will reference it so the same issue isn't re-flagged.");
-    if (!reason || !reason.trim()) return;
-    await markFalseFlag({ id, reason: reason.trim(), markedBy: user?.fullName || user?.firstName || "User" });
+  function openFlag(insight: any) {
+    setFlagging({ id: insight._id, title: insight.title || "this finding" });
+  }
+
+  async function submitFlag(reason: string) {
+    if (!flagging) return;
+    await markFalseFlag({ id: flagging.id, reason: reason.trim(), markedBy: user?.fullName || user?.firstName || "User" });
+    setFlagging(null);
   }
 
   async function unflag(id: any) {
@@ -467,7 +453,7 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
       {active.length > 0 ? (
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46]">
           {active.map(ins => (
-            <InsightRow key={ins._id} insight={ins} dotClass={sevDot[ins.severity] || sevDot.info} onFlag={() => flag(ins._id)} />
+            <InsightRow key={ins._id} insight={ins} dotClass={sevDot[ins.severity] || sevDot.info} onFlag={() => openFlag(ins)} />
           ))}
         </div>
       ) : (
@@ -499,6 +485,76 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
           )}
         </div>
       )}
+
+      {flagging && (
+        <FalseFlagModal
+          title={flagging.title}
+          onCancel={() => setFlagging(null)}
+          onSubmit={submitFlag}
+        />
+      )}
+    </div>
+  );
+}
+
+function FalseFlagModal({ title, onCancel, onSubmit }: {
+  title: string;
+  onCancel: () => void;
+  onSubmit: (reason: string) => void | Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit() {
+    if (!reason.trim() || submitting) return;
+    setSubmitting(true);
+    try { await onSubmit(reason); } finally { setSubmitting(false); }
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") onCancel();
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg shadow-xl w-full max-w-md p-5"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-1">Mark as false flag</p>
+        <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mb-3 truncate">"{title}"</p>
+        <p className="text-[12px] text-[#52525b] dark:text-[#a1a1aa] mb-2 leading-relaxed">
+          Why isn't this an issue? Your explanation gets saved so the next sync won't re-flag the same finding.
+        </p>
+        <textarea
+          autoFocus
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={4}
+          placeholder="e.g. Annual real-estate tax accrual is recorded as a lump sum in Q1 — this is expected."
+          className="w-full text-[12px] bg-white dark:bg-[#09090b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2 text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] dark:placeholder-[#52525b] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] resize-none"
+        />
+        <div className="flex items-center justify-end gap-2 mt-3">
+          <button
+            onClick={onCancel}
+            className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] px-3 py-1.5 rounded cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!reason.trim() || submitting}
+            className="text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-3 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {submitting ? "Saving…" : "Mark as false flag"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
