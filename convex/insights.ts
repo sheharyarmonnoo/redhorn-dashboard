@@ -44,6 +44,17 @@ export const extractForProperty = action({
     const priorDates = Object.keys(priorBySnapshot).filter(d => d !== latestDate).sort().reverse();
     const priorSnapshot = priorDates.length > 0 ? priorBySnapshot[priorDates[0]] : null;
 
+    // Per-tenant transactional data (Lease Ledger) — the AR-side view that
+    // unlocks delinquency, utility-posting, and aging analysis. May be empty
+    // if Receivable Detail hasn't synced yet.
+    const receivables: any[] = await ctx.runQuery(api.receivableDetails.listByProperty, {
+      propertyId: property._id,
+    });
+    // Tenants table — rounds out the picture of who's leased
+    const tenants: any[] = await ctx.runQuery(api.tenants.listByProperty, {
+      propertyId: property._id,
+    });
+
     // Prior insights for this property — give Claude continuity
     const allPriorAlerts: any[] = await ctx.runQuery(api.alerts.listForProperty, {
       propertyId: property._id,
@@ -55,7 +66,7 @@ export const extractForProperty = action({
     const priorAlerts = allPriorAlerts.filter((a: any) => a.status !== "false_flag");
     const falseFlags = allPriorAlerts.filter((a: any) => a.status === "false_flag");
 
-    const prompt = buildPrompt(property.name, latestDate, latest, priorSnapshot, priorAlerts, falseFlags);
+    const prompt = buildPrompt(property.name, latestDate, latest, priorSnapshot, receivables, tenants, priorAlerts, falseFlags);
     const rawAnalysis: string = await callClaude(prompt);
     const parsed = parseClaudeJson(rawAnalysis);
 
@@ -107,9 +118,93 @@ function rowsToTable(rows: any[]): string {
     .join("\n");
 }
 
-function buildPrompt(propertyName: string, latestDate: string, latest: any[], priorSnapshot: any[] | null, priorAlerts: any[], falseFlags: any[]): string {
+// Summarize receivable_details into a per-tenant view: latest balance, last
+// payment date, this-month charge codes posted, late-fee count. This is what
+// Claude reasons over for delinquency / utility-posting / payment-pattern
+// findings.
+function summarizeReceivables(receivables: any[], tenants: any[]): string {
+  if (!receivables || receivables.length === 0) return "(no receivable detail synced yet for this property)";
+
+  // Group transactions by tenant; track latest balance + last payment + charge codes seen this period
+  const byTenant: Record<string, { latestBalance: number; lastTxDate: string; lastPayDate: string; charges: number; receipts: number; chargeCodes: Set<string>; lateFees: number; }> = {};
+  for (const tx of receivables) {
+    const t = (tx.tenantName || "").trim();
+    if (!t) continue;
+    if (!byTenant[t]) {
+      byTenant[t] = { latestBalance: 0, lastTxDate: "", lastPayDate: "", charges: 0, receipts: 0, chargeCodes: new Set(), lateFees: 0 };
+    }
+    const b = byTenant[t];
+    const d = (tx.transactionDate || "").trim();
+    if (d && d > b.lastTxDate) {
+      b.lastTxDate = d;
+      b.latestBalance = Number(tx.balance) || 0;
+    }
+    if ((tx.receipts || 0) > 0 && d > b.lastPayDate) b.lastPayDate = d;
+    b.charges += Number(tx.charges) || 0;
+    b.receipts += Number(tx.receipts) || 0;
+    if (tx.chargeCode) b.chargeCodes.add(tx.chargeCode);
+    if (/late\s*fee/i.test(tx.description || "")) b.lateFees++;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const tenantList = tenants.filter((t: any) => (t.tenant || "").trim().length > 0);
+  const netLeaseTenants = tenantList.filter((t: any) => /net/i.test(t.leaseType || ""));
+
+  // Delinquent tenants: positive latest balance
+  const delinquent = Object.entries(byTenant)
+    .filter(([_, b]) => b.latestBalance > 0)
+    .sort(([, a], [, b]) => b.latestBalance - a.latestBalance);
+
+  const totalAR = delinquent.reduce((s, [, b]) => s + b.latestBalance, 0);
+  const lateFeesPosted = Object.values(byTenant).reduce((s, b) => s + b.lateFees, 0);
+  const totalReceipts = Object.values(byTenant).reduce((s, b) => s + b.receipts, 0);
+
+  // Electric posting check: which net-lease tenants did NOT have a CAM-Electric (or similar) charge this period?
+  const tenantsWithElectric = new Set<string>();
+  for (const [name, b] of Object.entries(byTenant)) {
+    const hasElectric = Array.from(b.chargeCodes).some(c => /electric|cam-?elec|elec-?recovery/i.test(c));
+    if (hasElectric) tenantsWithElectric.add(name);
+  }
+  const electricMissing = netLeaseTenants
+    .filter((t: any) => !tenantsWithElectric.has(t.tenant.split("(")[0].trim()))
+    .map((t: any) => `${t.unit} — ${t.tenant.split("(")[0].trim()}`)
+    .slice(0, 12);
+
+  const lines: string[] = [];
+  lines.push(`Total tenants leased: ${tenantList.length} (${netLeaseTenants.length} net-lease)`);
+  lines.push(`Total AR outstanding: $${Math.round(totalAR).toLocaleString()} across ${delinquent.length} tenants`);
+  lines.push(`Total receipts this period: $${Math.round(totalReceipts).toLocaleString()}`);
+  lines.push(`Late fees triggered: ${lateFeesPosted}`);
+  if (electricMissing.length > 0) {
+    lines.push(`Net-lease tenants missing electric charge this period (${electricMissing.length}): ${electricMissing.slice(0, 6).join("; ")}${electricMissing.length > 6 ? ", …" : ""}`);
+  } else if (netLeaseTenants.length > 0) {
+    lines.push(`Net-lease electric posting: all ${netLeaseTenants.length} tenants have an electric charge this period`);
+  }
+
+  if (delinquent.length > 0) {
+    lines.push(``);
+    lines.push(`Top 10 delinquent tenants (sorted by balance):`);
+    for (const [name, b] of delinquent.slice(0, 10)) {
+      const daysSincePay = b.lastPayDate ? daysBetween(b.lastPayDate, today) : null;
+      const payInfo = b.lastPayDate ? `last paid ${b.lastPayDate}${daysSincePay !== null ? ` (${daysSincePay}d ago)` : ""}` : "no payment on record";
+      lines.push(`  - ${name}: $${Math.round(b.latestBalance).toLocaleString()} owed · ${payInfo}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function daysBetween(a: string, b: string): number | null {
+  const da = new Date(a);
+  const db = new Date(b);
+  if (isNaN(da.getTime()) || isNaN(db.getTime())) return null;
+  return Math.round((db.getTime() - da.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function buildPrompt(propertyName: string, latestDate: string, latest: any[], priorSnapshot: any[] | null, receivables: any[], tenants: any[], priorAlerts: any[], falseFlags: any[]): string {
   const latestTable = rowsToTable(latest);
   const priorTable = priorSnapshot ? rowsToTable(priorSnapshot) : "(no prior snapshot — this is the first sync)";
+  const receivableSummary = summarizeReceivables(receivables, tenants);
   const priorInsightLog = priorAlerts.length === 0
     ? "(no prior insights recorded yet)"
     : priorAlerts.slice(0, 8).map(a => `- [${a.severity}] ${a.title} — ${a.body.slice(0, 200)}`).join("\n");
@@ -138,6 +233,12 @@ function buildPrompt(propertyName: string, latestDate: string, latest: any[], pr
     priorTable,
     `\`\`\``,
     ``,
+    `=== PER-TENANT AR / LEASE LEDGER (this period) ===`,
+    `Source: Yardi Commercial Lease Ledger SSRS export. This is the AR-side view that the income statement aggregates upward. Use it to flag tenant-specific delinquency, missed utility postings, payment timing, and concentration risk.`,
+    `\`\`\``,
+    receivableSummary,
+    `\`\`\``,
+    ``,
     `=== PRIOR INSIGHTS LOGGED FOR THIS PROPERTY (continuity) ===`,
     priorInsightLog,
     ``,
@@ -158,6 +259,9 @@ function buildPrompt(propertyName: string, latestDate: string, latest: any[], pr
     `- NOI compression — revenue trend vs. expense trend`,
     `- Continuation or resolution of prior insights — if a prior alert is now fixed or worsening, flag that explicitly`,
     `- Anomalies that appeared this month and weren't there before`,
+    `- Tenant-specific delinquency from the AR section: name the tenant, dollars owed, days since last payment. Concentration risk if one tenant >20% of total AR.`,
+    `- Missed utility postings: if net-lease tenants are listed as missing an electric charge this period, flag them by unit + tenant name.`,
+    `- Payment-pattern shifts: tenants who used to pay on time and are now late (compare to prior insights for the same tenant).`,
     ``,
     `IMPORTANT — title format:`,
     `Each title MUST be a short imperative action item, 4–8 words, telling the user what TO DO.`,
