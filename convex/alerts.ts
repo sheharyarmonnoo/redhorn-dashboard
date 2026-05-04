@@ -97,6 +97,34 @@ export const updateStatus = mutation({
  * include it as a suppression hint — Claude won't re-flag the same pattern
  * unless something materially changed.
  */
+/**
+ * Demo cleanup: deletes every alert created before the most recent live
+ * yardi_sync sync_job. Removes the duplicate insights that piled up from
+ * each iteration today, leaving only the freshest batch.
+ */
+export const cleanForDemo = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const liveSyncs = await ctx.db
+      .query("sync_jobs")
+      .filter((q) => q.eq(q.field("source"), "yardi_sync"))
+      .collect();
+    if (liveSyncs.length === 0) return { total: 0, deleted: 0, kept: 0, cutoff: 0 };
+    const latestLive = liveSyncs.sort((a, b) => b._creationTime - a._creationTime)[0];
+    const cutoff = latestLive._creationTime;
+
+    const all = await ctx.db.query("alerts").collect();
+    let deleted = 0;
+    for (const alert of all) {
+      if (alert._creationTime < cutoff) {
+        await ctx.db.delete(alert._id);
+        deleted++;
+      }
+    }
+    return { total: all.length, deleted, kept: all.length - deleted, cutoff };
+  },
+});
+
 export const markFalseFlag = mutation({
   args: {
     id: v.id("alerts"),

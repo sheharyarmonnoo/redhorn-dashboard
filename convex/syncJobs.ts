@@ -76,6 +76,68 @@ export const failAbandonedPending = mutation({
 });
 
 /**
+ * Demo cleanup: keeps only the latest successful "yardi_sync" job (live) and
+ * one successful "yardi_sync_historical" job per month. Deletes everything
+ * else — including failed runs, duplicates from today's testing, and any
+ * stale 0-record rows. Returns counts for sanity-checking.
+ *
+ * Idempotent. Safe to run any time.
+ */
+export const cleanForDemo = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("sync_jobs").collect();
+
+    // Bucket by (source, monthKey). Keep the most-recently-completed
+    // SUCCESSFUL job in each bucket; delete the rest.
+    const isSuccess = (j: any) =>
+      j.status === "completed" && (j.recordsCreated || 0) > 0 && Array.isArray(j.files) && j.files.length > 0;
+
+    const buckets: Record<string, any[]> = {};
+    for (const j of all) {
+      const month = (j.completedAt || j.startedAt || "").slice(0, 7) || "unknown";
+      const key = `${j.source || "unknown"}|${month}`;
+      if (!buckets[key]) buckets[key] = [];
+      buckets[key].push(j);
+    }
+
+    const keep = new Set<string>();
+    for (const [, jobs] of Object.entries(buckets)) {
+      const successes = jobs.filter(isSuccess);
+      if (successes.length === 0) continue;
+      // Latest by completedAt
+      successes.sort((a, b) => (b.completedAt || "").localeCompare(a.completedAt || ""));
+      keep.add(successes[0]._id);
+    }
+
+    // For "yardi_sync" (live) keep only the SINGLE most recent overall
+    // — Max + Ori don't need to see daily history yet, just the latest.
+    const liveJobs = all.filter(j => j.source === "yardi_sync" && isSuccess(j));
+    liveJobs.sort((a, b) => (b.completedAt || "").localeCompare(a.completedAt || ""));
+    const liveKeepId = liveJobs[0]?._id;
+    // Drop the per-month live keepers other than the absolute latest
+    for (const j of liveJobs) {
+      if (j._id !== liveKeepId) keep.delete(j._id);
+    }
+    if (liveKeepId) keep.add(liveKeepId);
+
+    let deleted = 0;
+    for (const j of all) {
+      if (!keep.has(j._id)) {
+        await ctx.db.delete(j._id);
+        deleted++;
+      }
+    }
+
+    return {
+      total: all.length,
+      kept: keep.size,
+      deleted,
+    };
+  },
+});
+
+/**
  * Patch a single file's rowsIngested count after that file's parse + insert
  * has finished. Lets the Data Pipeline grid show real per-file counts instead
  * of the job's lump sum against every row.
