@@ -44,6 +44,10 @@ export const extractForProperty = action({
     const priorDates = Object.keys(priorBySnapshot).filter(d => d !== latestDate).sort().reverse();
     const priorSnapshot = priorDates.length > 0 ? priorBySnapshot[priorDates[0]] : null;
 
+    // Reporting periods (e.g. "2026-04" for the latest CP, "2026-03" for prior)
+    const latestPeriod = latest[0]?.period as string | undefined;
+    const priorPeriod = priorSnapshot?.[0]?.period as string | undefined;
+
     // Per-tenant transactional data (Lease Ledger) — the AR-side view that
     // unlocks delinquency, utility-posting, and aging analysis. May be empty
     // if Receivable Detail hasn't synced yet.
@@ -66,7 +70,7 @@ export const extractForProperty = action({
     const priorAlerts = allPriorAlerts.filter((a: any) => a.status !== "false_flag");
     const falseFlags = allPriorAlerts.filter((a: any) => a.status === "false_flag");
 
-    const prompt = buildPrompt(property.name, latestDate, latest, priorSnapshot, receivables, tenants, priorAlerts, falseFlags);
+    const prompt = buildPrompt(property.name, latestDate, latestPeriod, priorPeriod, latest, priorSnapshot, receivables, tenants, priorAlerts, falseFlags);
     const rawAnalysis: string = await callClaude(prompt);
     const parsed = parseClaudeJson(rawAnalysis);
 
@@ -201,10 +205,18 @@ function daysBetween(a: string, b: string): number | null {
   return Math.round((db.getTime() - da.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function buildPrompt(propertyName: string, latestDate: string, latest: any[], priorSnapshot: any[] | null, receivables: any[], tenants: any[], priorAlerts: any[], falseFlags: any[]): string {
+function periodLabel(yyyymm: string | undefined): string {
+  if (!yyyymm || !/^\d{4}-\d{2}$/.test(yyyymm)) return "current period";
+  const [y, m] = yyyymm.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+}
+
+function buildPrompt(propertyName: string, latestDate: string, latestPeriod: string | undefined, priorPeriod: string | undefined, latest: any[], priorSnapshot: any[] | null, receivables: any[], tenants: any[], priorAlerts: any[], falseFlags: any[]): string {
   const latestTable = rowsToTable(latest);
   const priorTable = priorSnapshot ? rowsToTable(priorSnapshot) : "(no prior snapshot — this is the first sync)";
   const receivableSummary = summarizeReceivables(receivables, tenants);
+  const latestLabel = periodLabel(latestPeriod);
+  const priorLabel = priorPeriod ? periodLabel(priorPeriod) : "the prior month";
   const priorInsightLog = priorAlerts.length === 0
     ? "(no prior insights recorded yet)"
     : priorAlerts.slice(0, 8).map(a => `- [${a.severity}] ${a.title} — ${a.body.slice(0, 200)}`).join("\n");
@@ -221,14 +233,18 @@ function buildPrompt(propertyName: string, latestDate: string, latest: any[], pr
 
   return [
     `You are a senior CRE asset-management analyst reviewing the latest income statement for "${propertyName}".`,
-    `Snapshot date: ${latestDate}`,
+    `Reporting period: **${latestLabel}** (CP column reflects ${latestLabel} totals).`,
+    `Prior period for MoM comparison: **${priorLabel}**.`,
+    `Snapshot ingested: ${latestDate}`,
     ``,
-    `=== LATEST INCOME STATEMENT (this run) ===`,
+    `When you cite "CP" or current-period numbers, prefix them with the month name (e.g. "${latestLabel.split(" ")[0]} CP rent dropped to $X" or "$X this ${latestLabel.split(" ")[0]}"). Same for prior — say "${priorLabel.split(" ")[0]}" instead of "prior".`,
+    ``,
+    `=== ${latestLabel.toUpperCase()} INCOME STATEMENT (this run) ===`,
     `\`\`\``,
     latestTable,
     `\`\`\``,
     ``,
-    `=== PRIOR SNAPSHOT (for month-over-month comparison) ===`,
+    `=== ${priorLabel.toUpperCase()} INCOME STATEMENT (for month-over-month comparison) ===`,
     `\`\`\``,
     priorTable,
     `\`\`\``,

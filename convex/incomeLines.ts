@@ -11,6 +11,7 @@ export const bulkInsertByCode = mutation({
     propertyCode: v.string(),
     syncId: v.optional(v.id("sync_jobs")),
     snapshotDate: v.string(), // ISO timestamp — also serves as updated_time
+    period: v.optional(v.string()), // YYYY-MM the report's CP column actually covers
     historical: v.optional(v.boolean()), // when true, insert as isLatest=false; don't bump prior latest
     rows: v.array(
       v.object({
@@ -61,6 +62,7 @@ export const bulkInsertByCode = mutation({
         currentPeriod: r.currentPeriod,
         yearToDate: r.yearToDate,
         sinceInception: r.sinceInception,
+        period: args.period,
         snapshotDate: args.snapshotDate,
         isLatest: !isHistorical,
       });

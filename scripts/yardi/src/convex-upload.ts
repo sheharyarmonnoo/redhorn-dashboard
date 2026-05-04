@@ -104,16 +104,23 @@ export async function uploadRunToConvex(
     ? endOfMonthIso(opts.month)
     : new Date().toISOString();
   const ingestedProperties: string[] = [];
+  // Track each property's actual reporting period (e.g. "2026-04") so the
+  // monthly_revenue rollup writes to the correct month — independent of
+  // when the sync ran.
+  const periodByProperty: Record<string, string> = {};
   for (const u of uploaded) {
     let perFileRows = 0;
     try {
       if (u.reportType === "income_statement") {
         const parsed = parseIncomeStatement(u.filePath);
-        console.log(`   parsed IS ${u.fileName}: ${parsed.rows.length} rows (${parsed.periodHeader})`);
+        const period = periodHeaderToYYYYMM(parsed.periodHeader);
+        console.log(`   parsed IS ${u.fileName}: ${parsed.rows.length} rows (${parsed.periodHeader}${period ? ` → ${period}` : ""})`);
+        if (period) periodByProperty[u.propertyCode] = period;
         const result: any = await client.mutation(FN.bulkInsertIncomeLines as any, {
           propertyCode: u.propertyCode,
           syncId: jobId,
           snapshotDate,
+          period,
           rows: parsed.rows,
           historical: opts.historical === true,
         });
@@ -223,12 +230,15 @@ export async function uploadRunToConvex(
     }
   }
 
-  // Phase 2.5 — recompute monthly_revenue rollup. For live syncs we use the
-  // latest income_lines snapshot (recomputeFromLatest); for historical
-  // backfills we recompute from the specific month's snapshot we just inserted
-  // so the rollup lands in the right month and doesn't disturb the current one.
-  const monthKey = (opts.historical && opts.month) ? opts.month : snapshotDate.slice(0, 7);
+  // Phase 2.5 — recompute monthly_revenue rollup. The month key MUST come
+  // from the income statement's actual reporting period (e.g. "Period =
+  // Apr 2026" → "2026-04"), not today's date. Otherwise the chart and KPI
+  // cards label April's numbers as May because the sync ran in May.
   for (const code of ingestedProperties) {
+    const propertyPeriod = periodByProperty[code];
+    const monthKey = (opts.historical && opts.month)
+      ? opts.month
+      : (propertyPeriod || snapshotDate.slice(0, 7));
     try {
       const fnPath = opts.historical
         ? FN.recomputeMonthlyRevenueFromMonth
@@ -310,11 +320,18 @@ export async function uploadRunToConvex(
   // Phase 4 — email digest. Sends an HTML summary of the run to whoever is on
   // YARDI_DIGEST_TO. Skipped silently if the env var isn't set, so unconfigured
   // local runs don't blow up. Also skipped on historical backfills.
+  // Aggregate "month" for digest + activity log: prefer the actual reporting
+  // period of any property, fall back to historical month or today.
+  const summaryMonth =
+    Object.values(periodByProperty)[0]
+    || (opts.historical ? opts.month : undefined)
+    || snapshotDate.slice(0, 7);
+
   if (digestProperties.length > 0 && !opts.historical) {
     try {
       await sendSyncDigest({
         syncJobId: jobId,
-        month: monthKey,
+        month: summaryMonth,
         rowsIngested: totalRowsIngested,
         filesUploaded: uploaded.length,
         properties: digestProperties,
@@ -329,7 +346,7 @@ export async function uploadRunToConvex(
   try {
     const propsLabel = ingestedProperties.join(", ") || "—";
     const desc = opts.historical
-      ? `Yardi historical backfill · ${monthKey} · ${uploaded.length} files · ${totalRowsIngested} rows (${propsLabel})`
+      ? `Yardi historical backfill · ${summaryMonth} · ${uploaded.length} files · ${totalRowsIngested} rows (${propsLabel})`
       : `Yardi sync · ${uploaded.length} files · ${totalRowsIngested} rows · ${totalInsights} insights · ${totalAlertsCreated} alerts (${propsLabel})`;
     await client.mutation(FN.logActivity as any, {
       type: "sync",
@@ -341,6 +358,20 @@ export async function uploadRunToConvex(
   }
 
   return { jobId, uploaded, failed };
+}
+
+// "Period = Apr 2026" → "2026-04". Returns undefined if header doesn't match.
+function periodHeaderToYYYYMM(header: string): string | undefined {
+  if (!header) return undefined;
+  const m = header.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{4})/i);
+  if (!m) return undefined;
+  const monthMap: Record<string, string> = {
+    jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+    jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+  };
+  const mm = monthMap[m[1].toLowerCase().slice(0, 3)];
+  if (!mm) return undefined;
+  return `${m[2]}-${mm}`;
 }
 
 function endOfMonthIso(month: string): string {

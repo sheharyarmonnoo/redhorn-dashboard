@@ -148,6 +148,10 @@ export default defineSchema({
     currentPeriod: v.number(),
     yearToDate: v.number(),
     sinceInception: v.optional(v.number()),
+    // The reporting period these CP figures cover, e.g. "2026-04". Optional
+    // for backwards compatibility with rows ingested before this field
+    // existed; recompute logic falls back to snapshotDate when missing.
+    period: v.optional(v.string()),
     snapshotDate: v.string(),
     isLatest: v.boolean(),
   })
