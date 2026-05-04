@@ -152,7 +152,7 @@ function KanbanCard({ item, onRemove, onEdit, onDragStart, onDragEnd, isDragging
   );
 }
 
-export default function ActionItems({ heading = "Tasks", showHeader = true }: { heading?: string; showHeader?: boolean } = {}) {
+export default function ActionItems({ heading = "Tasks", showHeader = true, compact = false }: { heading?: string; showHeader?: boolean; compact?: boolean } = {}) {
   const { items, createItem, moveItem, updateItem, removeItem } = useActionItems();
   const [showAdd, setShowAdd] = useState(false);
   const [newText, setNewText] = useState("");
@@ -254,7 +254,10 @@ export default function ActionItems({ heading = "Tasks", showHeader = true }: { 
                 <p className="text-[11px] font-semibold text-[#18181b] dark:text-[#fafafa] uppercase tracking-wide">{col.label}</p>
                 <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] font-medium">{colItems.length}</span>
               </div>
-              <div className="space-y-2 min-h-[80px]">
+              <div
+                className="space-y-2 min-h-[80px] overflow-y-auto pr-1"
+                style={{ maxHeight: compact ? "200px" : "50vh" }}
+              >
                 {colItems.map(item => (
                   <KanbanCard
                     key={item._id}

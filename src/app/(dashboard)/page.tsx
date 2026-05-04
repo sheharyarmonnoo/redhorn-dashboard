@@ -169,7 +169,7 @@ export default function DashboardPage() {
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
       </div>
 
-      <ActionItems heading="Tasks" />
+      <ActionItems heading="Tasks" compact />
 
       <LatestInsights propertyId={property._id} />
 
