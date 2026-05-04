@@ -524,7 +524,9 @@ function AlertDrawer({
                 className="w-full text-[12px] bg-white dark:bg-[#09090b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2 text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] resize-none"
               />
             ) : (
-              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{alert.detail}</p>
+              <div className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed space-y-1.5">
+                {renderMarkdownLite(alert.detail || "")}
+              </div>
             )}
           </div>
 
@@ -628,4 +630,53 @@ function AlertDrawer({
       </div>
     </div>
   );
+}
+
+// Lightweight markdown renderer mirroring the dashboard's renderer: handles
+// **bold**, "- " bullets, and \n\n section breaks. Kept inline so the alerts
+// page doesn't need a markdown library.
+function renderMarkdownLite(text: string): React.ReactNode {
+  const sections = text.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+  return sections.map((section, i) => {
+    const lines = section.split("\n").map(l => l.trimEnd());
+    const blocks: React.ReactNode[] = [];
+    let bulletBuffer: string[] = [];
+    const flushBullets = () => {
+      if (bulletBuffer.length > 0) {
+        blocks.push(
+          <ul key={`ul-${blocks.length}`} className="space-y-1 ml-4 list-disc marker:text-[#a1a1aa] dark:marker:text-[#52525b]">
+            {bulletBuffer.map((b, bi) => (
+              <li key={bi}>{renderInlineLite(b)}</li>
+            ))}
+          </ul>
+        );
+        bulletBuffer = [];
+      }
+    };
+    for (const line of lines) {
+      const m = line.match(/^[-*]\s+(.*)$/);
+      if (m) bulletBuffer.push(m[1]);
+      else {
+        flushBullets();
+        if (line.trim().length > 0) blocks.push(<p key={`p-${blocks.length}`}>{renderInlineLite(line)}</p>);
+      }
+    }
+    flushBullets();
+    return <div key={i} className="space-y-1.5">{blocks}</div>;
+  });
+}
+
+function renderInlineLite(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  const re = /\*\*([^*]+)\*\*/g;
+  let last = 0;
+  let m;
+  let key = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(<strong key={key++} className="font-semibold text-[#18181b] dark:text-[#fafafa]">{m[1]}</strong>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
 }
