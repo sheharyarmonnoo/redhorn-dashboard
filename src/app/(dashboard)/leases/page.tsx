@@ -1,10 +1,11 @@
 "use client";
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import { useActiveProperty, useTenants, formatCurrency } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import PageHeader from "@/components/PageHeader";
+import UnitDetailPanel from "@/components/UnitDetailPanel";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -60,8 +61,14 @@ export default function LeasesPage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const [activeFilter, setActiveFilter] = useState<UrgencyFilter>("all");
+  const [selected, setSelected] = useState<any>(null);
   const activeProperty = useActiveProperty();
   const tenants = useTenants(activeProperty?._id);
+
+  const onRowClicked = useCallback((event: RowClickedEvent) => {
+    if (!event.data) return;
+    setSelected(event.data);
+  }, []);
 
   const leaseData = useMemo(() => {
     return tenants
@@ -174,12 +181,16 @@ export default function LeasesPage() {
           onColumnVisible={persistence.onColumnVisible}
           onColumnPinned={persistence.onColumnPinned}
           onSortChanged={persistence.onSortChanged}
+          onRowClicked={onRowClicked}
+          rowSelection="single"
           animateRows={true}
           pagination={true}
           paginationPageSize={500}
           getRowId={(params) => params.data.unit}
         />
       </div>
+
+      <UnitDetailPanel tenant={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }

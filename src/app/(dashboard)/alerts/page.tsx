@@ -127,12 +127,6 @@ export default function AlertsPage() {
     saveCustomAlerts(updated);
   }
 
-  function startEditAlert(alert: AlertRow) {
-    setEditingAlertId(alert.id);
-    setNewAlert({ unit: alert.unit === "—" ? "" : alert.unit, category: alert.category, severity: alert.severity, detail: alert.detail });
-    setShowAddAlert(true);
-  }
-
   function saveEditAlert() {
     if (!editingAlertId || !newAlert.detail.trim()) return;
     const updated = customAlerts.map(a => a.id === editingAlertId ? {
@@ -438,6 +432,154 @@ function AlertModal({
           >
             {editing ? "Save changes" : "Add alert"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AlertDrawer({
+  alert, onClose, onSave, onMarkHandled,
+}: {
+  alert: AlertRow | null;
+  onClose: () => void;
+  onSave: (updates: Partial<AlertRow>) => void;
+  onMarkHandled: () => void;
+}) {
+  const [draft, setDraft] = useState<AlertRow | null>(alert);
+  useEffect(() => { setDraft(alert); }, [alert?.id]);
+
+  if (!alert || !draft) return null;
+  const isCustom = alert.id.startsWith("custom-");
+  const dirty = isCustom && (draft.unit !== alert.unit || draft.category !== alert.category || draft.severity !== alert.severity || draft.detail !== alert.detail);
+
+  function handleSave() {
+    if (!isCustom || !draft) return;
+    onSave({ unit: draft.unit, category: draft.category, severity: draft.severity, detail: draft.detail });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40 dark:bg-black/60" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-xl w-full max-w-md h-full overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#e4e4e7] dark:border-[#3f3f46] sticky top-0 bg-white dark:bg-[#18181b]">
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Alert details</p>
+          <button onClick={onClose} className="text-[16px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer leading-none">×</button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Description</label>
+            {isCustom ? (
+              <textarea
+                value={draft.detail}
+                onChange={(e) => setDraft({ ...draft, detail: e.target.value })}
+                rows={4}
+                className="w-full text-[12px] bg-white dark:bg-[#09090b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2 text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] resize-none"
+              />
+            ) : (
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed">{alert.detail}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Unit</label>
+              {isCustom ? (
+                <input
+                  type="text"
+                  value={draft.unit}
+                  onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
+                  className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+                />
+              ) : (
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{alert.unit || "—"}</p>
+              )}
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Tenant</label>
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5 truncate">{alert.tenant || "—"}</p>
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Category</label>
+              {isCustom ? (
+                <select
+                  value={draft.category}
+                  onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+                  className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+                >
+                  <option value="General">General</option>
+                  <option value="Past Due">Past Due</option>
+                  <option value="Lease Expiring">Lease Expiring</option>
+                  <option value="Holdover">Holdover</option>
+                  <option value="Maintenance">Maintenance</option>
+                  <option value="PM Follow-up">PM Follow-up</option>
+                </select>
+              ) : (
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{alert.category}</p>
+              )}
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Severity</label>
+              {isCustom ? (
+                <select
+                  value={draft.severity}
+                  onChange={(e) => setDraft({ ...draft, severity: e.target.value as AlertRow["severity"] })}
+                  className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+                >
+                  <option value="Critical">Critical</option>
+                  <option value="Warning">Warning</option>
+                  <option value="Info">Info</option>
+                </select>
+              ) : (
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{alert.severity}</p>
+              )}
+            </div>
+            {alert.amount > 0 && (
+              <div>
+                <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Amount</label>
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{formatCurrency(alert.amount)}</p>
+              </div>
+            )}
+            <div>
+              <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide block mb-1">Date</label>
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{alert.date || "—"}</p>
+            </div>
+          </div>
+
+          {!isCustom && (
+            <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] italic leading-relaxed">
+              This alert is auto-generated from sync data. To suppress it, use "Mark as handled". The system will regenerate it on the next sync if the underlying condition still applies.
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46] sticky bottom-0 bg-white dark:bg-[#18181b]">
+          <button
+            onClick={onMarkHandled}
+            className="text-[12px] font-medium bg-[#16a34a] text-white hover:bg-[#15803d] px-3 py-1.5 rounded cursor-pointer"
+          >
+            Mark as handled
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] px-3 py-1.5 rounded cursor-pointer"
+            >
+              Close
+            </button>
+            {isCustom && (
+              <button
+                onClick={handleSave}
+                disabled={!dirty || !draft.detail.trim()}
+                className="text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-3 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Save
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
