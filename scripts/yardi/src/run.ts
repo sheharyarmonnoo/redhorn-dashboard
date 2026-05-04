@@ -2,11 +2,11 @@ import { openAuthenticatedSession } from "./auth.js";
 import { getProperties } from "./properties.js";
 import { runIncomeStatementForProperty } from "./reports/income-statement.js";
 import { runRentRollForProperty, runTotalUnitsForProperty } from "./reports/rent-roll.js";
+import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
 // Held back until we have a viable Yardi delivery path:
 //   import { runPastDueForProperty } from "./reports/rent-roll.js";
 //   import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
 //   import { runGlDetailForProperty } from "./reports/gl-detail.js";
-//   import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
 import { latestClosedMonth } from "./paths.js";
 import { uploadRunToConvex } from "./convex-upload.js";
 
@@ -83,15 +83,23 @@ async function main() {
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "total_units", ok: false, error: msg });
       }
 
-      // Past Due / Rent Roll (full) / GL Detail / Receivable Detail are
-      // intentionally not wired into the live sync. Their scrapers exist
-      // (scripts/yardi/src/reports/*.ts) but Yardi exposes them through
-      // workflows that don't lend themselves to fast automation: panel-name
-      // mismatches, SSRSReportFilter without a download path, and the
-      // SysConductorReportMonitor queue page (60-300s per page load).
-      // Re-enable any of these by uncommenting the relevant try-block once
-      // we have a working delivery mechanism (e.g. n8n cron + manual
-      // queue-poll, or a different report path).
+      // Receivable Detail — Lease Ledger via SSRS Screen + ReportViewer
+      // exportReport API. Per-tenant charge + payment + balance with aging
+      // buckets. ~30-60s per property.
+      try {
+        const path = await runReceivableDetailForProperty(voyager, property, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "receivable_detail", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   RD FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "receivable_detail", ok: false, error: msg });
+      }
+
+      // Past Due / Rent Roll (full) / GL Detail are still held back. Their
+      // scrapers exist in scripts/yardi/src/reports/ but the URL paths I
+      // probed don't render in this Yardi instance. Re-enable each by
+      // uncommenting its import + try-block once the right URL/menu path is
+      // identified — the parsers + Convex mutations are already wired.
     }
 
     console.log("\n=== Download Summary ===");

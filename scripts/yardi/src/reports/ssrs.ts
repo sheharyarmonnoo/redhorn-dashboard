@@ -25,9 +25,9 @@ export interface SsrsRunOptions {
   reportFile: string;            // e.g. "rs_Comm_Lease_Ledger.SSRS.txt"
   outputFilename: string;        // local filename to save (within month dir)
   reportLabel: string;           // human label for logs
-  emailSubjectKeywords: string[]; // keywords to match the Yardi report email subject
   setMonthRange?: boolean;       // default true — fill begmonth/endmonth
   setBegDate?: boolean;          // default false — fill begdate to end-of-period
+  emailSubjectKeywords?: string[]; // legacy — only used if we ever fall back to email
 }
 
 export async function runSsrsReportForProperty(
@@ -77,32 +77,69 @@ export async function runSsrsReportForProperty(
     await setSsrsField(frame, "begdate", mmddyyyy);
   }
 
-  // Output: email the report. Yardi will mail the .xlsx as an attachment to
-  // the Yardi user's email (forwards to GMAIL_USER). We then IMAP-fetch it.
-  // This bypasses the unreliable Save-to-Excel-File popup behavior.
-  await setSsrsSelect(frame, "RptOutput", "Emailxlsx");
+  // Output: render to Screen. Yardi opens a popup at SSRSReportViewer.aspx
+  // with the rendered report. Standard Microsoft SSRS ReportViewer exposes
+  // a public JS API: $find('ReportViewer1').exportReport('EXCELOPENXML').
+  // We call it in the popup's context to trigger a clean .xlsx download.
+  await setSsrsSelect(frame, "RptOutput", "Screen");
 
   const outPath = resolve(
     downloadDirFor(monthIso),
     opts.outputFilename || `${slugForProperty(property.code)}-${opts.reportFile.replace(/\.SSRS\.txt$/i, "")}.xlsx`
   );
 
-  // Anchor the email-arrival window slightly before submit so we don't race
-  // a stale earlier email.
-  const submittedAt = new Date();
   const submitBtn = frame.locator('input[type="submit"]').first();
-  await submitBtn.click();
-  console.log(`   submitted ${opts.reportLabel}; polling Gmail for the report email…`);
+  const context = voyagerPage.context();
 
-  // Yardi typically delivers within 30-60s. Poll the inbox + REDHORN label
-  // for an email matching the report subject keywords with an .xlsx attachment.
-  await fetchYardiReportAttachment({
-    outPath,
-    subjectKeywords: opts.emailSubjectKeywords,
-    afterDate: submittedAt,
-    timeoutMs: 300_000,    // 5 min — generous; reports usually land in <60s
-    pollIntervalMs: 8_000,
-  });
+  const [viewerPopup] = await Promise.all([
+    context.waitForEvent("page", { timeout: 60_000 }),
+    submitBtn.click(),
+  ]);
+
+  console.log(`   ${opts.reportLabel} viewer opened; waiting for SSRS to be ready…`);
+
+  // Wait until the SSRS ReportViewer JS object is alive in the popup.
+  await viewerPopup.waitForFunction(
+    () => {
+      const w = window as any;
+      return typeof w.$find === "function" && w.$find("ReportViewer1") !== null && w.$find("ReportViewer1") !== undefined;
+    },
+    null,
+    { timeout: 120_000 }
+  );
+
+  // Give the report itself a beat to render (SSRS exports won't bind to the
+  // dataset until the viewer has finished its initial paint).
+  await viewerPopup.waitForTimeout(2000);
+
+  // Trigger Excel export and capture the resulting download. SSRS opens a
+  // throwaway popup to deliver the file; the download event bubbles up to
+  // the context, so listen there.
+  const [download] = await Promise.all([
+    context.waitForEvent("page", { timeout: 60_000 })
+      .then(p => p.waitForEvent("download", { timeout: 60_000 })
+        .then(d => { p.close().catch(() => {}); return d; }))
+      .catch(() => null),
+    viewerPopup.evaluate(() => {
+      const w = window as any;
+      w.$find("ReportViewer1").exportReport("EXCELOPENXML");
+    }),
+  ]);
+
+  // Some SSRS configs deliver the download directly on the viewer page
+  // instead of a child popup; if the popup race didn't catch it, try the
+  // viewer page's download event as a fallback.
+  let final = download;
+  if (!final) {
+    console.log(`   no popup download; checking viewer page directly…`);
+    final = await viewerPopup.waitForEvent("download", { timeout: 60_000 }).catch(() => null);
+  }
+  if (!final) {
+    throw new Error(`SSRS export download never fired for ${opts.reportLabel}`);
+  }
+
+  await final.saveAs(outPath);
+  await viewerPopup.close().catch(() => {});
 
   console.log(`   saved → ${outPath}`);
   return outPath;
