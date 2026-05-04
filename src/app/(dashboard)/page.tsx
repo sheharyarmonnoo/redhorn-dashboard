@@ -602,13 +602,46 @@ function SummaryCard({ summary, updatedAt, expanded, onToggle }: {
   );
 }
 
-// Lightweight markdown renderer — handles **bold** and \n\n paragraph breaks.
-// Avoids a markdown library; the prompt is constrained to these two features.
+// Lightweight markdown renderer — handles **bold**, single-newline line breaks,
+// "- " bullet lists, and \n\n section breaks. Avoids a markdown library; the
+// prompt is constrained to this small grammar.
 function renderMarkdown(text: string): React.ReactNode {
-  const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
-  return paragraphs.map((p, i) => (
-    <p key={i}>{renderInline(p)}</p>
-  ));
+  const sections = text.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+  return sections.map((section, i) => {
+    const lines = section.split("\n").map(l => l.trimEnd());
+    // Group consecutive "- " lines into a single <ul>; everything else is <p>.
+    const blocks: React.ReactNode[] = [];
+    let bulletBuffer: string[] = [];
+    const flushBullets = () => {
+      if (bulletBuffer.length > 0) {
+        blocks.push(
+          <ul key={`ul-${blocks.length}`} className="space-y-1 ml-4 list-disc marker:text-[#a1a1aa] dark:marker:text-[#52525b]">
+            {bulletBuffer.map((b, bi) => (
+              <li key={bi}>{renderInline(b)}</li>
+            ))}
+          </ul>
+        );
+        bulletBuffer = [];
+      }
+    };
+    for (const line of lines) {
+      const m = line.match(/^[-*]\s+(.*)$/);
+      if (m) {
+        bulletBuffer.push(m[1]);
+      } else {
+        flushBullets();
+        if (line.trim().length > 0) {
+          blocks.push(<p key={`p-${blocks.length}`}>{renderInline(line)}</p>);
+        }
+      }
+    }
+    flushBullets();
+    return (
+      <div key={i} className="space-y-1.5">
+        {blocks}
+      </div>
+    );
+  });
 }
 
 function renderInline(text: string): React.ReactNode {
