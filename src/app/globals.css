@@ -214,6 +214,56 @@ body {
   animation: rh-row-in 240ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
+/* Clerk dark-mode safety net — element class names can drift between
+   Clerk versions, so we also target their stable data attributes. Keeps
+   text legible on the user-button popover, the OTP digit inputs, and
+   the social button labels regardless of which override is current. */
+.dark .cl-userButtonPopoverCard,
+.dark [data-localization-key="userButton.action__manageAccount"],
+.dark [data-localization-key="userButton.action__signOut"] {
+  color: #fafafa !important;
+}
+.dark .cl-userButtonPopoverActionButton,
+.dark .cl-userButtonPopoverActionButton__manageAccount,
+.dark .cl-userButtonPopoverActionButton__signOut {
+  color: #fafafa !important;
+}
+.dark .cl-userButtonPopoverActionButton:hover {
+  background-color: rgba(255,255,255,0.04) !important;
+}
+.dark .cl-otpCodeFieldInput,
+.dark input[name^="codeInput-"],
+.dark .cl-formFieldInput[autocomplete="one-time-code"],
+.auth-clerk-wrapper .cl-otpCodeFieldInput,
+.auth-clerk-wrapper input[name^="codeInput-"],
+.auth-clerk-wrapper .cl-formFieldInput[autocomplete="one-time-code"] {
+  color: #fafafa !important;
+  background-color: rgba(255,255,255,0.05) !important;
+  border-color: rgba(255,255,255,0.1) !important;
+}
+.dark .cl-footer,
+.dark .cl-footerAction,
+.dark .cl-footerActionLink,
+.auth-clerk-wrapper .cl-footer,
+.auth-clerk-wrapper .cl-footerAction,
+.auth-clerk-wrapper .cl-footerActionLink {
+  display: none !important;
+}
+/* Auth pages are always dark — make sure all Clerk text on them is light. */
+.auth-clerk-wrapper .cl-headerTitle,
+.auth-clerk-wrapper .cl-headerSubtitle,
+.auth-clerk-wrapper .cl-formFieldLabel,
+.auth-clerk-wrapper .cl-formFieldInput,
+.auth-clerk-wrapper .cl-socialButtonsBlockButtonText,
+.auth-clerk-wrapper .cl-identityPreviewText,
+.auth-clerk-wrapper .cl-alternativeMethodsBlockButtonText {
+  color: #fafafa !important;
+}
+.auth-clerk-wrapper .cl-formFieldInput {
+  background-color: rgba(255,255,255,0.05) !important;
+  border-color: rgba(255,255,255,0.1) !important;
+}
+
 /* Top-of-page progress bar — shown during route transitions and any
    long-running data load. Slim, animated indeterminate sweep. */
 @keyframes rh-progress-sweep {

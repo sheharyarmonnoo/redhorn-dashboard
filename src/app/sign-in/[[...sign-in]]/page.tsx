@@ -31,11 +31,23 @@ export default function SignInPage() {
               card: "shadow-none border border-white/10 mx-auto",
               headerTitle: "!text-white",
               headerSubtitle: "!text-white/60",
+              socialButtonsBlockButton: "!text-white !border-white/10 hover:!bg-white/[0.04]",
+              socialButtonsBlockButtonText: "!text-white",
+              dividerLine: "!bg-white/10",
+              dividerText: "!text-white/40",
               formFieldLabel: "!text-white/70",
               formFieldInput: "!text-white !bg-white/5 !border-white/10",
+              // OTP code boxes use a separate element class — without this
+              // override the digits render as black on dark background.
+              otpCodeFieldInput: "!text-white !bg-white/5 !border-white/10",
+              formResendCodeLink: "!text-white/70 hover:!text-white",
               formButtonPrimary: "!bg-white !text-[#18181b] hover:!bg-white/90",
-              footerActionLink: "!text-white/80 hover:!text-white",
-              footer: "hidden",
+              identityPreviewText: "!text-white",
+              identityPreviewEditButtonIcon: "!text-white/70",
+              alternativeMethodsBlockButton: "!text-white !border-white/10 hover:!bg-white/[0.04]",
+              footer: "!hidden",
+              footerAction: "!hidden",
+              footerActionLink: "!hidden",
             },
           }}
         />

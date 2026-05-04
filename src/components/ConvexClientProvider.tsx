@@ -29,6 +29,7 @@ export default function ConvexClientProvider({ children }: { children: ReactNode
               colorInputBackground: "rgba(255,255,255,0.04)",
               colorText: "#fafafa",
               colorTextSecondary: "#a1a1aa",
+              colorInputText: "#fafafa",
               colorNeutral: "#fafafa",
               colorPrimary: "#fafafa",
               borderRadius: "6px",
@@ -36,8 +37,15 @@ export default function ConvexClientProvider({ children }: { children: ReactNode
           : undefined,
         elements: isDark
           ? {
-              userButtonPopoverCard: { backgroundColor: "#18181b", borderColor: "#3f3f46" },
-              userButtonPopoverFooter: { display: "none" },
+              userButtonPopoverCard: "!bg-[#18181b] !border-[#3f3f46]",
+              userButtonPopoverMain: "!text-white",
+              userButtonPopoverActionButton: "!text-white hover:!bg-white/[0.04]",
+              userButtonPopoverActionButtonText: "!text-white",
+              userButtonPopoverActionButtonIcon: "!text-white/70",
+              userButtonPopoverFooter: "!hidden",
+              userPreview: "!text-white",
+              userPreviewMainIdentifier: "!text-white",
+              userPreviewSecondaryIdentifier: "!text-white/60",
             }
           : undefined,
       }}
