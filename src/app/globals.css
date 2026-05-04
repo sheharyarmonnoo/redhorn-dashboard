@@ -249,6 +249,31 @@ body {
   .rh-hover-lift:hover { transform: none !important; }
 }
 
+/* Smooth collapse/expand for inline detail sections (insight rows, etc.).
+   Uses the CSS grid template-rows trick so we don't need to know the height
+   of the content ahead of time. */
+.rh-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.rh-collapse.is-open {
+  grid-template-rows: 1fr;
+}
+.rh-collapse > .rh-collapse-inner {
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 200ms ease-out 60ms;
+}
+.rh-collapse.is-open > .rh-collapse-inner {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rh-collapse, .rh-collapse > .rh-collapse-inner {
+    transition: none !important;
+  }
+}
+
 /* Account page — hide Clerk's internal navbar so it doesn't duplicate our sidebar */
 .account-clerk-wrapper .cl-navbar,
 .account-clerk-wrapper .cl-navbarMobileMenuRow,

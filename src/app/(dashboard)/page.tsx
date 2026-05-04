@@ -285,32 +285,34 @@ function InsightRow({ insight, dotClass, onFlag, index = 0 }: {
         <span className="text-[9px] uppercase tracking-wide font-medium text-[#a1a1aa] dark:text-[#71717a] flex-shrink-0">{insight.severity}</span>
         <span className={`text-[10px] text-[#a1a1aa] dark:text-[#71717a] transition-transform flex-shrink-0 ${expanded ? "rotate-90" : ""}`}>›</span>
       </button>
-      {expanded && (
-        <div className="px-3 pb-3 pl-[1.625rem]">
-          <div className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed space-y-1.5">
-            {renderMarkdown(insight.body || "")}
-          </div>
-          {insight.dataContext?.lineItem && (
-            <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">
-              <span className="uppercase tracking-wide font-medium">Line item:</span> {insight.dataContext.lineItem}
-            </p>
-          )}
-          {insight.dataContext?.mom && (
-            <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] sm:hidden mt-0.5">
-              <span className="uppercase tracking-wide font-medium">MoM:</span> {insight.dataContext.mom}
-            </p>
-          )}
-          <div className="mt-2 flex items-center justify-end">
-            <button
-              onClick={(e) => { e.stopPropagation(); onFlag(); }}
-              className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
-              title="Mark as handled — won't re-flag this next sync"
-            >
-              Mark as Handled
-            </button>
+      <div className={`rh-collapse ${expanded ? "is-open" : ""}`}>
+        <div className="rh-collapse-inner">
+          <div className="px-3 pb-3 pl-[1.625rem]">
+            <div className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed space-y-1.5">
+              {renderMarkdown(insight.body || "")}
+            </div>
+            {insight.dataContext?.lineItem && (
+              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">
+                <span className="uppercase tracking-wide font-medium">Line item:</span> {insight.dataContext.lineItem}
+              </p>
+            )}
+            {insight.dataContext?.mom && (
+              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] sm:hidden mt-0.5">
+                <span className="uppercase tracking-wide font-medium">MoM:</span> {insight.dataContext.mom}
+              </p>
+            )}
+            <div className="mt-2 flex items-center justify-end">
+              <button
+                onClick={(e) => { e.stopPropagation(); onFlag(); }}
+                className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
+                title="Mark as handled — won't re-flag this next sync"
+              >
+                Mark as Handled
+              </button>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
