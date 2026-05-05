@@ -181,6 +181,14 @@ export function useSyncJobs() {
   return jobs ?? [];
 }
 
+// Same query, but exposes the loading state so callers can distinguish
+// "still streaming" from "actually empty" and avoid flashing the empty
+// state during the brief Convex round-trip after navigation.
+export function useSyncJobsWithLoading() {
+  const jobs = useQuery(api.syncJobs.list);
+  return { jobs: jobs ?? [], loading: jobs === undefined };
+}
+
 // ===== AGING RECORDS =====
 
 export function useAgingRecords(propertyId: string | undefined) {

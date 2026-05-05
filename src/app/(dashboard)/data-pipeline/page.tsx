@@ -2,7 +2,7 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
-import { useSyncJobs } from "@/hooks/useConvexData";
+import { useSyncJobsWithLoading } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import { useTheme } from "@/components/ThemeProvider";
 import PageHeader from "@/components/PageHeader";
@@ -501,7 +501,7 @@ function SmartUploadModal({ onClose }: { onClose: () => void }) {
 export default function DataPipelinePage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
-  const syncJobs = useSyncJobs();
+  const { jobs: syncJobs, loading: syncJobsLoading } = useSyncJobsWithLoading();
   const [selectedFile, setSelectedFile] = useState<FileSyncRow | null>(null);
   const [activeSection, setActiveSection] = useState<"workflow" | "protocol">("workflow");
   const [showUpload, setShowUpload] = useState(false);
@@ -723,7 +723,7 @@ export default function DataPipelinePage() {
         />
       </div>
 
-      <FileVolumeChart syncJobs={syncJobs} />
+      <FileVolumeChart syncJobs={syncJobs} loading={syncJobsLoading} />
 
       {selectedFile && (
         <DetailPanel file={selectedFile} onClose={() => setSelectedFile(null)} />
@@ -735,7 +735,7 @@ export default function DataPipelinePage() {
 // File-volume chart — counts files per property per bucket (day or week).
 // Sources from sync_jobs.files[].fileName ("hol-...", "bel-...") since the
 // files array entries don't carry a propertyCode field of their own.
-function FileVolumeChart({ syncJobs }: { syncJobs: any[] }) {
+function FileVolumeChart({ syncJobs, loading }: { syncJobs: any[]; loading?: boolean }) {
   const [bucket, setBucket] = useState<"day" | "week">("day");
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -811,7 +811,13 @@ function FileVolumeChart({ syncJobs }: { syncJobs: any[] }) {
       <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mb-3">
         {bucket === "day" ? "Per-day file count by property" : "Per-week file count by property (week starts Monday)"}
       </p>
-      {categories.length > 0 ? (
+      {loading ? (
+        <div className="h-60 flex items-end gap-2 animate-pulse" aria-hidden>
+          {[55, 70, 45, 80, 60, 75, 50].map((h, i) => (
+            <div key={i} className="flex-1 bg-[#f4f4f5] dark:bg-[#27272a] rounded-t" style={{ height: `${h}%` }} />
+          ))}
+        </div>
+      ) : categories.length > 0 ? (
         <Chart options={options} series={series} type="line" height={240} />
       ) : (
         <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a] text-center py-12">No sync history yet.</p>
