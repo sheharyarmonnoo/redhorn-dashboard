@@ -4,8 +4,6 @@ import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import { useSyncJobs } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
-import { useAction, useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
 import PageHeader from "@/components/PageHeader";
 import { Download, X, Trash2 } from "lucide-react";
 
@@ -503,10 +501,7 @@ export default function DataPipelinePage() {
   const [selectedFile, setSelectedFile] = useState<FileSyncRow | null>(null);
   const [activeSection, setActiveSection] = useState<"workflow" | "protocol">("workflow");
   const [showUpload, setShowUpload] = useState(false);
-  const [insightsRunning, setInsightsRunning] = useState(false);
-  const [insightsResult, setInsightsResult] = useState<string | null>(null);
-  const runInsights = useAction(api.insights.extractForProperty);
-  const propertiesAvailable = useQuery(api.properties.list) ?? [];
+  // Insights run from the daily sync wrapper now — no in-dashboard trigger.
 
   // Flatten sync_jobs into one row per attached file. Each sync_jobs row contains
   // a `files: [{storageId, fileName, reportType}]` array — show each file as its
@@ -657,38 +652,7 @@ export default function DataPipelinePage() {
 
   return (
     <div>
-      <PageHeader title="Data Pipeline" subtitle="File sync history — click any row for details">
-        <button
-          onClick={async () => {
-            setInsightsRunning(true);
-            setInsightsResult(null);
-            try {
-              const summaries: string[] = [];
-              for (const p of propertiesAvailable as any[]) {
-                if (!p.hasData) continue;
-                const r: any = await runInsights({ propertyCode: p.code });
-                summaries.push(`• ${p.name}: ${r.alertsCreated} insight${r.alertsCreated === 1 ? "" : "s"} — ${r.analysis}`);
-              }
-              setInsightsResult(summaries.join("\n\n") || "No properties with data yet.");
-            } catch (err: any) {
-              setInsightsResult(`Error: ${err?.message || err}`);
-            } finally {
-              setInsightsRunning(false);
-            }
-          }}
-          disabled={insightsRunning || syncData.length === 0}
-          className="text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {insightsRunning ? "Running insights…" : "Run insights"}
-        </button>
-      </PageHeader>
-
-      {insightsResult && (
-        <div className="mt-2 mb-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40 rounded p-3 text-[12px] text-[#18181b] dark:text-[#fafafa] whitespace-pre-wrap">
-          <p className="text-[10px] font-semibold text-[#2563eb] dark:text-[#60a5fa] uppercase tracking-wide mb-1">Latest run</p>
-          {insightsResult}
-        </div>
-      )}
+      <PageHeader title="Data Pipeline" subtitle="File sync history — click any row for details" />
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-3">
