@@ -4,8 +4,12 @@ import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import { useSyncJobs } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
+import { useTheme } from "@/components/ThemeProvider";
 import PageHeader from "@/components/PageHeader";
 import { Download, X, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
+
+const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -719,9 +723,128 @@ export default function DataPipelinePage() {
         />
       </div>
 
+      <FileVolumeChart syncJobs={syncJobs} />
+
       {selectedFile && (
         <DetailPanel file={selectedFile} onClose={() => setSelectedFile(null)} />
       )}
     </div>
   );
+}
+
+// File-volume chart — counts files per property per bucket (day or week).
+// Sources from sync_jobs.files[].fileName ("hol-...", "bel-...") since the
+// files array entries don't carry a propertyCode field of their own.
+function FileVolumeChart({ syncJobs }: { syncJobs: any[] }) {
+  const [bucket, setBucket] = useState<"day" | "week">("day");
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+
+  const { categories, series } = useMemo(() => {
+    if (!syncJobs || syncJobs.length === 0) return { categories: [] as string[], series: [] as any[] };
+    const propNames: Record<string, string> = { hol: "Hollister", bel: "Belgold" };
+    const buckets: Record<string, Record<string, number>> = {}; // propCode -> bucketKey -> count
+
+    for (const job of syncJobs) {
+      const date = new Date(job._creationTime ?? Date.now());
+      const key = bucket === "day" ? toDayKey(date) : toWeekKey(date);
+      for (const f of (job.files ?? []) as Array<{ fileName?: string }>) {
+        const prefix = (f.fileName || "").split("-")[0];
+        if (!prefix) continue;
+        if (!buckets[prefix]) buckets[prefix] = {};
+        buckets[prefix][key] = (buckets[prefix][key] || 0) + 1;
+      }
+    }
+
+    const allKeys = new Set<string>();
+    for (const m of Object.values(buckets)) for (const k of Object.keys(m)) allKeys.add(k);
+    const categories = Array.from(allKeys).sort();
+    const series = Object.entries(buckets)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([code, counts]) => ({
+        name: propNames[code] || code,
+        data: categories.map(c => counts[c] || 0),
+      }));
+    return { categories, series };
+  }, [syncJobs, bucket]);
+
+  const axisColor = isDark ? "#71717a" : "#a1a1aa";
+  const gridColor = isDark ? "#27272a" : "#f4f4f5";
+
+  const options: ApexCharts.ApexOptions = {
+    chart: { type: "line", toolbar: { show: false }, fontFamily: "'Inter', -apple-system, system-ui, sans-serif", background: "transparent" },
+    theme: { mode: isDark ? "dark" : "light" },
+    colors: isDark ? ["#fafafa", "#a1a1aa"] : ["#18181b", "#71717a"],
+    stroke: { curve: "smooth", width: 2 },
+    markers: { size: 4, strokeWidth: 2, hover: { sizeOffset: 2 } },
+    xaxis: {
+      categories,
+      labels: { style: { colors: axisColor, fontSize: "11px" }, formatter: (v: string) => formatBucketLabel(v, bucket) },
+    },
+    yaxis: { labels: { style: { colors: axisColor, fontSize: "11px" }, formatter: (v: number) => String(Math.round(v)) }, min: 0 },
+    grid: { borderColor: gridColor, strokeDashArray: 0 },
+    legend: { position: "top", horizontalAlign: "right", fontSize: "11px", markers: { size: 6, shape: "square" as const }, labels: { colors: axisColor } },
+    tooltip: { theme: isDark ? "dark" : "light", y: { formatter: (v: number) => `${v} file${v === 1 ? "" : "s"}` } },
+    dataLabels: { enabled: false },
+  };
+
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4 mt-6">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Files Downloaded</p>
+        <div className="inline-flex border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden text-[11px] font-medium">
+          {(["day", "week"] as const).map(b => (
+            <button
+              key={b}
+              onClick={() => setBucket(b)}
+              className={`px-2.5 py-1 cursor-pointer transition-colors ${
+                bucket === b
+                  ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]"
+                  : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a]"
+              }`}
+            >
+              {b === "day" ? "Daily" : "Weekly"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mb-3">
+        {bucket === "day" ? "Per-day file count by property" : "Per-week file count by property (week starts Monday)"}
+      </p>
+      {categories.length > 0 ? (
+        <Chart options={options} series={series} type="line" height={240} />
+      ) : (
+        <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a] text-center py-12">No sync history yet.</p>
+      )}
+    </div>
+  );
+}
+
+function toDayKey(d: Date): string {
+  // YYYY-MM-DD in local time so a sync at 23:55 doesn't bleed into "next day"
+  // for users in negative-UTC zones. Most syncs happen overnight so this matters.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function toWeekKey(d: Date): string {
+  // Monday-anchored ISO-style week: returns YYYY-MM-DD of that week's Monday.
+  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = date.getDay(); // 0 Sun, 1 Mon, ... 6 Sat
+  const diff = (dow + 6) % 7; // distance back to Monday
+  date.setDate(date.getDate() - diff);
+  return toDayKey(date);
+}
+
+function formatBucketLabel(key: string, bucket: "day" | "week"): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return key;
+  const [y, m, d] = key.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  if (bucket === "day") {
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  // week — show "May 5" for the Monday
+  return `Wk ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
