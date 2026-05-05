@@ -27,16 +27,25 @@ Everything runs under one `sync_jobs` row for traceability.
 
 ## How to run
 
+The sync runs on the **VPS** (`root@2.24.74.123`). Local Claude Code (or any shell) SSHes in and fires the wrapper:
+
+```bash
+ssh -i ~/.ssh/redhorn_vps_temp -o ConnectTimeout=10 root@2.24.74.123 \
+  '/usr/local/bin/yardi-sync.sh >> /var/log/yardi/sync.log 2>&1; tail -120 /var/log/yardi/sync.log'
+```
+
+The wrapper at `/usr/local/bin/yardi-sync.sh` is just `cd /opt/redhorn-dashboard/scripts/yardi && npm run income -- --headless`. The trailing `tail -120` brings the run summary back so the caller can verify success.
+
+For ad-hoc local runs (dev, testing parser changes):
+
 ```bash
 cd scripts/yardi
 NEXT_PUBLIC_CONVEX_URL=https://industrious-blackbird-448.convex.cloud npm run income
 ```
 
-The script is named `income` for legacy reasons but it runs all four reports via `src/run.ts`.
+The script is named `income` for legacy reasons but it runs all four reports via `src/run.ts`. Headed by default locally — add `--headless` for unattended runs (always headless on VPS).
 
-Headed by default — Chromium opens so you can see the scrape. Add `--headless` for unattended runs.
-
-Optional flags:
+Optional flags (pass through `npm run income --` after the wrapper or directly):
 - `--month=YYYY-MM` — override the report period (default: latest closed month)
 - `--template=IS_CFTem` — override the income statement template
 - `--code=NNNNNN` — paste an MFA code if Gmail IMAP can't fetch it
