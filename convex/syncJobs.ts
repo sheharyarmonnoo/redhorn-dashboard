@@ -14,6 +14,46 @@ export const get = query({
   },
 });
 
+/**
+ * Cascade-delete a sync_jobs row + all its attached _storage blobs. Used by
+ * the /yardi-cleanup skill to nuke a bad run without leaving orphan files.
+ *
+ * Does NOT touch derived rows (income_lines / tenants / receivable_details
+ * / monthly_revenue) — those are snapshot tables and rolling them back is a
+ * separate concern. If the job's data is currently driving the dashboard,
+ * the dashboard keeps showing it after this call.
+ *
+ * Returns the storage ids + filenames it deleted so the caller can also
+ * remove the local .xlsx files that mirror them.
+ */
+export const deleteWithFiles = mutation({
+  args: { id: v.id("sync_jobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.id);
+    if (!job) return { deleted: false, storageIds: [], fileNames: [] as string[] };
+    const files = (job.files || []) as Array<{ storageId: any; fileName: string; reportType: string }>;
+    const storageIds = files.map(f => f.storageId);
+    const fileNames = files.map(f => f.fileName);
+    for (const storageId of storageIds) {
+      try { await ctx.storage.delete(storageId); } catch { /* already gone — fine */ }
+    }
+    await ctx.db.delete(args.id);
+    return { deleted: true, jobId: args.id, fileCount: files.length, storageIds, fileNames };
+  },
+});
+
+/**
+ * Returns the most recent sync_jobs row regardless of source. Convenience
+ * for cleanup tooling that wants to nuke "the last run" without the caller
+ * having to hand-pick an id.
+ */
+export const latest = query({
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("sync_jobs").order("desc").take(1);
+    return rows[0] ?? null;
+  },
+});
+
 export const create = mutation({
   args: {
     source: v.string(),
