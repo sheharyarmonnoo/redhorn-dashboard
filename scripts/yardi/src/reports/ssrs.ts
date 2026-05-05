@@ -36,6 +36,39 @@ export async function runSsrsReportForProperty(
   monthIso: string,
   opts: SsrsRunOptions
 ): Promise<string> {
+  // SSRS in headless mode is flaky around the export-popup navigation. One
+  // retry catches almost all transient failures (context destroyed during
+  // export, popup never opens, download never fires). We close any orphan
+  // popups before the retry so the second attempt starts clean.
+  const maxAttempts = 2;
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await runSsrsReportOnce(voyagerPage, property, monthIso, opts);
+    } catch (err: any) {
+      lastErr = err;
+      if (attempt >= maxAttempts) break;
+      console.log(`   ${opts.reportLabel} attempt ${attempt} failed (${(err?.message || err).toString().slice(0, 120)}); retrying…`);
+      // Close any popups that opened from the failed attempt so the next
+      // run isn't fighting an existing viewer window.
+      const ctx = voyagerPage.context();
+      for (const p of ctx.pages()) {
+        if (p !== voyagerPage && /SSRSReportViewer|ReportViewer/i.test(p.url())) {
+          await p.close().catch(() => {});
+        }
+      }
+      await voyagerPage.waitForTimeout(2000);
+    }
+  }
+  throw lastErr;
+}
+
+async function runSsrsReportOnce(
+  voyagerPage: Page,
+  property: YardiProperty,
+  monthIso: string,
+  opts: SsrsRunOptions
+): Promise<string> {
   console.log(`\n→ ${property.name} (${property.code}) — ${opts.reportLabel} for ${monthIso}`);
 
   const baseUrl = new URL(voyagerPage.url());
@@ -147,10 +180,24 @@ export async function runSsrsReportForProperty(
   context.on("page", onNewPage);
 
   try {
-    await viewerPopup.evaluate(() => {
-      const w = window as any;
-      w.$find("ReportViewer1").exportReport("EXCELOPENXML");
-    });
+    // SSRS's exportReport() triggers a navigation in the viewer popup, which
+    // can race with our evaluate() and destroy the JS context before the
+    // call returns. The side effect (download) still fires — we only care
+    // that the export was invoked, not that the evaluate resolved cleanly.
+    // So we swallow the "context destroyed" / "navigated" error here and
+    // let the download race below decide success.
+    try {
+      await viewerPopup.evaluate(() => {
+        const w = window as any;
+        w.$find("ReportViewer1").exportReport("EXCELOPENXML");
+      });
+    } catch (err: any) {
+      const msg = (err?.message || "").toLowerCase();
+      const isNavRace = msg.includes("execution context was destroyed")
+        || msg.includes("frame was detached")
+        || msg.includes("target closed");
+      if (!isNavRace) throw err;
+    }
 
     const download = await Promise.race([
       downloadPromise,
