@@ -26,8 +26,8 @@ const FN = {
   bulkInsertReceivableDetails: "receivableDetails:bulkInsertByCode",
   recomputeMonthlyRevenue: "monthlyRevenue:recomputeFromLatest",
   recomputeMonthlyRevenueFromMonth: "monthlyRevenue:recomputeFromMonth",
-  extractInsights: "insights:extractForProperty",
-  getPropertyByCode: "properties:getByCode",
+  // extractInsights / getPropertyByCode no longer used — insights moved
+  // to the local /yardi-run skill (Claude on the laptop, not the server).
   setFileRecords: "syncJobs:setFileRecords",
 } as const;
 
@@ -283,45 +283,15 @@ export async function uploadRunToConvex(
     }
   }
 
-  // Phase 3 — run Claude insights against each freshly ingested property. This is
-  // what makes the sync deliver real value: each run produces narrative analysis
-  // that references prior snapshots and prior insights for continuity.
-  // Skipped on historical backfills — those are pure data ingest, not analysis.
-  let totalInsights = 0;
-  let totalAlertsCreated = 0;
+  // Phase 3 — insights are NOT generated during the sync anymore. The
+  // Anthropic API key was removed from Convex; analysis now runs locally
+  // (via the /yardi-run skill) so the user can curate the output before
+  // it lands as alerts. The sync just leaves data fresh in Convex; the
+  // local Claude reads it and writes alerts.create() mutations as needed.
+  const totalInsights = 0;
+  const totalAlertsCreated = 0;
   const digestProperties: DigestProperty[] = [];
   const insightSummaries: Array<{ propertyCode: string; summary: string }> = [];
-  if (!opts.historical) {
-    for (const code of ingestedProperties) {
-      try {
-        console.log(`   running insights for ${code}…`);
-        const result: any = await client.action(FN.extractInsights as any, {
-          propertyCode: code,
-          syncJobId: jobId,
-        });
-        totalInsights += result.insightsCount || 0;
-        totalAlertsCreated += result.alertsCreated || 0;
-        insightSummaries.push({ propertyCode: code, summary: result.summary });
-        const property: any = await client.query(FN.getPropertyByCode as any, { code });
-        digestProperties.push({
-          name: property?.name || code,
-          code,
-          summary: result.summary || "",
-          insights: (result.insights || []).map((i: any) => ({
-            severity: i.severity || "info",
-            title: i.title || "",
-          })),
-          alertsCreated: result.alertsCreated || 0,
-        });
-        console.log(`   ${code}: ${result.insightsCount} insights, ${result.alertsCreated} alerts written`);
-        console.log(`      → ${result.summary.slice(0, 200)}`);
-      } catch (err: any) {
-        const msg = `insights for ${code}: ${err?.message || err}`;
-        ingestErrors.push(msg);
-        console.error(`   ${msg}`);
-      }
-    }
-  }
 
   await client.mutation(FN.completeSyncJob as any, {
     id: jobId,
