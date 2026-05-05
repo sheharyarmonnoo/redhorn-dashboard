@@ -261,8 +261,23 @@ async function launchVoyagerFromYardiOne(context: BrowserContext, yardiOne: Page
     console.log("No PROCEED page detected (might already be in Voyager).");
   }
 
-  // Voyager's main page renders content in an iframe named "filter"; wait for it
-  await voyagerPage.waitForSelector('iframe[name="filter"]', { timeout: 60_000 });
+  // Voyager's main page renders content in an iframe named "filter". The
+  // default `state: "visible"` check sometimes times out post-SSO even
+  // though the iframe IS attached and we can access it via .frame() —
+  // the SSO handoff repaint briefly hides the iframe. Wait for "attached"
+  // (DOM presence) instead, which is what we actually need.
+  try {
+    await voyagerPage.waitForSelector('iframe[name="filter"]', { state: "attached", timeout: 60_000 });
+  } catch (err) {
+    // Defensive fallback: if Playwright's selector wait failed but the
+    // frame is already in the page's frame list, proceed anyway. This
+    // catches the post-SSO render race where the iframe is present but
+    // briefly fails the visibility heuristic.
+    const hasFilterFrame = voyagerPage.frames().some(f => f.name() === "filter");
+    if (!hasFilterFrame) throw err;
+    console.log("Voyager loaded (filter iframe found via frame list after selector wait timed out).");
+    return voyagerPage;
+  }
   console.log("Voyager loaded.");
   return voyagerPage;
 }
