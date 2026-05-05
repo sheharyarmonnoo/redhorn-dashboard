@@ -569,7 +569,9 @@ function SummaryCard({ summary, updatedAt, expanded, onToggle }: {
   return (
     <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 mb-3 rh-card-mount">
       <p className="text-[11px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide mb-2">Summary</p>
-      <div className={`text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed space-y-2 ${!expanded && isLong ? "line-clamp-3" : ""}`}>
+      <div
+        className={`rh-summary-collapse text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed space-y-2 ${!expanded && isLong ? "is-clamped" : ""}`}
+      >
         {renderMarkdown(summary)}
       </div>
       <div className="flex items-center gap-3 mt-2">
