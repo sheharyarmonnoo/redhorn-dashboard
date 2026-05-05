@@ -252,13 +252,25 @@ function buildPrompt(propertyName: string, latestDate: string, latestPeriod: str
         return `- "${a.title}" — REASON THIS IS NOT AN ISSUE: ${reason}${commentBlock}`;
       }).join("\n\n");
 
+  const hasPriorMonth = priorPeriod !== undefined;
+  const latestMonthName = latestLabel.split(" ")[0];
+  const priorMonthName = hasPriorMonth ? priorLabel.split(" ")[0] : "";
+
   return [
     `You are a senior CRE asset-management analyst reviewing the latest income statement for "${propertyName}".`,
     `Reporting period: **${latestLabel}** (CP column reflects ${latestLabel} totals).`,
-    `Prior period for MoM comparison: **${priorLabel}**.`,
+    hasPriorMonth
+      ? `Prior period for MoM comparison: **${priorLabel}**.`
+      : `No prior calendar month is available for comparison yet — only ${latestLabel} data has been ingested.`,
     `Snapshot ingested: ${latestDate}`,
     ``,
-    `When you cite "CP" or current-period numbers, prefix them with the month name (e.g. "${latestLabel.split(" ")[0]} CP rent dropped to $X" or "$X this ${latestLabel.split(" ")[0]}"). Same for prior — say "${priorLabel.split(" ")[0]}" instead of "prior".`,
+    `WORDING RULES — non-negotiable:`,
+    `- This pipeline runs DAILY. Phrases like "the last run", "the prior run", "the previous snapshot", "since last sync" are AMBIGUOUS (could mean yesterday, could mean a same-day re-run) and BANNED. Never use them.`,
+    `- ALWAYS use the specific calendar month name. Say "${latestMonthName}" for the current period.`,
+    hasPriorMonth
+      ? `- When you compare to a prior month, name it explicitly: "${priorMonthName}". Do NOT write "last period", "prior period", "the previous month", or "the prior snapshot" — write "${priorMonthName}".`
+      : `- No prior calendar month exists in the data yet. DO NOT mention the absence at all. Don't write "no prior month", "first sync", "no MoM available", "first month of data", or any acknowledgement that comparison data is missing. Just analyze ${latestMonthName} on its own merits using the AR / Lease Ledger + the prior-insights log. Treat ${latestMonthName} numbers as standalone facts, not as deltas.`,
+    `- "CP" and "YTD" are fine because they're standard ledger column labels.`,
     ``,
     `=== ${latestLabel.toUpperCase()} INCOME STATEMENT (this run) ===`,
     `\`\`\``,
@@ -307,10 +319,11 @@ function buildPrompt(propertyName: string, latestDate: string, latestPeriod: str
     `Save the numbers, magnitudes, and full context for the "detail" field.`,
     ``,
     `IMPORTANT — avoid alert fatigue:`,
-    `If the prior period table above shows "(no prior snapshot — this is the first sync)", the user just re-ran the sync for the same period. NEVER flag "data feed frozen", "duplicate snapshot", "byte-for-byte identical", "data refresh failure", or any variation of that finding. There is simply no prior period to diff against. Skip all MoM commentary and focus the insights on tenant-level signals from the AR / Lease Ledger data, plus open items still showing in the prior insights log.`,
-    `Even if you have BOTH periods present and they happen to share many identical line items, prefer to call out the items that DID move rather than flagging the overall snapshot as suspect — Yardi data legitimately can be near-flat between months once leases are stable.`,
-    `If there are genuinely no new findings worth flagging this run, return an empty insights array (zero entries). Better to return nothing than to repeat the same alert from prior runs.`,
-    `Each finding you flag MUST be either (a) net-new this run, (b) materially worse than its prior occurrence, or (c) a confirmed resolution of a prior issue.`,
+    hasPriorMonth
+      ? `Even though ${latestMonthName} and ${priorMonthName} may share many identical line items, prefer to call out the items that DID move rather than flagging the overall ${latestMonthName} snapshot as suspect — Yardi data legitimately can be near-flat between months once leases are stable. Do NOT generate "data feed frozen", "duplicate snapshot", "byte-for-byte identical", or "data refresh failure" findings.`
+      : `No prior calendar month is available, so there is nothing to diff against. NEVER flag "data feed frozen", "duplicate snapshot", "byte-for-byte identical", "data refresh failure", or any variation. Focus the insights on ${latestMonthName} numbers in isolation plus the tenant-level signals from the AR / Lease Ledger and any open items in the prior-insights log.`,
+    `If there are genuinely no new findings worth flagging this ${latestMonthName} review, return an empty insights array (zero entries). Better to return nothing than to repeat the same alert from earlier ${latestMonthName} runs.`,
+    `Each finding you flag MUST be either (a) net-new for ${latestMonthName}, (b) materially worse than its earlier occurrence, or (c) a confirmed resolution of an earlier issue.`,
     ``,
     `IMPORTANT — markdown formatting (applies to BOTH "summary" AND each "detail" field):`,
     `These fields render as markdown on the dashboard. Use:`,
