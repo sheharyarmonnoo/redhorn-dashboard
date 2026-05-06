@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
-import { useTenants, useActiveProperty, formatCurrency } from "@/hooks/useConvexData";
+import { useTenants, useUnits, useActiveProperty, formatCurrency } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
@@ -59,7 +59,38 @@ export default function RentRollPage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const activeProperty = useActiveProperty();
-  const tenants = useTenants(activeProperty?._id);
+  const tenantsLeased = useTenants(activeProperty?._id);
+  const unitsAll = useUnits(activeProperty?._id);
+
+  // The rent roll grid should show every unit on the property, not just the
+  // ones with active leases. Yardi's "Total Units" list (units table) gives
+  // us the universe; the "Current Leases" list (tenants table) gives us the
+  // active leases. Anything in units but not in tenants is a vacancy and
+  // should render as a vacant row so the totals match Yardi's portfolio view.
+  const tenants = useMemo(() => {
+    const norm = (s: string) => (s || "").trim().toLowerCase();
+    const leasedKeys = new Set(tenantsLeased.map((t: any) => norm(t.unit)));
+    const vacancies = unitsAll
+      .filter((u: any) => !leasedKeys.has(norm(u.unit)))
+      .map((u: any) => ({
+        _id: `vacant-${u.unit}`,
+        unit: u.unit,
+        building: u.building || "",
+        sqft: u.sqft || 0,
+        tenant: "",
+        leaseType: "",
+        leaseFrom: "",
+        leaseTo: "",
+        monthlyRent: 0,
+        monthlyElectric: 0,
+        securityDeposit: 0,
+        pastDueAmount: 0,
+        status: "vacant",
+        electricPosted: false,
+        propertyId: activeProperty?._id,
+      }));
+    return [...tenantsLeased, ...vacancies];
+  }, [tenantsLeased, unitsAll, activeProperty?._id]);
 
   // Re-resolve the selected tenant from the live list each render so the
   // drawer reflects the latest override state from Convex without a re-click.
