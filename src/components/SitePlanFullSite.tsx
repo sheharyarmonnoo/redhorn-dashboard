@@ -263,7 +263,7 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
   }, [tenants, units]);
 
   return (
-    <div className="relative w-full max-w-5xl mx-auto rounded-lg border border-[#e4e4e7] dark:border-[#3f3f46] bg-white dark:bg-[#18181b] shadow-sm overflow-hidden">
+    <div className="relative w-full rounded-lg border border-[#e4e4e7] dark:border-[#3f3f46] bg-white dark:bg-[#18181b] shadow-sm overflow-hidden">
       {/* Zoom controls — bottom-right, above the legend */}
       <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-1 bg-white/90 dark:bg-[#18181b]/90 backdrop-blur border border-[#e4e4e7] dark:border-[#3f3f46] rounded-md p-1 shadow-sm">
         <button
