@@ -19,7 +19,17 @@ export default function DashboardPage() {
   const property = useActiveProperty();
   const tenants = useTenants(property?._id);
   const units = useUnits(property?._id);
-  const monthlyRevenue = useMonthlyRevenue(property?._id);
+  const monthlyRevenueRaw = useMonthlyRevenue(property?._id);
+  // Drop phantom rows for the current calendar month and beyond. Older
+  // sync runs that fell back to snapshotDate (today) before the
+  // period-from-IS-header logic landed left dupes; the chart shouldn't
+  // show "May" as the same value as April just because the sync ran in
+  // May. Once next month's IS comes in, those months populate naturally.
+  const monthlyRevenue = useMemo(() => {
+    const today = new Date();
+    const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+    return monthlyRevenueRaw.filter((m: any) => m.month && m.month < cutoff);
+  }, [monthlyRevenueRaw]);
   const loading = useDashboardLoading(property?._id);
   const { theme } = useTheme();
   const isDark = theme === "dark";
