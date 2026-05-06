@@ -16,6 +16,7 @@ export interface ParsedReceivableDetail {
   // Per-lease metadata extracted from each "Lease Information" block. The
   // Lease Ledger carries lease term + monthly rent + sqft data the rent-roll
   // dashboard panel doesn't expose — use this to enrich tenant rows on ingest.
+  // Also includes the aging bucket row at the end of each section.
   leases: Array<{
     tenantName: string;
     unit?: string;
@@ -24,6 +25,13 @@ export interface ParsedReceivableDetail {
     leaseFrom?: string;
     leaseTo?: string;
     monthlyRent?: number;
+    // Aging buckets from the row that closes each lease section. Sourced
+    // from columns: c1=0-30, c4=31-60, c6=61-90, c9=above 90, c15=Amount Due.
+    aging0_30?: number;
+    aging31_60?: number;
+    aging61_90?: number;
+    agingOver90?: number;
+    amountDue?: number;
   }>;
 }
 

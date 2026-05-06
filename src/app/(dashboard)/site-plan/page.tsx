@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { useActiveProperty, useTenants, useUnits, leasedUnitKeys } from "@/hooks/useConvexData";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
-import SitePlan3D from "@/components/SitePlan3D";
+import SitePlanMap2D from "@/components/SitePlanMap2D";
 
 export default function SitePlanPage() {
   const property = useActiveProperty();
@@ -14,10 +14,36 @@ export default function SitePlanPage() {
   // back into the open drawer immediately, without a close + reopen.
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
 
+  // Resolve selectedUnit (single unit code) to the underlying lease, even
+  // when the lease covers multiple units (e.g. tenant.unit = "A-103, A-112,
+  // A-85"). Falls back to a synthetic vacant tenant pulled from the units
+  // feed so vacant slots still open the drawer with sqft / building data.
   const selected = useMemo(() => {
     if (!selectedUnit) return null;
-    return tenantsList.find((t: any) => t.unit === selectedUnit) || null;
-  }, [tenantsList, selectedUnit]);
+    const norm = (s: string) => (s || "").trim().toLowerCase();
+    const target = norm(selectedUnit);
+    const lease = tenantsList.find((t: any) =>
+      (t.unit || "").split(",").map((s: string) => norm(s)).includes(target)
+    );
+    if (lease) return { ...lease, unit: selectedUnit };
+    const u = units.find((x: any) => norm(x.unit) === target);
+    if (!u) return null;
+    return {
+      unit: u.unit,
+      building: u.building || "",
+      sqft: u.sqft || 0,
+      tenant: "",
+      status: "vacant",
+      leaseType: "",
+      leaseFrom: "",
+      leaseTo: "",
+      monthlyRent: 0,
+      monthlyElectric: 0,
+      pastDueAmount: 0,
+      electricPosted: false,
+      propertyId: property?._id,
+    };
+  }, [tenantsList, units, selectedUnit, property?._id]);
 
   const pastDue = tenantsList.filter((t: any) => t.status === "past_due");
   // Vacancy = units in the Total Units listing without an active lease.
@@ -64,7 +90,13 @@ export default function SitePlanPage() {
       </div>
 
       <div className="mt-4">
-        <SitePlan3D onSelect={(t: any) => setSelectedUnit(t?.unit ?? null)} selectedUnit={selectedUnit} />
+        <SitePlanMap2D
+          tenants={tenantsList}
+          units={units}
+          selectedUnit={selectedUnit}
+          onSelect={(t: any) => setSelectedUnit(t?.unit ?? null)}
+          propertyId={property?._id}
+        />
       </div>
 
       <UnitDetailPanel tenant={selected} onClose={() => setSelectedUnit(null)} />
