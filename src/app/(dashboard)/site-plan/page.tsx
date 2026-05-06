@@ -5,6 +5,7 @@ import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import SitePlanFullSite from "@/components/SitePlanFullSite";
 import SitePlanFloorPlan from "@/components/SitePlanFloorPlan";
+import SitePlan3D from "@/components/SitePlan3D";
 
 export default function SitePlanPage() {
   const property = useActiveProperty();
@@ -100,13 +101,25 @@ export default function SitePlanPage() {
       </div>
 
       <div className="mt-4">
-        <SitePlanFullSite
-          tenants={tenantsList}
-          units={units}
-          selectedUnit={selectedUnit}
-          onSelectUnit={(unit: string) => setSelectedUnit(unit)}
-          onOpenExecSuites={() => setExecOpen(true)}
-        />
+        {/* The full-site SVG is hard-coded to Hollister's layout
+            (Building A/B/C/D + Exec Suites annex). For any other property
+            (Belgold, etc.) we don't have a printed map, so fall back to
+            the generic data-driven grid that renders one card per tenant
+            + each vacant unit. */}
+        {property?.code === "hollister" ? (
+          <SitePlanFullSite
+            tenants={tenantsList}
+            units={units}
+            selectedUnit={selectedUnit}
+            onSelectUnit={(unit: string) => setSelectedUnit(unit)}
+            onOpenExecSuites={() => setExecOpen(true)}
+          />
+        ) : (
+          <SitePlan3D
+            onSelect={(t: any) => setSelectedUnit(t?.unit ?? null)}
+            selectedUnit={selectedUnit}
+          />
+        )}
       </div>
 
       <UnitDetailPanel tenant={selected} onClose={() => setSelectedUnit(null)} />

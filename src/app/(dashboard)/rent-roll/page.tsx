@@ -234,7 +234,11 @@ export default function RentRollPage() {
     if (!event.data) return;
     const key = `${activeProperty?.code || "x"}-${event.data.unit}`;
     setSelectedKey(key);
-  }, []);
+    // activeProperty must be in deps — otherwise the closure captures the
+    // first-render code and a property switch (Hollister → Belgold) makes
+    // the click set selectedKey to "hollister-A" while the selected memo
+    // looks for "belgold-A", so the drawer silently never opens.
+  }, [activeProperty?.code]);
 
   const totalRent = tenants.filter((t: any) => t.status !== "vacant").reduce((s: number, t: any) => s + t.monthlyRent, 0);
   const totalSqft = tenants.reduce((s: number, t: any) => s + t.sqft, 0);
