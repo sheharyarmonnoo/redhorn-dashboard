@@ -127,16 +127,29 @@ function PastDueDetail() {
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Delinquent Tenants</p>
         {pastDue.length === 0 ? (
           <p className="text-[11px] text-[#16a34a]">No delinquent tenants.</p>
-        ) : pastDue.map((t: any) => (
-          <div key={t.unit} className="py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">{t.unit} — {t.tenant}</span>
-              <span className="text-[12px] font-medium text-[#dc2626]">{formatCurrency(t.pastDueAmount)}</span>
+        ) : pastDue.map((t: any) => {
+          const leaseExpiringSoon = isExpiringWithin(t.leaseTo, 90);
+          return (
+            <div key={t.unit} className="py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate min-w-0 flex-1" title={`${t.unit} — ${t.tenant}`}>
+                  {t.unit} — {t.tenant}
+                </span>
+                <span className="text-[12px] font-medium text-[#dc2626] whitespace-nowrap flex-shrink-0">{formatCurrency(t.pastDueAmount)}</span>
+              </div>
+              <p className="text-[10px] text-[#a1a1aa] mt-0.5">
+                Last paid: {t.lastPaymentDate || "—"} · {t.delinquencyStage || "past_due"}
+              </p>
+              {t.leaseTo && (
+                <p className={`text-[10px] mt-0.5 ${leaseExpiringSoon ? "text-[#d97706] font-medium" : "text-[#a1a1aa]"}`}>
+                  Lease expires {formatLeaseDate(t.leaseTo)}
+                  {leaseExpiringSoon && " · expiring within 90 days"}
+                </p>
+              )}
+              {t.notes && <p className="text-[10px] text-[#71717a] mt-0.5">{t.notes}</p>}
             </div>
-            <p className="text-[10px] text-[#a1a1aa] mt-0.5">Last paid: {t.lastPaymentDate} · {t.delinquencyStage || "past_due"}</p>
-            {t.notes && <p className="text-[10px] text-[#71717a] mt-0.5">{t.notes}</p>}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
