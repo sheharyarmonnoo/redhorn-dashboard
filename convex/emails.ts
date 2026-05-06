@@ -1,7 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery, query } from "./_generated/server";
+import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import nodemailer from "nodemailer";
 
@@ -42,7 +42,7 @@ export const send = action({
 
     if (!host || !portStr || !user || !pass) {
       const error = "SMTP not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS via `npx convex env set`.";
-      const logId: any = await ctx.runMutation(internal.emails.logSend, {
+      const logId: any = await ctx.runMutation(internal.emailsLog.logSend, {
         ...sanitizeForLog(args),
         status: "failed",
         errorMessage: error,
@@ -66,7 +66,7 @@ export const send = action({
         subject: args.subject,
         [args.isHtml ? "html" : "text"]: args.body,
       });
-      const logId: any = await ctx.runMutation(internal.emails.logSend, {
+      const logId: any = await ctx.runMutation(internal.emailsLog.logSend, {
         ...sanitizeForLog(args),
         status: "sent",
         smtpMessageId: info.messageId,
@@ -74,7 +74,7 @@ export const send = action({
       return { ok: true, messageId: info.messageId, logId };
     } catch (err: any) {
       const error = err?.message || String(err);
-      const logId: any = await ctx.runMutation(internal.emails.logSend, {
+      const logId: any = await ctx.runMutation(internal.emailsLog.logSend, {
         ...sanitizeForLog(args),
         status: "failed",
         errorMessage: error,
@@ -99,59 +99,3 @@ function sanitizeForLog(args: any) {
     sentBy: args.sentBy,
   };
 }
-
-export const logSend = internalMutation({
-  args: {
-    propertyId: v.optional(v.id("properties")),
-    relatedType: v.optional(v.string()),
-    relatedId: v.optional(v.string()),
-    toEmail: v.string(),
-    toName: v.optional(v.string()),
-    cc: v.optional(v.array(v.string())),
-    bcc: v.optional(v.array(v.string())),
-    subject: v.string(),
-    body: v.string(),
-    isHtml: v.optional(v.boolean()),
-    sentBy: v.string(),
-    status: v.string(),
-    smtpMessageId: v.optional(v.string()),
-    errorMessage: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("email_log", {
-      ...args,
-      sentAt: new Date().toISOString(),
-    });
-  },
-});
-
-export const listForProperty = query({
-  args: { propertyId: v.id("properties") },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("email_log")
-      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
-      .order("desc")
-      .take(100);
-  },
-});
-
-export const listForRelated = query({
-  args: { relatedType: v.string(), relatedId: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("email_log")
-      .withIndex("by_related", (q) =>
-        q.eq("relatedType", args.relatedType).eq("relatedId", args.relatedId)
-      )
-      .order("desc")
-      .collect();
-  },
-});
-
-export const recent = query({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    return await ctx.db.query("email_log").order("desc").take(args.limit ?? 50);
-  },
-});
