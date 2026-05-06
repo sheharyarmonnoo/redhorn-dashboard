@@ -34,7 +34,14 @@ function Field({ label, value, color }: { label: string; value: string; color?: 
 }
 
 function RevenueDetail() {
-  const { tenants, monthlyRevenue } = useKpiData();
+  const { tenants, monthlyRevenue: monthlyRevenueRaw } = useKpiData();
+  // Drop phantom rows for the current month and beyond — older syncs left
+  // a duplicate row when the period header wasn't being read; without
+  // filtering, the trend list shows two adjacent months with the same
+  // value (e.g. 2026-04 = 2026-05 = $162,825).
+  const today = new Date();
+  const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const monthlyRevenue = monthlyRevenueRaw.filter((m: any) => m.month && m.month < cutoff);
   const occupied = tenants.filter((t: any) => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant?.includes("Owner"));
   const totalRent = occupied.reduce((s: number, t: any) => s + t.monthlyRent, 0);
   const totalElectric = occupied.reduce((s: number, t: any) => s + t.monthlyElectric, 0);
