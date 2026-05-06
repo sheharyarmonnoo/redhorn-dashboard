@@ -189,6 +189,53 @@ export default function RentRollPage() {
         valueFormatter: (p: { value: string }) => p.value || "—" },
       { field: "leaseTo", headerName: "Lease End", width: 110,
         valueFormatter: (p: { value: string }) => p.value || "—" },
+      // Days until lease expires + urgency band — replaces the old separate
+      // /leases page. Hidden by default; users enable from column menu.
+      { field: "daysToExpiry", headerName: "Days Left", width: 100, type: "numericColumn",
+        valueGetter: (p: any) => {
+          const to = p.data?.leaseTo;
+          if (!to) return null;
+          const end = new Date(to).getTime();
+          if (!Number.isFinite(end)) return null;
+          return Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24));
+        },
+        cellRenderer: (p: { value: number | null; data: any }) => {
+          if (p.data?.status === "vacant") return <span className="text-[#a1a1aa]">—</span>;
+          const d = p.value;
+          if (d === null || d === undefined) return <span className="text-[#a1a1aa]">—</span>;
+          if (d <= 0) return <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white">EXPIRED</span>;
+          const color = d <= 90 ? "text-[#dc2626] font-semibold" : d <= 180 ? "text-[#d97706] font-medium" : "text-[#16a34a]";
+          return <span className={`text-[12px] ${color}`}>{d}d</span>;
+        },
+      },
+      { field: "leaseUrgency", headerName: "Urgency", width: 140, hide: true,
+        valueGetter: (p: any) => {
+          if (p.data?.status === "vacant") return "—";
+          const to = p.data?.leaseTo;
+          if (!to) return "—";
+          const end = new Date(to).getTime();
+          if (!Number.isFinite(end)) return "—";
+          const d = Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24));
+          if (d <= 0) return "Expired";
+          if (d <= 90) return "Critical (<90d)";
+          if (d <= 180) return "Warning (90-180d)";
+          return "OK (180d+)";
+        },
+        cellRenderer: (p: { value: string }) => {
+          const dots: Record<string, string> = {
+            "Expired": "bg-[#7f1d1d]",
+            "Critical (<90d)": "bg-[#dc2626]",
+            "Warning (90-180d)": "bg-[#d97706]",
+            "OK (180d+)": "bg-[#16a34a]",
+          };
+          return (
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b] dark:text-[#fafafa]">
+              <span className={`w-1.5 h-1.5 rounded-full ${dots[p.value] || "bg-[#a1a1aa]"}`} />
+              {p.value}
+            </span>
+          );
+        },
+      },
       { field: "monthlyRent", headerName: "Rent", width: 110, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
       // Prefer the Show Detail rent roll's monthlyRentPerSF column; fall

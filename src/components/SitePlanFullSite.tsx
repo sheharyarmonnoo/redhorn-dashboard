@@ -1,5 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
+import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 
 type Tenant = any;
 
@@ -165,6 +166,86 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
   const [hovered, setHovered] = useState<string | null>(null);
   const [hoveredAnnex, setHoveredAnnex] = useState(false);
 
+  // Pan + zoom state. viewBox starts at full extents (0 0 1420 1100); zoom and
+  // pan modify it so the SVG scales/translates without losing crisp text.
+  const VB_W = 1420;
+  const VB_H = 1100;
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ active: boolean; startX: number; startY: number; startPanX: number; startPanY: number }>({
+    active: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0,
+  });
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  const viewW = VB_W / zoom;
+  const viewH = VB_H / zoom;
+  const viewBox = `${pan.x} ${pan.y} ${viewW} ${viewH}`;
+
+  const clampPan = useCallback((px: number, py: number, vw: number, vh: number) => {
+    return { x: Math.max(0, Math.min(VB_W - vw, px)), y: Math.max(0, Math.min(VB_H - vh, py)) };
+  }, []);
+
+  const onWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const cx = ((e.clientX - rect.left) / rect.width) * (VB_W / zoom) + pan.x;
+    const cy = ((e.clientY - rect.top) / rect.height) * (VB_H / zoom) + pan.y;
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const nextZoom = Math.max(1, Math.min(6, zoom * factor));
+    if (nextZoom === zoom) return;
+    const nextVW = VB_W / nextZoom;
+    const nextVH = VB_H / nextZoom;
+    const nextPanX = cx - (cx - pan.x) * (nextVW / (VB_W / zoom));
+    const nextPanY = cy - (cy - pan.y) * (nextVH / (VB_H / zoom));
+    const c = clampPan(nextPanX, nextPanY, nextVW, nextVH);
+    setZoom(nextZoom);
+    setPan(c);
+  }, [zoom, pan, clampPan]);
+
+  const onMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (zoom <= 1) return;
+    dragRef.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      startPanX: pan.x,
+      startPanY: pan.y,
+    };
+  }, [zoom, pan]);
+
+  const onMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!dragRef.current.active) return;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const dx = ((e.clientX - dragRef.current.startX) / rect.width) * viewW;
+    const dy = ((e.clientY - dragRef.current.startY) / rect.height) * viewH;
+    const c = clampPan(dragRef.current.startPanX - dx, dragRef.current.startPanY - dy, viewW, viewH);
+    setPan(c);
+  }, [viewW, viewH, clampPan]);
+
+  const onMouseUp = useCallback(() => {
+    dragRef.current.active = false;
+  }, []);
+
+  const zoomIn = () => {
+    const next = Math.min(6, zoom * 1.4);
+    const nextVW = VB_W / next;
+    const nextVH = VB_H / next;
+    const c = clampPan(pan.x + (viewW - nextVW) / 2, pan.y + (viewH - nextVH) / 2, nextVW, nextVH);
+    setZoom(next); setPan(c);
+  };
+  const zoomOut = () => {
+    const next = Math.max(1, zoom / 1.4);
+    const nextVW = VB_W / next;
+    const nextVH = VB_H / next;
+    const c = clampPan(pan.x - (nextVW - viewW) / 2, pan.y - (nextVH - viewH) / 2, nextVW, nextVH);
+    setZoom(next); setPan(c);
+  };
+  const reset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+
   const decorated = useMemo(() => {
     const out: Record<string, { tenant: Tenant | null; status: string; sqft: number }> = {};
     for (const b of BUILDINGS) {
@@ -183,7 +264,39 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
 
   return (
     <div className="relative w-full max-w-5xl mx-auto rounded-lg border border-[#e4e4e7] dark:border-[#3f3f46] bg-white dark:bg-[#18181b] shadow-sm overflow-hidden">
-      <svg viewBox="0 0 1420 1100" className="block w-full h-auto" style={{ maxHeight: "78vh" }} preserveAspectRatio="xMidYMid meet">
+      {/* Zoom controls — bottom-right, above the legend */}
+      <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-1 bg-white/90 dark:bg-[#18181b]/90 backdrop-blur border border-[#e4e4e7] dark:border-[#3f3f46] rounded-md p-1 shadow-sm">
+        <button
+          onClick={zoomIn}
+          disabled={zoom >= 6}
+          title="Zoom in"
+          className="w-8 h-8 flex items-center justify-center rounded text-[#18181b] dark:text-[#fafafa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+        ><ZoomIn size={14} /></button>
+        <button
+          onClick={zoomOut}
+          disabled={zoom <= 1}
+          title="Zoom out"
+          className="w-8 h-8 flex items-center justify-center rounded text-[#18181b] dark:text-[#fafafa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+        ><ZoomOut size={14} /></button>
+        <button
+          onClick={reset}
+          disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
+          title="Reset view"
+          className="w-8 h-8 flex items-center justify-center rounded text-[#18181b] dark:text-[#fafafa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+        ><Maximize2 size={13} /></button>
+      </div>
+      <svg
+        ref={svgRef}
+        viewBox={viewBox}
+        className="block w-full h-auto select-none"
+        style={{ maxHeight: "78vh", cursor: zoom > 1 ? (dragRef.current.active ? "grabbing" : "grab") : "default", touchAction: "none" }}
+        preserveAspectRatio="xMidYMid meet"
+        onWheel={onWheel}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+      >
         {/* No background rect — let the card's bg shine through so there's
             no gray-vs-white seam between the SVG and its container. */}
 
