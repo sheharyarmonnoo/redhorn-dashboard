@@ -67,14 +67,45 @@ export const recomputeFromLatest = mutation({
     // Tally revenue categories from current-period column for the chart
     // breakdown. Skip subtotal / NET lines so we don't double-count when
     // we're walking individual line items.
+    //
+    // BUGFIX: previously we keyed only on the line item label, so lines like
+    //   "Electricity"  under  parent "UTILITIES (REIMB)"      (CP = -$745)
+    //   "R&M Electrical" under parent "REPAIR & MAINT (REIMB)" (CP = $10K)
+    // were swept into "electric income" — that's why Hollister 2025-12 read
+    // electric=-$7,415 and 2026-02 read -$30,462. Yardi's IS hierarchy splits
+    // top-level sections by parentLine; we walk that ancestor chain and only
+    // count children of the income-side parents. Reimbursable / expense
+    // sub-trees never contribute to income KPIs anymore.
+    const byLineItem = new Map<string, typeof lines[number]>();
+    for (const r of lines) byLineItem.set((r.lineItem || "").trim(), r);
+    const INCOME_ROOTS = new Set([
+      "INCOME",
+      "RENTAL INCOME",
+      "MISC INCOME",
+      "INTEREST & OTHER INCOME",
+      "PROPERTY MANAGEMENT/LEASING REVENUE",
+    ]);
+    function isUnderIncome(row: typeof lines[number]): boolean {
+      let cur: typeof lines[number] | undefined = row;
+      // Walk up via parentLine; cap at 8 hops as a safety net.
+      for (let i = 0; i < 8 && cur; i++) {
+        const label = (cur.lineItem || "").trim().toUpperCase();
+        if (INCOME_ROOTS.has(label)) return true;
+        const parent = (cur.parentLine || "").trim();
+        if (!parent) return false;
+        cur = byLineItem.get(parent);
+      }
+      return false;
+    }
     let rent = 0, cam = 0, electric = 0, lateFees = 0;
     for (const r of lines) {
       const li = (r.lineItem || "").toLowerCase();
       const cp = r.currentPeriod || 0;
       if (/^\s*total\b/i.test(r.lineItem) || /^\s*net\b/i.test(r.lineItem)) continue;
-      if (/rent|rental income|storage rent/.test(li) && !/expense/.test(li)) rent += cp;
-      else if (/electric|utility/.test(li) && !/expense/.test(li)) electric += cp;
-      else if (/cam|common area/.test(li) && !/expense/.test(li)) cam += cp;
+      if (!isUnderIncome(r)) continue; // skip expense / REIMB sub-trees
+      if (/rent|rental income|storage rent/.test(li)) rent += cp;
+      else if (/electric|utility/.test(li)) electric += cp;
+      else if (/cam|common area/.test(li)) cam += cp;
       else if (/late fee/.test(li)) lateFees += cp;
     }
 
@@ -198,14 +229,38 @@ export const recomputeFromMonth = mutation({
       .reverse()[0];
     const lines = inMonth.filter((r) => r.snapshotDate === latestSnapshot);
 
+    // Same parentLine ancestor walk as recomputeFromLatest — see comment
+    // there for the bug background. Lines like "Electricity" under
+    // "UTILITIES (REIMB)" must NOT be summed as electric income.
+    const byLineItem = new Map<string, typeof lines[number]>();
+    for (const r of lines) byLineItem.set((r.lineItem || "").trim(), r);
+    const INCOME_ROOTS = new Set([
+      "INCOME",
+      "RENTAL INCOME",
+      "MISC INCOME",
+      "INTEREST & OTHER INCOME",
+      "PROPERTY MANAGEMENT/LEASING REVENUE",
+    ]);
+    function isUnderIncome(row: typeof lines[number]): boolean {
+      let cur: typeof lines[number] | undefined = row;
+      for (let i = 0; i < 8 && cur; i++) {
+        const label = (cur.lineItem || "").trim().toUpperCase();
+        if (INCOME_ROOTS.has(label)) return true;
+        const parent = (cur.parentLine || "").trim();
+        if (!parent) return false;
+        cur = byLineItem.get(parent);
+      }
+      return false;
+    }
     let rent = 0, cam = 0, electric = 0, lateFees = 0;
     for (const r of lines) {
       const li = (r.lineItem || "").toLowerCase();
       const cp = r.currentPeriod || 0;
       if (/^\s*total\b/i.test(r.lineItem) || /^\s*net\b/i.test(r.lineItem)) continue;
-      if (/rent|rental income|storage rent/.test(li) && !/expense/.test(li)) rent += cp;
-      else if (/electric|utility/.test(li) && !/expense/.test(li)) electric += cp;
-      else if (/cam|common area/.test(li) && !/expense/.test(li)) cam += cp;
+      if (!isUnderIncome(r)) continue; // skip expense / REIMB sub-trees
+      if (/rent|rental income|storage rent/.test(li)) rent += cp;
+      else if (/electric|utility/.test(li)) electric += cp;
+      else if (/cam|common area/.test(li)) cam += cp;
       else if (/late fee/.test(li)) lateFees += cp;
     }
 
