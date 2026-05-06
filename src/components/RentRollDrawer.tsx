@@ -108,7 +108,7 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40 dark:bg-black/60 rh-backdrop" onClick={onClose}>
       <div
-        className="bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-xl w-full max-w-md h-full overflow-y-auto rh-drawer"
+        className={`bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-xl w-full ${tab === "details" ? "max-w-md" : "max-w-3xl"} h-full overflow-y-auto rh-drawer transition-[max-width] duration-200`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#e4e4e7] dark:border-[#3f3f46] sticky top-0 bg-white dark:bg-[#18181b] z-10">
@@ -385,14 +385,15 @@ function LedgerTable({ rows, emptyLabel }: { rows: any[]; emptyLabel: string }) 
                 Paid <span className="font-medium text-[#16a34a]">{formatCurrency(monthReceipts)}</span>
               </p>
             </div>
-            <table className="w-full text-[11px]">
+            <div className="overflow-x-auto">
+            <table className="w-full text-[11px] min-w-[640px]">
               <thead>
                 <tr className="text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider text-[9px] border-b border-[#e4e4e7] dark:border-[#3f3f46]">
-                  <th className="text-left px-3 py-1.5">Date</th>
+                  <th className="text-left px-3 py-1.5 whitespace-nowrap">Date</th>
                   <th className="text-left px-3 py-1.5">Description</th>
-                  <th className="text-right px-3 py-1.5">Charge</th>
-                  <th className="text-right px-3 py-1.5">Payment</th>
-                  <th className="text-right px-3 py-1.5">Balance</th>
+                  <th className="text-right px-3 py-1.5 whitespace-nowrap">Charge</th>
+                  <th className="text-right px-3 py-1.5 whitespace-nowrap">Payment</th>
+                  <th className="text-right px-3 py-1.5 whitespace-nowrap">Balance</th>
                 </tr>
               </thead>
               <tbody>
@@ -400,13 +401,14 @@ function LedgerTable({ rows, emptyLabel }: { rows: any[]; emptyLabel: string }) 
                   <tr key={i} className="border-t border-[#f4f4f5] dark:border-[#27272a]">
                     <td className="px-3 py-1.5 text-[#71717a] dark:text-[#a1a1aa] whitespace-nowrap">{r.transactionDate || "—"}</td>
                     <td className="px-3 py-1.5 text-[#18181b] dark:text-[#fafafa]">{r.description || ""}</td>
-                    <td className="px-3 py-1.5 text-right text-[#dc2626] font-medium">{r.charges > 0 ? formatCurrency(r.charges) : ""}</td>
-                    <td className="px-3 py-1.5 text-right text-[#16a34a] font-medium">{r.receipts > 0 ? formatCurrency(r.receipts) : ""}</td>
-                    <td className="px-3 py-1.5 text-right text-[#71717a] dark:text-[#a1a1aa]">{formatCurrency(r.balance || 0)}</td>
+                    <td className="px-3 py-1.5 text-right text-[#dc2626] font-medium whitespace-nowrap">{r.charges > 0 ? formatCurrency(r.charges) : ""}</td>
+                    <td className="px-3 py-1.5 text-right text-[#16a34a] font-medium whitespace-nowrap">{r.receipts > 0 ? formatCurrency(r.receipts) : ""}</td>
+                    <td className="px-3 py-1.5 text-right text-[#71717a] dark:text-[#a1a1aa] whitespace-nowrap">{formatCurrency(r.balance || 0)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         );
       })}
