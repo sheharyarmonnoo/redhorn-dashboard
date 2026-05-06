@@ -4,6 +4,7 @@ import { basename } from "node:path";
 import { config } from "./config.js";
 import { parseIncomeStatement } from "./parse-income-statement.js";
 import { parseRentRoll } from "./parse-rent-roll.js";
+import { parseRentRollAnalytics } from "./parse-rent-roll-analytics.js";
 import { parseTotalUnits } from "./parse-total-units.js";
 import { parsePastDue } from "./parse-past-due.js";
 import { parseGlDetail } from "./parse-gl-detail.js";
@@ -167,15 +168,20 @@ export async function uploadRunToConvex(
         perFileRows = result.matched;
         totalRowsIngested += result.matched;
       } else if (u.reportType === "rent_roll_full") {
-        const parsed = parseRentRoll(u.filePath);
-        console.log(`   parsed RR-full ${u.fileName}: ${parsed.rows.length} rows`);
-        // Show Detail rent roll has the rich columns: rent/SF, annual rent,
-        // recoveries per SF, security deposit, LOC. Pass the whole bag
-        // through to enrichRentByCode — server only writes non-zero values
-        // so partial Yardi outputs don't blow away other data.
+        // Commercial Analytics > Property > Rent Roll xlsx (the rich format
+        // with Security Deposit + LOC + Annual Rec/SF). Different layout
+        // from the dashboard "Current Leases" panel — uses dedicated parser.
+        const parsed = parseRentRollAnalytics(u.filePath);
+        const activeRows = parsed.rows.filter(r => r.status !== "vacant" && r.tenant !== "VACANT");
+        console.log(`   parsed RR-full ${u.fileName}: ${parsed.rows.length} rows (${activeRows.length} active leases, ${parsed.rows.length - activeRows.length} vacant)`);
+
+        // Pass the whole bag through to enrichRentByCode — server only
+        // writes non-zero values so partial Yardi outputs don't blow away
+        // other data. We exclude VACANT rows because they'd overwrite real
+        // tenant names with "VACANT" via the unit-match path.
         const result: any = await client.mutation(FN.enrichRent as any, {
           propertyCode: u.propertyCode,
-          rows: parsed.rows.map(r => ({
+          rows: activeRows.map(r => ({
             unit: r.unit,
             tenant: r.tenant,
             monthlyRent: r.monthlyRent,
