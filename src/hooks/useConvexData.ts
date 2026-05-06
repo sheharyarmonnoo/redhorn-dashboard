@@ -102,6 +102,24 @@ export function useDashboardLoading(propertyId: string | undefined) {
   return tenants === undefined || units === undefined || revenue === undefined;
 }
 
+// Tenants from the rent-roll panel can carry comma-separated units when one
+// lease covers multiple units (e.g. "A-103, A-112, A-85"). The Total Units
+// list always shows individual units. To compare them correctly we have to
+// split the tenant.unit field; otherwise every shared unit gets miscounted
+// as vacant. Returns a normalized lowercase set.
+export function leasedUnitKeys(tenants: { unit?: string }[]): Set<string> {
+  const set = new Set<string>();
+  for (const t of tenants) {
+    const raw = (t.unit || "").trim();
+    if (!raw) continue;
+    for (const part of raw.split(",")) {
+      const k = part.trim().toLowerCase();
+      if (k) set.add(k);
+    }
+  }
+  return set;
+}
+
 // Pure helper — does this lease end within the next N days (default 90)?
 // Used in both the KPI count on the dashboard and the drawer detail so the
 // two never disagree. Range is inclusive of today, exclusive of holdovers

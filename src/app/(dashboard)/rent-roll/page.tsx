@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
-import { useTenants, useUnits, useActiveProperty, formatCurrency } from "@/hooks/useConvexData";
+import { useTenants, useUnits, useActiveProperty, formatCurrency, leasedUnitKeys } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
@@ -62,14 +62,55 @@ export default function RentRollPage() {
   const tenantsLeased = useTenants(activeProperty?._id);
   const unitsAll = useUnits(activeProperty?._id);
 
-  // The rent roll grid should show every unit on the property, not just the
-  // ones with active leases. Yardi's "Total Units" list (units table) gives
-  // us the universe; the "Current Leases" list (tenants table) gives us the
-  // active leases. Anything in units but not in tenants is a vacancy and
-  // should render as a vacant row so the totals match Yardi's portfolio view.
+  // Build one row per individual unit so the rent roll matches Yardi's
+  // Total Units count.
+  //
+  // Source of truth:
+  //   - tenants.listByProperty: one row per LEASE. Multi-unit leases come
+  //     as "A-103, A-112, A-85" in a single tenant.unit field.
+  //   - units.listByProperty: one row per individual unit (always atomic).
+  //
+  // Strategy: expand each multi-unit lease into one row per unit, copying
+  // the tenant info onto each row but only keeping rent/sqft on the FIRST
+  // row of the lease. Secondary rows show "(incl. in <primary>)" so the
+  // sum of rents equals the actual rent roll, not 3x for shared leases.
+  // Unmatched units become vacant rows.
   const tenants = useMemo(() => {
     const norm = (s: string) => (s || "").trim().toLowerCase();
-    const leasedKeys = new Set(tenantsLeased.map((t: any) => norm(t.unit)));
+    const leasedKeys = leasedUnitKeys(tenantsLeased);
+    // Sqft per unit comes from the Total Units feed (individual unit) — the
+    // tenant.sqft field is the combined lease sqft, which would over-count
+    // for multi-unit leases.
+    const unitsByKey = new Map<string, any>(
+      unitsAll.map((u: any) => [norm(u.unit), u])
+    );
+    const expanded: any[] = [];
+    for (const t of tenantsLeased) {
+      const parts = (t.unit || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+      if (parts.length === 0) { expanded.push(t); continue; }
+      parts.forEach((unit: string, idx: number) => {
+        const isPrimary = idx === 0;
+        const matchedUnit = unitsByKey.get(norm(unit));
+        expanded.push({
+          ...t,
+          _id: parts.length > 1 ? `${t._id}-${unit}` : t._id,
+          unit,
+          building: matchedUnit?.building || t.building || "",
+          // Per-unit sqft from the Total Units feed (atomic). Falls back to
+          // the lease.sqft only when units feed has nothing for this unit.
+          sqft: matchedUnit?.sqft ?? (isPrimary ? t.sqft : 0),
+          // Primary row carries the lease's financials. Secondary rows
+          // (other units in the same lease) show 0 rent so the totals
+          // don't multi-count. Tenant column gets a "(incl. lease)" tag.
+          tenant: isPrimary ? t.tenant : `${t.tenant} (incl. lease)`,
+          monthlyRent: isPrimary ? t.monthlyRent : 0,
+          monthlyElectric: isPrimary ? t.monthlyElectric : 0,
+          securityDeposit: isPrimary ? t.securityDeposit : 0,
+          _multiUnitLease: parts.length > 1,
+          _multiUnitPrimary: isPrimary,
+        });
+      });
+    }
     const vacancies = unitsAll
       .filter((u: any) => !leasedKeys.has(norm(u.unit)))
       .map((u: any) => ({
@@ -89,7 +130,7 @@ export default function RentRollPage() {
         electricPosted: false,
         propertyId: activeProperty?._id,
       }));
-    return [...tenantsLeased, ...vacancies];
+    return [...expanded, ...vacancies];
   }, [tenantsLeased, unitsAll, activeProperty?._id]);
 
   // Re-resolve the selected tenant from the live list each render so the

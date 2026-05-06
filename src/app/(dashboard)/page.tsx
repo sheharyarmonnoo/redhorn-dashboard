@@ -5,7 +5,7 @@ import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
 import RevenueFilter from "@/components/RevenueFilter";
 import ActionItems from "@/components/ActionItems";
-import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, formatCurrency, useDashboardLoading, isExpiringWithin } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, formatCurrency, useDashboardLoading, isExpiringWithin, leasedUnitKeys } from "@/hooks/useConvexData";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
@@ -31,10 +31,10 @@ export default function DashboardPage() {
   }
 
   const occupied = tenants.filter(t => t.status !== "vacant");
-  // Vacancy is units the rent roll doesn't cover. Tenants come from the
-  // Current Leases panel (active leases only); units come from the Total Units
-  // listing (all space, leased or not). The diff is what's actually vacant.
-  const tenantUnitKeys = new Set(tenants.map(t => (t.unit || "").trim().toLowerCase()));
+  // Vacancy = units in the Total Units feed that aren't covered by any
+  // active lease. Multi-unit leases (e.g. tenant.unit = "A-103, A-112, A-85")
+  // must be expanded — otherwise A-112 and A-85 get miscounted as vacant.
+  const tenantUnitKeys = leasedUnitKeys(tenants);
   const vacantUnits = units.filter((u: any) => !tenantUnitKeys.has((u.unit || "").trim().toLowerCase()));
   const totalUnits = units.length > 0 ? units.length : tenants.length;
   const occupancyPct = totalUnits > 0 ? Math.round((occupied.length / totalUnits) * 100) : 0;
