@@ -181,6 +181,8 @@ export default function RentRollPage() {
         valueFormatter: (p: { value: string }) => p.value || "—" },
       { field: "monthlyRent", headerName: "Rent", width: 110, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
+      { field: "securityDeposit", headerName: "Security Deposit", width: 140, type: "numericColumn",
+        cellRenderer: CurrencyCellRenderer },
       // Net-lease electric posting status. Filterable so the user can
       // pull up "Not Posted" rows for the close.
       { field: "electricPosted", headerName: "Electric", width: 130, cellRenderer: ElectricPostedCellRenderer, filter: true,
