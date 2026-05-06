@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { Mail } from "lucide-react";
 import { api } from "../../convex/_generated/api";
@@ -14,26 +14,25 @@ interface Props {
   onClose: () => void;
 }
 
-const STATUS_OPTIONS = [
-  { value: "current", label: "Current" },
-  { value: "past_due", label: "Past Due" },
-  { value: "expiring_soon", label: "Expiring Soon" },
-  { value: "locked_out", label: "Locked Out" },
-  { value: "vacant", label: "Vacant" },
-];
+const STATUS_LABELS: Record<string, string> = {
+  current: "Current",
+  past_due: "Past Due",
+  expiring_soon: "Expiring Soon",
+  locked_out: "Locked Out",
+  vacant: "Vacant",
+};
 
 export default function RentRollDrawer({ tenant, onClose }: Props) {
   const setOverride = useMutation(api.tenantOverrides.setOverride);
-  const clearOverride = useMutation(api.tenantOverrides.clearOverride);
   const { user } = useUser();
-  const [draft, setDraft] = useState<any | null>(tenant);
-  const [saving, setSaving] = useState(false);
+  const [notesDraft, setNotesDraft] = useState<string>(tenant?.notes || "");
+  const [savingNotes, setSavingNotes] = useState(false);
   const [tab, setTab] = useState<"details" | "ledger" | "electric">("details");
   const [emailCtx, setEmailCtx] = useState<EmailContext | null>(null);
   const { properties } = useProperties();
   const property = useMemo(() => properties.find((p: any) => p._id === tenant?.propertyId) || null, [properties, tenant?.propertyId]);
 
-  useEffect(() => { setDraft(tenant); }, [tenant?.unit, tenant?.propertyId]);
+  useEffect(() => { setNotesDraft(tenant?.notes || ""); }, [tenant?.unit, tenant?.propertyId, tenant?.notes]);
   useEffect(() => { setTab("details"); }, [tenant?.unit, tenant?.propertyId]);
 
   // Pull all receivable_details for this property; filter to this tenant.
@@ -49,60 +48,22 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
 
   const electricTx = useMemo(() => tenantTx.filter((r: any) => /electric|electricity|cam-elec/i.test(r.description || "") || /electric|cam-elec/i.test(r.chargeCode || "")), [tenantTx]);
 
-  if (!tenant || !draft) return null;
+  if (!tenant) return null;
 
-  const dirty = draft.monthlyRent !== tenant.monthlyRent
-    || draft.monthlyElectric !== tenant.monthlyElectric
-    || draft.securityDeposit !== tenant.securityDeposit
-    || draft.leaseFrom !== tenant.leaseFrom
-    || draft.leaseTo !== tenant.leaseTo
-    || draft.status !== tenant.status
-    || (draft.notes || "") !== (tenant.notes || "")
-    || draft.pastDueAmount !== tenant.pastDueAmount
-    || (draft.nextRentIncrease || "") !== (tenant.nextRentIncrease || "")
-    || (draft.nextRentIncreaseAmount || 0) !== (tenant.nextRentIncreaseAmount || 0)
-    || (draft.tenantEmail || "") !== (tenant.tenantEmail || "")
-    || (draft.tenantPhone || "") !== (tenant.tenantPhone || "");
+  const notesDirty = (notesDraft || "") !== (tenant.notes || "");
 
-  async function handleSave() {
-    if (!draft || !tenant.propertyId || !tenant.unit) return;
-    setSaving(true);
+  async function handleSaveNotes() {
+    if (!tenant.propertyId || !tenant.unit) return;
+    if (!notesDirty) return;
+    setSavingNotes(true);
     try {
-      // Only persist fields the user actually changed. Sending the full draft
-      // would freeze every field as an override (including ones the user
-      // didn't touch like lease expiration), which then blocks future Yardi
-      // syncs from updating that field until "Revert to pipeline" is clicked.
-      const fields: Record<string, any> = {};
-      if (draft.monthlyRent !== tenant.monthlyRent) fields.monthlyRent = numOrUndef(draft.monthlyRent);
-      if (draft.monthlyElectric !== tenant.monthlyElectric) fields.monthlyElectric = numOrUndef(draft.monthlyElectric);
-      if (draft.securityDeposit !== tenant.securityDeposit) fields.securityDeposit = numOrUndef(draft.securityDeposit);
-      if (draft.leaseFrom !== tenant.leaseFrom) fields.leaseFrom = strOrUndef(draft.leaseFrom);
-      if (draft.leaseTo !== tenant.leaseTo) fields.leaseTo = strOrUndef(draft.leaseTo);
-      if (draft.status !== tenant.status) fields.status = strOrUndef(draft.status);
-      if ((draft.notes || "") !== (tenant.notes || "")) fields.notes = strOrUndef(draft.notes);
-      if (draft.pastDueAmount !== tenant.pastDueAmount) fields.pastDueAmount = numOrUndef(draft.pastDueAmount);
-      if ((draft.nextRentIncrease || "") !== (tenant.nextRentIncrease || "")) fields.nextRentIncrease = strOrUndef(draft.nextRentIncrease);
-      if ((draft.nextRentIncreaseAmount || 0) !== (tenant.nextRentIncreaseAmount || 0)) fields.nextRentIncreaseAmount = numOrUndef(draft.nextRentIncreaseAmount);
-      if ((draft.tenantEmail || "") !== (tenant.tenantEmail || "")) fields.tenantEmail = strOrUndef(draft.tenantEmail);
-      if ((draft.tenantPhone || "") !== (tenant.tenantPhone || "")) fields.tenantPhone = strOrUndef(draft.tenantPhone);
-      if (Object.keys(fields).length === 0) return;
       await setOverride({
         propertyId: tenant.propertyId as any,
         unit: tenant.unit,
-        fields,
+        fields: { notes: strOrUndef(notesDraft) },
         updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
       });
-    } finally { setSaving(false); }
-  }
-
-  async function handleRevert() {
-    if (!tenant.propertyId || !tenant.unit) return;
-    if (!window.confirm(`Revert ${tenant.unit} to pipeline values? Your manual edits will be discarded; the next sync's data will show.`)) return;
-    setSaving(true);
-    try {
-      await clearOverride({ propertyId: tenant.propertyId as any, unit: tenant.unit });
-      onClose();
-    } finally { setSaving(false); }
+    } finally { setSavingNotes(false); }
   }
 
   return (
@@ -175,70 +136,38 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Status">
-              <select
-                value={draft.status || "current"}
-                onChange={(e) => setDraft({ ...draft, status: e.target.value })}
-                className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
-              >
-                {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{STATUS_LABELS[tenant.status] || tenant.status || "—"}</p>
             </Field>
             <Field label="Lease Type">
               <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{tenant.leaseType || "—"}</p>
             </Field>
 
-            <Field label="Lease Start" overridden={tenant.overrideFields?.includes("leaseFrom")}>
-              <input
-                type="date"
-                value={(draft.leaseFrom || "").slice(0, 10)}
-                onChange={(e) => setDraft({ ...draft, leaseFrom: e.target.value })}
-                className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
-              />
+            <Field label="Lease Start">
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{formatDate(tenant.leaseFrom)}</p>
             </Field>
-            <Field label="Lease End" overridden={tenant.overrideFields?.includes("leaseTo")}>
-              <input
-                type="date"
-                value={(draft.leaseTo || "").slice(0, 10)}
-                onChange={(e) => setDraft({ ...draft, leaseTo: e.target.value })}
-                className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
-              />
+            <Field label="Lease End">
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{formatDate(tenant.leaseTo)}</p>
             </Field>
 
-            <Field label="Monthly Rent" overridden={tenant.overrideFields?.includes("monthlyRent")}>
-              <NumberInput value={draft.monthlyRent ?? 0} onChange={v => setDraft({ ...draft, monthlyRent: v })} />
+            <Field label="Monthly Rent">
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{formatCurrency(tenant.monthlyRent ?? 0)}</p>
             </Field>
-            <Field label="Security Deposit" overridden={tenant.overrideFields?.includes("securityDeposit")}>
-              <NumberInput value={draft.securityDeposit ?? 0} onChange={v => setDraft({ ...draft, securityDeposit: v })} />
-            </Field>
-
-            <Field label="Next Rent Increase Date" overridden={tenant.overrideFields?.includes("nextRentIncrease")}>
-              <input
-                type="date"
-                value={(draft.nextRentIncrease || "").slice(0, 10)}
-                onChange={(e) => setDraft({ ...draft, nextRentIncrease: e.target.value })}
-                className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
-              />
-            </Field>
-            <Field label="New Monthly Rent" overridden={tenant.overrideFields?.includes("nextRentIncreaseAmount")}>
-              <NumberInput value={draft.nextRentIncreaseAmount ?? 0} onChange={v => setDraft({ ...draft, nextRentIncreaseAmount: v })} />
+            <Field label="Security Deposit">
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{formatCurrency(tenant.securityDeposit ?? 0)}</p>
             </Field>
 
-            <Field label="Tenant Email" overridden={tenant.overrideFields?.includes("tenantEmail")}>
-              <input
-                type="email"
-                value={draft.tenantEmail || ""}
-                onChange={(e) => setDraft({ ...draft, tenantEmail: e.target.value })}
-                placeholder="contact@example.com"
-                className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
-              />
+            <Field label="Next Rent Increase Date">
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{formatDate(tenant.nextRentIncrease)}</p>
             </Field>
-            <Field label="Tenant Phone" overridden={tenant.overrideFields?.includes("tenantPhone")}>
-              <input
-                type="tel"
-                value={draft.tenantPhone || ""}
-                onChange={(e) => setDraft({ ...draft, tenantPhone: e.target.value })}
-                className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
-              />
+            <Field label="New Monthly Rent">
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{tenant.nextRentIncreaseAmount ? formatCurrency(tenant.nextRentIncreaseAmount) : "—"}</p>
+            </Field>
+
+            <Field label="Tenant Email">
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5 truncate" title={tenant.tenantEmail || ""}>{tenant.tenantEmail || "—"}</p>
+            </Field>
+            <Field label="Tenant Phone">
+              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{tenant.tenantPhone || "—"}</p>
             </Field>
 
             {/* Monthly Electric + Past Due intentionally hidden — billback
@@ -255,48 +184,23 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
 
           <Field label="Notes" overridden={tenant.overrideFields?.includes("notes")}>
             <textarea
-              value={draft.notes || ""}
-              onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              onBlur={handleSaveNotes}
               rows={4}
               placeholder="Anything the team should know about this lease — payment history, issues, off-system arrangements."
               className="w-full text-[12px] bg-white dark:bg-[#09090b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2 text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] resize-none"
             />
+            {savingNotes && (
+              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1">Saving…</p>
+            )}
           </Field>
 
-          {tenant.hasOverride && (
+          {tenant.hasOverride && tenant.overrideUpdatedAt && (
             <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] leading-relaxed">
-              Modified fields override the synced Yardi data. They persist across syncs.
-              Click <span className="font-medium">Revert to pipeline</span> to discard your edits and restore the synced values.
-              {tenant.overrideUpdatedAt && <> · Last edited {new Date(tenant.overrideUpdatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}{tenant.overrideUpdatedBy ? ` by ${tenant.overrideUpdatedBy}` : ""}.</>}
+              Last edited {new Date(tenant.overrideUpdatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}{tenant.overrideUpdatedBy ? ` by ${tenant.overrideUpdatedBy}` : ""}.
             </p>
           )}
-        </div>
-        )}
-
-        {tab === "details" && (
-        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46] sticky bottom-0 bg-white dark:bg-[#18181b]">
-          <button
-            onClick={handleRevert}
-            disabled={!tenant.hasOverride || saving}
-            className="text-[12px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#dc2626] dark:hover:text-[#f87171] px-2 py-1.5 rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            Revert to pipeline
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] px-3 py-1.5 rounded cursor-pointer"
-            >
-              Close
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!dirty || saving}
-              className="text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-3 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
         </div>
         )}
       </div>
@@ -424,6 +328,16 @@ function formatMonth(m: string): string {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
+function formatDate(d: any): string {
+  if (!d) return "—";
+  const s = String(d).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s || "—";
+  const [y, m, day] = s.split("-");
+  const date = new Date(Number(y), Number(m) - 1, Number(day));
+  if (isNaN(date.getTime())) return s;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 function Field({ label, overridden, children }: { label: string; overridden?: boolean; children: React.ReactNode }) {
   return (
     <div>
@@ -434,22 +348,6 @@ function Field({ label, overridden, children }: { label: string; overridden?: bo
       {children}
     </div>
   );
-}
-
-function NumberInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <input
-      type="number"
-      value={Number.isFinite(value) ? value : 0}
-      onChange={(e) => onChange(Number(e.target.value) || 0)}
-      className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
-    />
-  );
-}
-
-function numOrUndef(v: any): number | undefined {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
 }
 
 function strOrUndef(v: any): string | undefined {
