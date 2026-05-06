@@ -27,53 +27,55 @@ type Room = {
 
 const ROOMS: Room[] = [
   // Top row of executive suites
-  { unit: "A-107", x: 290, y: 100, w: 90, h: 100, type: "unit" },
-  { unit: "A-111", x: 380, y: 100, w: 90, h: 100, type: "unit" },
-  { unit: "A-106", x: 470, y: 100, w: 90, h: 100, type: "unit" },
-  { unit: "A-106A", x: 560, y: 100, w: 120, h: 100, type: "unit" },
-  { unit: "A-103", x: 680, y: 100, w: 240, h: 200, type: "unit" },
+  { unit: "A-107", x: 290, y: 100, w: 90, h: 110, type: "unit" },
+  { unit: "A-111", x: 380, y: 100, w: 90, h: 110, type: "unit" },
+  { unit: "A-106", x: 470, y: 100, w: 90, h: 110, type: "unit" },
+  { unit: "A-106A", x: 560, y: 100, w: 120, h: 110, type: "unit" },
+  { unit: "A-103", x: 680, y: 100, w: 220, h: 170, type: "unit" },
 
-  // Top-left: Break Room/Kitchen with EXIT
-  { label: "Break Room / Kitchen", x: 100, y: 100, w: 190, h: 100, type: "common" },
-  { label: "EXIT", x: 200, y: 60, w: 80, h: 38, type: "exit" },
+  // Top-left: Break Room/Kitchen with EXIT (door at top of break room)
+  { label: "Break Room / Kitchen", x: 100, y: 100, w: 190, h: 110, type: "common" },
+  { label: "EXIT", x: 195, y: 78, w: 60, h: 22, type: "exit" },
 
   // Restrooms cluster
-  { label: "Womans", x: 100, y: 220, w: 75, h: 75, type: "common", fontSize: 13 },
-  { label: "Mens", x: 175, y: 220, w: 65, h: 75, type: "common", fontSize: 13 },
+  { label: "Womans", x: 100, y: 230, w: 70, h: 70, type: "common", fontSize: 12 },
+  { label: "Mens", x: 170, y: 230, w: 70, h: 70, type: "common", fontSize: 12 },
 
   // A-108 (small upper-middle)
-  { unit: "A-108", x: 240, y: 220, w: 100, h: 75, type: "unit" },
+  { unit: "A-108", x: 240, y: 230, w: 110, h: 70, type: "unit" },
 
   // Inner column / cluster
-  { unit: "A-120", x: 100, y: 295, w: 140, h: 230, type: "unit" },
-  { unit: "A-113", x: 240, y: 295, w: 100, h: 200, type: "unit" },
-  { unit: "A-110", x: 340, y: 295, w: 100, h: 160, type: "unit" },
-  { unit: "A-85",  x: 380, y: 455, w: 90,  h: 90,  type: "unit" },
+  { unit: "A-120", x: 100, y: 310, w: 140, h: 230, type: "unit" },
+  { unit: "A-113", x: 250, y: 310, w: 100, h: 200, type: "unit" },
+  { unit: "A-110", x: 360, y: 310, w: 110, h: 160, type: "unit" },
+  { unit: "A-85",  x: 380, y: 480, w: 90,  h: 90,  type: "unit" },
 
-  // Tiny W/M
-  { label: "W", x: 100, y: 440, w: 40, h: 40, type: "common", fontSize: 14 },
-  { label: "M", x: 100, y: 480, w: 40, h: 40, type: "common", fontSize: 14 },
+  // Tiny W/M (between A-120 and the rest of inner cluster — moved down to
+  // a less crowded spot)
+  { label: "W", x: 100, y: 555, w: 35, h: 35, type: "common", fontSize: 13 },
+  { label: "M", x: 100, y: 595, w: 35, h: 35, type: "common", fontSize: 13 },
 
-  // Right column suites
-  { unit: "A-101", x: 920, y: 280, w: 130, h: 170, type: "unit" },
-  { unit: "A-102", x: 830, y: 340, w: 90,  h: 200, type: "unit" },
-  { unit: "A-100", x: 920, y: 520, w: 130, h: 160, type: "unit" },
+  // Right column suites — start below A-103 to avoid edge collision
+  { unit: "A-101", x: 920, y: 290, w: 140, h: 150, type: "unit" },
+  { unit: "A-102", x: 820, y: 350, w: 90,  h: 200, type: "unit" },
+  { unit: "A-100", x: 920, y: 490, w: 140, h: 150, type: "unit" },
 
-  // Common Area (center)
-  { label: "Common Area", x: 450, y: 270, w: 300, h: 280, type: "common" },
+  // Common Area (center) — y starts BELOW A-103's bottom edge (y=270)
+  // and right edge stays clear of the A-102 corridor (x=820)
+  { label: "Common Area", x: 480, y: 290, w: 330, h: 240, type: "common" },
 
   // Bottom row
-  { unit: "A-114", x: 100, y: 545, w: 180, h: 130, type: "unit" },
-  { unit: "A-112", x: 280, y: 545, w: 160, h: 130, type: "unit" },
-  { label: "Conference Room", x: 440, y: 545, w: 170, h: 130, type: "common" },
-  { unit: "A-85A", x: 610, y: 545, w: 110, h: 130, type: "unit" },
-  { unit: "A-90",  x: 720, y: 545, w: 60,  h: 130, type: "unit" },
+  { unit: "A-114", x: 150, y: 555, w: 170, h: 130, type: "unit" },
+  { unit: "A-112", x: 320, y: 555, w: 150, h: 130, type: "unit" },
+  { label: "Conference Room", x: 480, y: 555, w: 180, h: 130, type: "common" },
+  { unit: "A-85A", x: 660, y: 555, w: 90, h: 130, type: "unit" },
+  { unit: "A-90",  x: 750, y: 555, w: 60, h: 130, type: "unit" },
 
-  // EXIT (right side)
-  { label: "EXIT", x: 780, y: 590, w: 80, h: 50, type: "exit" },
+  // EXIT (right side, between A-90 and A-100)
+  { label: "EXIT", x: 815, y: 600, w: 60, h: 22, type: "exit" },
 
   // Bottom-spanning suite
-  { unit: "A-130", x: 200, y: 680, w: 520, h: 80, type: "unit" },
+  { unit: "A-130", x: 200, y: 695, w: 520, h: 75, type: "unit" },
 ];
 
 const NORM = (s: string) => (s || "").trim().toLowerCase();
@@ -212,7 +214,7 @@ export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSele
               )}
               <text
                 x={r.x + r.w / 2}
-                y={r.y + r.h / 2 + 5}
+                y={r.y + r.h / 2 + (dec.status === "vacant" ? -2 : 5)}
                 textAnchor="middle"
                 fontSize={Math.min(r.fontSize || 16, Math.max(11, Math.min(r.w, r.h) / 5))}
                 fontWeight={600}
@@ -222,6 +224,20 @@ export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSele
               >
                 {r.unit}
               </text>
+              {dec.status === "vacant" && (
+                <text
+                  x={r.x + r.w / 2}
+                  y={r.y + r.h / 2 + 14}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fontStyle="italic"
+                  fill="#a1a1aa"
+                  className="dark:[fill:#71717a]"
+                  style={{ pointerEvents: "none", userSelect: "none" }}
+                >
+                  vacant
+                </text>
+              )}
             </g>
           );
         })}

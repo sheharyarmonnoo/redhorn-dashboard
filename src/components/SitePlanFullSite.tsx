@@ -182,18 +182,8 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
         {/* Each building */}
         {BUILDINGS.map(b => (
           <g key={b.name}>
-            {/* Building outline */}
-            <rect
-              x={b.outline.x}
-              y={b.outline.y}
-              width={b.outline.w}
-              height={b.outline.h}
-              fill="none"
-              stroke={b.outlineColor}
-              strokeWidth={3}
-              rx={4}
-            />
-            {/* Building label above the outline */}
+            {/* Building label above the units (no outline rect — let the
+                unit grid carry the visual structure) */}
             <text
               x={b.outline.x + b.outline.w / 2}
               y={b.outline.y - 22}
@@ -248,7 +238,7 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
                   )}
                   <text
                     x={r.x + r.w / 2}
-                    y={r.y + r.h / 2 + 4}
+                    y={r.y + r.h / 2 + (dec.status === "vacant" ? -2 : 4)}
                     textAnchor="middle"
                     fontSize={Math.min(13, Math.max(9, Math.min(r.w, r.h) / 6))}
                     fontWeight={600}
@@ -258,6 +248,20 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
                   >
                     {r.unit}
                   </text>
+                  {dec.status === "vacant" && (
+                    <text
+                      x={r.x + r.w / 2}
+                      y={r.y + r.h / 2 + 11}
+                      textAnchor="middle"
+                      fontSize={Math.min(9, Math.max(7, Math.min(r.w, r.h) / 9))}
+                      fontStyle="italic"
+                      fill="#a1a1aa"
+                      className="dark:[fill:#71717a]"
+                      style={{ pointerEvents: "none", userSelect: "none" }}
+                    >
+                      vacant
+                    </text>
+                  )}
                 </g>
               );
             })}
@@ -293,12 +297,9 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
           </text>
         </g>
 
-        {/* Parking + entrance hint */}
+        {/* Parking */}
         <text x={760} y={520} textAnchor="middle" fontSize={11} fontStyle="italic" fill="#a1a1aa">
           Parking
-        </text>
-        <text x={760} y={540} textAnchor="middle" fontSize={11} fontStyle="italic" fill="#a1a1aa">
-          (You Are Here ★)
         </text>
       </svg>
 
