@@ -53,11 +53,6 @@ function ElectricPostedCellRenderer(props: { data: any }) {
   if (isVacant || !isNet) {
     return <span className="text-[11px] text-[#d4d4d8] dark:text-[#52525b]">—</span>;
   }
-  // Secondary rows of multi-unit leases inherit the primary row's posting
-  // state — show as not applicable to avoid duplicate "Not Posted" warnings.
-  if (t._multiUnitLease && !t._multiUnitPrimary) {
-    return <span className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">—</span>;
-  }
   const posted = !!t.electricPosted;
   return (
     <span className={`inline-flex items-center gap-1.5 text-[11px] ${posted ? "text-[#16a34a]" : "text-[#dc2626] font-medium"}`}>
@@ -87,62 +82,52 @@ export default function RentRollPage() {
   const unitsAll = useUnits(activeProperty?._id);
   const { byTenant: chargeSummary, latestMonth: chargeMonth } = useChargeSummary(activeProperty?._id);
 
-  // Build one row per individual unit so the rent roll matches Yardi's
-  // Total Units count.
+  // Build the rent roll: one row per LEASE (multi-unit leases stay merged),
+  // plus one row per VACANT unit.
   //
   // Source of truth:
   //   - tenants.listByProperty: one row per LEASE. Multi-unit leases come
   //     as "A-103, A-112, A-85" in a single tenant.unit field.
   //   - units.listByProperty: one row per individual unit (always atomic).
   //
-  // Strategy: expand each multi-unit lease into one row per unit, copying
-  // the tenant info onto each row but only keeping rent/sqft on the FIRST
-  // row of the lease. Secondary rows show "(incl. in <primary>)" so the
-  // sum of rents equals the actual rent roll, not 3x for shared leases.
-  // Unmatched units become vacant rows.
+  // Strategy: keep multi-unit leases as a SINGLE row whose `unit` is the
+  // comma-separated string from Yardi. Compute combined sqft by summing
+  // matched per-unit sqfts from the Units feed. Vacant units (no matching
+  // lease) are still expanded one-per-unit so each appears as its own row.
   const tenants = useMemo(() => {
     const norm = (s: string) => (s || "").trim().toLowerCase();
     const leasedKeys = leasedUnitKeys(tenantsLeased);
-    // Sqft per unit comes from the Total Units feed (individual unit) — the
-    // tenant.sqft field is the combined lease sqft, which would over-count
-    // for multi-unit leases.
+    // Per-unit sqft / building from the Total Units feed — needed because
+    // the tenant.sqft field on a multi-unit lease may be the combined or
+    // single-unit value depending on the export.
     const unitsByKey = new Map<string, any>(
       unitsAll.map((u: any) => [norm(u.unit), u])
     );
-    const expanded: any[] = [];
+    const merged: any[] = [];
     for (const t of tenantsLeased) {
       const parts = (t.unit || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-      if (parts.length === 0) { expanded.push(t); continue; }
-      parts.forEach((unit: string, idx: number) => {
-        const isPrimary = idx === 0;
-        const matchedUnit = unitsByKey.get(norm(unit));
-        const chargeKey = normalizeTenantName(t.tenant || "");
-        const cs = isPrimary ? chargeSummary.get(chargeKey) : null;
-        expanded.push({
-          ...t,
-          _id: parts.length > 1 ? `${t._id}-${unit}` : t._id,
-          unit,
-          building: matchedUnit?.building || t.building || "",
-          // Per-unit sqft from the Total Units feed (atomic). Falls back to
-          // the lease.sqft only when units feed has nothing for this unit.
-          sqft: matchedUnit?.sqft ?? (isPrimary ? t.sqft : 0),
-          // Primary row carries the lease's financials. Secondary rows
-          // (other units in the same lease) show 0 rent so the totals
-          // don't multi-count. Tenant column gets a "(incl. lease)" tag.
-          tenant: isPrimary ? t.tenant : `${t.tenant} (incl. lease)`,
-          monthlyRent: isPrimary ? t.monthlyRent : 0,
-          monthlyElectric: isPrimary ? t.monthlyElectric : 0,
-          securityDeposit: isPrimary ? t.securityDeposit : 0,
-          // Charge summary derived from receivable_details for the latest
-          // posted month. Only on the primary row for multi-unit leases.
-          camCharge: cs?.cam ?? 0,
-          electricCharge: cs?.electric ?? 0,
-          insuranceCharge: cs?.insurance ?? 0,
-          currentMonthCharges: cs?.currentMonthCharges ?? 0,
-          currentBalance: cs?.currentBalance ?? 0,
-          _multiUnitLease: parts.length > 1,
-          _multiUnitPrimary: isPrimary,
-        });
+      if (parts.length === 0) { merged.push(t); continue; }
+      // Sum sqft across every unit in the lease's comma-list. Fall back to
+      // the lease.sqft when the Units feed has no match for any of them.
+      const matchedUnits = parts.map((u: string) => unitsByKey.get(norm(u))).filter(Boolean);
+      const summedSqft = matchedUnits.reduce((s: number, u: any) => s + (u.sqft || 0), 0);
+      const sqft = summedSqft > 0 ? summedSqft : (t.sqft || 0);
+      // Building: first matched unit's building, or join distinct buildings
+      // when the lease spans multiple. Falls back to lease.building.
+      const buildings = Array.from(new Set(matchedUnits.map((u: any) => u.building).filter(Boolean)));
+      const building = buildings.length > 1 ? buildings.join(", ") : (buildings[0] || t.building || "");
+      const chargeKey = normalizeTenantName(t.tenant || "");
+      const cs = chargeSummary.get(chargeKey);
+      merged.push({
+        ...t,
+        unit: t.unit, // keep the comma-separated string from Yardi as-is
+        building,
+        sqft,
+        camCharge: cs?.cam ?? 0,
+        electricCharge: cs?.electric ?? 0,
+        insuranceCharge: cs?.insurance ?? 0,
+        currentMonthCharges: cs?.currentMonthCharges ?? 0,
+        currentBalance: cs?.currentBalance ?? 0,
       });
     }
     const vacancies = unitsAll
@@ -164,7 +149,7 @@ export default function RentRollPage() {
         electricPosted: false,
         propertyId: activeProperty?._id,
       }));
-    return [...expanded, ...vacancies];
+    return [...merged, ...vacancies];
   }, [tenantsLeased, unitsAll, activeProperty?._id, chargeSummary]);
 
   // Re-resolve the selected tenant from the live list each render so the
@@ -203,7 +188,18 @@ export default function RentRollPage() {
           if (p.data?.status === "vacant") return <span className="text-[#a1a1aa]">—</span>;
           const d = p.value;
           if (d === null || d === undefined) return <span className="text-[#a1a1aa]">—</span>;
-          if (d <= 0) return <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white">EXPIRED</span>;
+          if (d <= 0) {
+            // Cap stale-expired display: within a year show "EXPIRED Nd ago";
+            // beyond a year drop the number — it gets meaningless visually.
+            if (d <= -365) {
+              return <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white">EXPIRED</span>;
+            }
+            return <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white">EXPIRED {-d}d ago</span>;
+          }
+          // Cap very long-future leases (>5 years) so the column stays narrow.
+          if (d > 1825) {
+            return <span className="text-[12px] text-[#16a34a]">1825d+</span>;
+          }
           const color = d <= 90 ? "text-[#dc2626] font-semibold" : d <= 180 ? "text-[#d97706] font-medium" : "text-[#16a34a]";
           return <span className={`text-[12px] ${color}`}>{d}d</span>;
         },
@@ -325,6 +321,17 @@ export default function RentRollPage() {
 
   const totalRent = tenants.filter((t: any) => t.status !== "vacant").reduce((s: number, t: any) => s + t.monthlyRent, 0);
   const totalSqft = tenants.reduce((s: number, t: any) => s + t.sqft, 0);
+  // Each row's `unit` may be a comma-separated string for multi-unit leases.
+  // Sum distinct units across all rows so the count matches Yardi's atomic
+  // unit total even though we render one row per lease.
+  const totalUnits = (() => {
+    const set = new Set<string>();
+    for (const t of tenants as any[]) {
+      const parts = (t.unit || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+      for (const p of parts) set.add(p.toLowerCase());
+    }
+    return set.size;
+  })();
 
   // Real export: dump the current grid (filtered + grouped) to CSV via AG Grid.
   function exportRentRollReal() {
@@ -344,7 +351,7 @@ export default function RentRollPage() {
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">
         <div className="flex items-center gap-2 overflow-x-auto">
           <span className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 text-[#1e1e2d] dark:text-[#fafafa] font-semibold whitespace-nowrap">
-            {tenants.length} Units
+            {totalUnits} Units
           </span>
           <span className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 text-[#1e1e2d] dark:text-[#fafafa] whitespace-nowrap">
             {totalSqft.toLocaleString()} SF
