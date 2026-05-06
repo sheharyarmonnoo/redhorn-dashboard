@@ -9,10 +9,7 @@ function mergeOverride(tenant: any, override: any): any {
   const merged: any = { ...tenant };
   const applied: string[] = [];
   const fieldKeys = [
-    "monthlyRent", "monthlyElectric", "securityDeposit",
-    "leaseFrom", "leaseTo", "status", "notes",
-    "pastDueAmount", "delinquencyStage",
-    "nextRentIncrease", "nextRentIncreaseAmount",
+    "notes",
     "tenantEmail", "tenantPhone", "tenantContactName",
   ];
   for (const k of fieldKeys) {

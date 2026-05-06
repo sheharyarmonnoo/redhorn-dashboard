@@ -2,17 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
 const OVERRIDE_FIELDS = v.object({
-  monthlyRent: v.optional(v.number()),
-  monthlyElectric: v.optional(v.number()),
-  securityDeposit: v.optional(v.number()),
-  leaseFrom: v.optional(v.string()),
-  leaseTo: v.optional(v.string()),
-  status: v.optional(v.string()),
   notes: v.optional(v.string()),
-  pastDueAmount: v.optional(v.number()),
-  delinquencyStage: v.optional(v.string()),
-  nextRentIncrease: v.optional(v.string()),
-  nextRentIncreaseAmount: v.optional(v.number()),
   tenantEmail: v.optional(v.string()),
   tenantPhone: v.optional(v.string()),
   tenantContactName: v.optional(v.string()),
@@ -93,5 +83,39 @@ export const listByProperty = query({
 export const listAll = query({
   handler: async (ctx) => {
     return await ctx.db.query("tenant_overrides").collect();
+  },
+});
+
+/**
+ * One-shot migration: clear Yardi-sourced fields off every tenant_overrides
+ * row before the schema narrows. Convex schema validation is strict; a row
+ * carrying e.g. a `status` value will reject the new schema, so we null
+ * those fields first. Safe to re-run — no-op once everything is clean.
+ */
+export const clearStaleFields = mutation({
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("tenant_overrides").collect();
+    let cleared = 0;
+    for (const r of rows) {
+      const patch: any = {};
+      const staleKeys = [
+        "monthlyRent", "monthlyElectric", "securityDeposit",
+        "leaseFrom", "leaseTo", "status",
+        "pastDueAmount", "delinquencyStage",
+        "nextRentIncrease", "nextRentIncreaseAmount",
+      ];
+      let dirty = false;
+      for (const k of staleKeys) {
+        if ((r as any)[k] !== undefined) {
+          patch[k] = undefined;
+          dirty = true;
+        }
+      }
+      if (dirty) {
+        await ctx.db.patch(r._id, patch);
+        cleared++;
+      }
+    }
+    return { totalRows: rows.length, cleared };
   },
 });

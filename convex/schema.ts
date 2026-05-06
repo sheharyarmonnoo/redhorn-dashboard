@@ -21,25 +21,14 @@ export default defineSchema({
 
   // ===== TENANT OVERRIDES =====
   // Manual edits persist across syncs. Keyed by propertyId + unit so they
-  // survive tenant row churn (sync replaces tenant docs each time). Each
-  // override field is optional; only set fields apply. "Revert to pipeline"
-  // = delete the override row for that unit.
+  // survive tenant row churn (sync replaces tenant docs each time). Limited
+  // to user-curated fields ONLY — Yardi-sourced data (rent, lease dates,
+  // status, past-due, etc.) flows from sync and is not overridable here.
+  // "Revert to pipeline" = delete the override row for that unit.
   tenant_overrides: defineTable({
     propertyId: v.id("properties"),
     unit: v.string(),
-    monthlyRent: v.optional(v.number()),
-    monthlyElectric: v.optional(v.number()),
-    securityDeposit: v.optional(v.number()),
-    leaseFrom: v.optional(v.string()),
-    leaseTo: v.optional(v.string()),
-    status: v.optional(v.string()),
     notes: v.optional(v.string()),
-    pastDueAmount: v.optional(v.number()),
-    delinquencyStage: v.optional(v.string()),
-    // Manual entry until the Tenancy Schedule scraper lands. Date the rent
-    // bumps next + the new monthly rent post-bump.
-    nextRentIncrease: v.optional(v.string()),
-    nextRentIncreaseAmount: v.optional(v.number()),
     // Manual contact info — tenant emails aren't in Yardi exports
     tenantEmail: v.optional(v.string()),
     tenantPhone: v.optional(v.string()),
