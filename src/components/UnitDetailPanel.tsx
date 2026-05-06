@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { useUnitNotes, useTenantMutations, formatCurrency } from "@/hooks/useConvexData";
+import { useUnitNotes, formatCurrency } from "@/hooks/useConvexData";
 
 interface Props {
   tenant: any | null;
@@ -22,7 +22,6 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
     tenant?.propertyId,
     tenant?.unit
   );
-  const { updateElectricPosted } = useTenantMutations();
 
   useEffect(() => {
     if (tenantProp) {
@@ -75,12 +74,6 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
     const d = new Date(iso);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
       " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  }
-
-  async function toggleElectric() {
-    if (!tenant) return;
-    await updateElectricPosted({ id: tenant._id as any, electricPosted: !tenant.electricPosted });
-    onUpdated?.();
   }
 
   return (
@@ -191,7 +184,7 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
                 </div>
               )}
 
-              {/* Posting Status — electric is the only toggle backed by Convex today */}
+              {/* Posting Status — auto-derived from receivable detail charges during sync */}
               {tenant.leaseType === "Office Net Lease" && (
                 <div>
                   <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">
@@ -199,15 +192,15 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
                   </p>
                   <div className="flex items-center justify-between py-1.5">
                     <p className="text-[12px] text-[#18181b] dark:text-[#fafafa]">Electric / Utility charge posted</p>
-                    <button
-                      onClick={toggleElectric}
-                      className={`text-[10px] font-medium px-2.5 py-0.5 rounded cursor-pointer transition-colors ${
+                    <span
+                      className={`text-[10px] font-medium px-2.5 py-0.5 rounded ${
                         tenant.electricPosted ? "bg-[#16a34a] text-white" : "bg-red-100 dark:bg-red-950/50 text-[#dc2626]"
                       }`}
                     >
                       {tenant.electricPosted ? "Posted" : "Not Posted"}
-                    </button>
+                    </span>
                   </div>
+                  <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">Auto-derived from receivable detail.</p>
                 </div>
               )}
             </>
