@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { config } from "./config.js";
 import { parseIncomeStatement } from "./parse-income-statement.js";
-import { parseRentRoll } from "./parse-rent-roll.js";
 import { parseRentRollAnalytics } from "./parse-rent-roll-analytics.js";
 import { parseTotalUnits } from "./parse-total-units.js";
 import { parsePastDue } from "./parse-past-due.js";
@@ -131,21 +130,6 @@ export async function uploadRunToConvex(
         perFileRows = result.inserted;
         totalRowsIngested += result.inserted;
         if (!ingestedProperties.includes(u.propertyCode)) ingestedProperties.push(u.propertyCode);
-      } else if (u.reportType === "rent_roll") {
-        const parsed = parseRentRoll(u.filePath);
-        console.log(`   parsed RR ${u.fileName}: ${parsed.rows.length} leases`);
-        if (parsed.rows.length === 0) {
-          console.warn(`   warning: rent-roll parser returned 0 rows — header likely didn't match expected columns`);
-        }
-        const result: any = await client.mutation(FN.bulkReplaceTenants as any, {
-          propertyCode: u.propertyCode,
-          syncId: jobId,
-          snapshotDate,
-          rows: parsed.rows,
-        });
-        console.log(`   ingested RR → ${result.inserted} tenants · superseded ${result.supersededPrior}`);
-        perFileRows = result.inserted;
-        totalRowsIngested += result.inserted;
       } else if (u.reportType === "total_units") {
         const parsed = parseTotalUnits(u.filePath);
         console.log(`   parsed TU ${u.fileName}: ${parsed.rows.length} units`);
@@ -171,40 +155,45 @@ export async function uploadRunToConvex(
         totalRowsIngested += result.matched;
       } else if (u.reportType === "rent_roll_full") {
         // Commercial Analytics > Property > Rent Roll xlsx (the rich format
-        // with Security Deposit + LOC + Annual Rec/SF). Different layout
-        // from the dashboard "Current Leases" panel — uses dedicated parser.
+        // with Security Deposit + LOC + Annual Rec/SF). This is now the
+        // single authoritative rent-roll source — it carries every column
+        // the dashboard "Current Leases" panel was missing, so we route it
+        // through bulkReplaceTenants (insert-or-replace) instead of just
+        // patching. VACANT rows are excluded so we don't pollute the
+        // tenants table with placeholder rows.
         const parsed = parseRentRollAnalytics(u.filePath);
         const activeRows = parsed.rows.filter(r => r.status !== "vacant" && r.tenant !== "VACANT");
         console.log(`   parsed RR-full ${u.fileName}: ${parsed.rows.length} rows (${activeRows.length} active leases, ${parsed.rows.length - activeRows.length} vacant)`);
 
-        // Pass the whole bag through to enrichRentByCode — server only
-        // writes non-zero values so partial Yardi outputs don't blow away
-        // other data. We exclude VACANT rows because they'd overwrite real
-        // tenant names with "VACANT" via the unit-match path.
-        const result: any = await client.mutation(FN.enrichRent as any, {
+        const result: any = await client.mutation(FN.bulkReplaceTenants as any, {
           propertyCode: u.propertyCode,
+          syncId: jobId,
+          snapshotDate,
           rows: activeRows.map(r => ({
             unit: r.unit,
+            building: r.building,
             tenant: r.tenant,
-            monthlyRent: r.monthlyRent,
-            monthlyElectric: r.monthlyElectric,
-            securityDeposit: r.securityDeposit,
-            leaseFrom: r.leaseFrom,
-            leaseTo: r.leaseTo,
             leaseType: r.leaseType,
             sqft: r.sqft,
+            leaseFrom: r.leaseFrom,
+            leaseTo: r.leaseTo,
             leaseTermMonths: r.leaseTermMonths,
+            monthlyRent: r.monthlyRent,
             monthlyRentPerSF: r.monthlyRentPerSF,
             annualRent: r.annualRent,
             annualRentPerSF: r.annualRentPerSF,
             annualRecPerSF: r.annualRecPerSF,
             annualMiscPerSF: r.annualMiscPerSF,
+            monthlyElectric: r.monthlyElectric,
+            securityDeposit: r.securityDeposit,
             locAmount: r.locAmount,
+            status: r.status,
+            pastDueAmount: r.pastDueAmount,
           })),
         });
-        console.log(`   enriched RR-full → matched ${result.matched}/${result.tenants} tenants`);
-        perFileRows = result.matched;
-        totalRowsIngested += result.matched;
+        console.log(`   ingested RR-full → ${result.inserted} tenants · superseded ${result.supersededPrior}`);
+        perFileRows = result.inserted;
+        totalRowsIngested += result.inserted;
       } else if (u.reportType === "gl_detail") {
         const parsed = parseGlDetail(u.filePath);
         console.log(`   parsed GL ${u.fileName}: ${parsed.rows.length} JE rows`);

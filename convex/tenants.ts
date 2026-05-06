@@ -224,6 +224,17 @@ export const bulkReplaceByCode = mutation({
         securityDeposit: v.optional(v.number()),
         status: v.optional(v.string()),
         pastDueAmount: v.optional(v.number()),
+        // Rich Show Detail columns from the Commercial Analytics rent roll.
+        // The basic dashboard "Current Leases" panel didn't carry these,
+        // but the rent-roll-full export does — and that's now the single
+        // ingest path, so bulkReplaceByCode has to accept them all.
+        leaseTermMonths: v.optional(v.number()),
+        monthlyRentPerSF: v.optional(v.number()),
+        annualRent: v.optional(v.number()),
+        annualRentPerSF: v.optional(v.number()),
+        annualRecPerSF: v.optional(v.number()),
+        annualMiscPerSF: v.optional(v.number()),
+        locAmount: v.optional(v.number()),
       })
     ),
   },
@@ -246,7 +257,7 @@ export const bulkReplaceByCode = mutation({
 
     let inserted = 0;
     for (const r of args.rows) {
-      await ctx.db.insert("tenants", {
+      const doc: any = {
         syncId: args.syncId,
         propertyId: property._id,
         unit: r.unit,
@@ -265,7 +276,17 @@ export const bulkReplaceByCode = mutation({
         lastPaymentDate: "",
         snapshotDate: args.snapshotDate,
         isLatest: true,
-      });
+      };
+      // Optional Show Detail columns — only set when present so we don't
+      // store undefined values for properties whose rent roll lacks them.
+      if (typeof r.leaseTermMonths === "number" && r.leaseTermMonths > 0) doc.leaseTermMonths = r.leaseTermMonths;
+      if (typeof r.monthlyRentPerSF === "number" && r.monthlyRentPerSF > 0) doc.monthlyRentPerSF = r.monthlyRentPerSF;
+      if (typeof r.annualRent === "number" && r.annualRent > 0) doc.annualRent = r.annualRent;
+      if (typeof r.annualRentPerSF === "number" && r.annualRentPerSF > 0) doc.annualRentPerSF = r.annualRentPerSF;
+      if (typeof r.annualRecPerSF === "number" && r.annualRecPerSF > 0) doc.annualRecPerSF = r.annualRecPerSF;
+      if (typeof r.annualMiscPerSF === "number" && r.annualMiscPerSF > 0) doc.annualMiscPerSF = r.annualMiscPerSF;
+      if (typeof r.locAmount === "number" && r.locAmount > 0) doc.locAmount = r.locAmount;
+      await ctx.db.insert("tenants", doc);
       inserted++;
     }
 

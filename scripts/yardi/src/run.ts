@@ -1,7 +1,7 @@
 import { openAuthenticatedSession } from "./auth.js";
 import { getProperties } from "./properties.js";
 import { runIncomeStatementForProperty } from "./reports/income-statement.js";
-import { runRentRollForProperty, runTotalUnitsForProperty } from "./reports/rent-roll.js";
+import { runTotalUnitsForProperty } from "./reports/rent-roll.js";
 import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
 import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
 import { runTwelveMonthBudgetForProperty } from "./reports/twelve-month-budget.js";
@@ -63,16 +63,6 @@ async function main() {
       // want to overwrite current rent-roll / past-due data with a snapshot of
       // last month's leases.
       if (historical) continue;
-
-      // Rent Roll (Current Leases panel)
-      try {
-        const path = await runRentRollForProperty(voyager, property, month);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll", ok: true, path });
-      } catch (err: any) {
-        const msg = err?.message || String(err);
-        console.error(`   RR FAILED — ${msg}`);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll", ok: false, error: msg });
-      }
 
       // Total Units (Space/Facilities panel)
       try {
