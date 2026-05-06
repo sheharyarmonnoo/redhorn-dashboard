@@ -1,9 +1,10 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useActiveProperty, useTenants, useUnits, leasedUnitKeys } from "@/hooks/useConvexData";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
-import SitePlanMap2D from "@/components/SitePlanMap2D";
+import SitePlanFullSite from "@/components/SitePlanFullSite";
+import SitePlanFloorPlan from "@/components/SitePlanFloorPlan";
 
 export default function SitePlanPage() {
   const property = useActiveProperty();
@@ -13,6 +14,15 @@ export default function SitePlanPage() {
   // live list each render so override mutations (e.g. status toggle) flow
   // back into the open drawer immediately, without a close + reopen.
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
+  const [execOpen, setExecOpen] = useState(false);
+
+  // Allow the modal to close on Escape — same pattern the drawers use.
+  useEffect(() => {
+    if (!execOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setExecOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [execOpen]);
 
   // Resolve selectedUnit (single unit code) to the underlying lease, even
   // when the lease covers multiple units (e.g. tenant.unit = "A-103, A-112,
@@ -90,16 +100,60 @@ export default function SitePlanPage() {
       </div>
 
       <div className="mt-4">
-        <SitePlanMap2D
+        <SitePlanFullSite
           tenants={tenantsList}
           units={units}
           selectedUnit={selectedUnit}
-          onSelect={(t: any) => setSelectedUnit(t?.unit ?? null)}
-          propertyId={property?._id}
+          onSelectUnit={(unit: string) => setSelectedUnit(unit)}
+          onOpenExecSuites={() => setExecOpen(true)}
         />
       </div>
 
       <UnitDetailPanel tenant={selected} onClose={() => setSelectedUnit(null)} />
+
+      {/* Executive Suites focus modal — full-screen with zoom-in animation
+          so the floor plan gets the breathing room it needs. Click backdrop
+          or hit Escape to dismiss. */}
+      {execOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 dark:bg-black/60 p-4 sm:p-6 rh-backdrop"
+          onClick={() => setExecOpen(false)}
+        >
+          <div
+            className="relative bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto rh-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-white dark:bg-[#18181b]">
+              <button
+                onClick={() => setExecOpen(false)}
+                className="flex items-center gap-1.5 text-[12px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+              >
+                ← Back to site
+              </button>
+              <div className="text-center">
+                <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Executive Suites</p>
+                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">Building A · A-101 → A-130 · floor plan</p>
+              </div>
+              <button
+                onClick={() => setExecOpen(false)}
+                className="text-[16px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer leading-none w-7 h-7 flex items-center justify-center rounded hover:bg-[#f4f4f5] dark:hover:bg-[#27272a]"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-4 sm:p-5">
+              <SitePlanFloorPlan
+                tenants={tenantsList}
+                units={units}
+                selectedUnit={selectedUnit}
+                onSelect={(t: any) => setSelectedUnit(t?.unit ?? null)}
+                propertyId={property?._id}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
