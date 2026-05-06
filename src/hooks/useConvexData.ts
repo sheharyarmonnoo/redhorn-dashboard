@@ -360,6 +360,27 @@ export function useUnitNotes(propertyId: string | undefined, unit: string | unde
   return { notes: notes ?? [], createNote, updateNote, removeNote };
 }
 
+// ===== MAINTENANCE LOG =====
+
+export function useMaintenance(propertyId: string | undefined) {
+  const items = useQuery(
+    api.maintenanceLog.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  const create = useMutation(api.maintenanceLog.create);
+  const update = useMutation(api.maintenanceLog.update);
+  const remove = useMutation(api.maintenanceLog.remove);
+  const markCompleted = useMutation(api.maintenanceLog.markCompleted);
+  return {
+    items: items ?? [],
+    loading: items === undefined,
+    create,
+    update,
+    remove,
+    markCompleted,
+  };
+}
+
 // ===== TENANT MUTATIONS =====
 
 export function useTenantMutations() {

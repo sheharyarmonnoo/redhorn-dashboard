@@ -71,8 +71,13 @@ export default defineSchema({
     .index("by_unit", ["propertyId", "unit"]),
 
   // ===== MAINTENANCE LOG =====
+  // Tracks both ad-hoc repairs/inspections and recurring routine tasks
+  // (gutter cleaning, drainage, HVAC service, etc). unitId is optional
+  // because property-level tasks (e.g. roof, gutters) don't tie to a
+  // specific unit; the freeform `unit` string lets us tag a unit code
+  // even before the units table is populated.
   maintenance_log: defineTable({
-    unitId: v.id("units"),
+    unitId: v.optional(v.id("units")),
     propertyId: v.id("properties"),
     date: v.string(),
     type: v.string(),
@@ -80,7 +85,14 @@ export default defineSchema({
     cost: v.optional(v.number()),
     vendor: v.optional(v.string()),
     status: v.string(),
-  }).index("by_unit", ["unitId"]),
+    unit: v.optional(v.string()),
+    category: v.optional(v.string()),       // "repair" | "inspection" | "routine" | "emergency" | "preventative"
+    isRecurring: v.optional(v.boolean()),
+    recurFrequency: v.optional(v.string()), // "monthly" | "quarterly" | "biannually" | "annually"
+    nextDueDate: v.optional(v.string()),    // ISO date when the next instance is due
+  })
+    .index("by_unit", ["unitId"])
+    .index("by_property", ["propertyId"]),
 
   // ===== TENANTS / LEASES =====
   tenants: defineTable({

@@ -21,6 +21,7 @@ import type * as glTransactions from "../glTransactions.js";
 import type * as http from "../http.js";
 import type * as incomeLines from "../incomeLines.js";
 import type * as lineBudgets from "../lineBudgets.js";
+import type * as maintenanceLog from "../maintenanceLog.js";
 import type * as monthlyRevenue from "../monthlyRevenue.js";
 import type * as properties from "../properties.js";
 import type * as propertyDebt from "../propertyDebt.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   incomeLines: typeof incomeLines;
   lineBudgets: typeof lineBudgets;
+  maintenanceLog: typeof maintenanceLog;
   monthlyRevenue: typeof monthlyRevenue;
   properties: typeof properties;
   propertyDebt: typeof propertyDebt;
