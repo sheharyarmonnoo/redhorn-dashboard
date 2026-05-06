@@ -25,8 +25,11 @@ export interface ParsedReceivableDetail {
     leaseFrom?: string;
     leaseTo?: string;
     monthlyRent?: number;
-    // Aging buckets from the row that closes each lease section. Sourced
-    // from columns: c1=0-30, c4=31-60, c6=61-90, c9=above 90, c15=Amount Due.
+    // Aging buckets from the two-row block that closes each lease section.
+    // The Yardi SSRS export emits the bucket LABELS in one row ("0-30 Days",
+    // "31-60 Days", "61-90 Days", "Above 90 Days", "Amount Due") and the
+    // numeric amounts in the row immediately below it. Both rows use the same
+    // column layout: c1=0-30, c4=31-60, c6=61-90, c9=above 90, c15=Amount Due.
     aging0_30?: number;
     aging31_60?: number;
     aging61_90?: number;
@@ -186,21 +189,24 @@ function readTransactions(
     const c1 = (row[1] || "").toString().trim();
     const c2 = (row[2] || "").toString().trim();
 
-    // Aging row closes each lease section. Read bucket amounts then stop.
-    // Column layout (verified from Yardi SSRS): c1=0-30 label, c4=31-60,
-    // c6=61-90, c9=over90, c15=Amount Due (total balance outstanding).
+    // Aging row closes each lease section. The Yardi SSRS export uses a
+    // TWO-ROW layout: the row whose c1 starts with "0-30" holds the bucket
+    // LABELS ("0-30 Days", "31-60 Days", "61-90 Days", "Above 90 Days",
+    // "Amount Due"), and the row immediately below holds the numeric amounts
+    // at the same columns: c1=0-30, c4=31-60, c6=61-90, c9=above 90,
+    // c15=Amount Due. Verified against actual hol-receivable-detail.xlsx
+    // (Apr 2026): e.g. Royal A Logistics row 957 has [1]=0, [4]=497.05,
+    // [6]=329.74, [9]=2712.03, [15]=3538.82 (matches the $3,538.82 balance).
     if (/^0-?\s*30/.test(c1) || /Days/i.test(c1)) {
+      const valuesRow = grid[i + 1] || [];
       aging = {
-        aging0_30: toNumber(row[1]),
-        aging31_60: toNumber(row[4]),
-        aging61_90: toNumber(row[6]),
-        agingOver90: toNumber(row[9]),
-        amountDue: toNumber(row[15]),
+        aging0_30: toNumber(valuesRow[1]),
+        aging31_60: toNumber(valuesRow[4]),
+        aging61_90: toNumber(valuesRow[6]),
+        agingOver90: toNumber(valuesRow[9]),
+        amountDue: toNumber(valuesRow[15]),
       };
-      // If c1 is the "0-30 Days" label (text not number), the 0-30 amount
-      // may be in c2 or c3 instead. Fallback: use c2 if c1 parsed as 0.
-      if (aging.aging0_30 === 0) aging.aging0_30 = toNumber(row[2]);
-      i++;
+      i += 2;
       break;
     }
     if (c1 === "Lease Information") break;
