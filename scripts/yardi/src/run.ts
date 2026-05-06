@@ -4,6 +4,7 @@ import { runIncomeStatementForProperty } from "./reports/income-statement.js";
 import { runRentRollForProperty, runTotalUnitsForProperty } from "./reports/rent-roll.js";
 import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
 import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
+import { runTwelveMonthBudgetForProperty } from "./reports/twelve-month-budget.js";
 // Held back:
 //   import { runPastDueForProperty } from "./reports/rent-roll.js";
 //   import { runGlDetailForProperty } from "./reports/gl-detail.js";
@@ -13,7 +14,7 @@ import { uploadRunToConvex } from "./convex-upload.js";
 interface RunResult {
   property: string;
   propertyCode: string;
-  reportType: "income_statement" | "rent_roll" | "total_units" | "past_due" | "rent_roll_full" | "gl_detail" | "receivable_detail";
+  reportType: "income_statement" | "rent_roll" | "total_units" | "past_due" | "rent_roll_full" | "gl_detail" | "receivable_detail" | "twelve_month_budget";
   ok: boolean;
   path?: string;
   error?: string;
@@ -112,6 +113,21 @@ async function main() {
         console.error(`   RR-full FAILED — ${msg}`);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll_full", ok: false, error: msg });
       }
+
+      // 12 Month Budget — Yardi's GlRepFinancial.aspx with ReportNum=8.
+      // Pulls a rolling 12-month window ending at `month`, drops it into
+      // line_budgets so the Financials → Budget vs Actuals tab is fed by
+      // real Yardi data instead of manual entry. Soft-fails so a budget
+      // hiccup doesn't break the rest of the sync.
+      try {
+        const periodStart = subtractMonths(month, 11);
+        const path = await runTwelveMonthBudgetForProperty(voyager, property, periodStart, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "twelve_month_budget", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   Budget FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "twelve_month_budget", ok: false, error: msg });
+      }
     }
 
     console.log("\n=== Download Summary ===");
@@ -154,6 +170,13 @@ async function main() {
   } finally {
     await close();
   }
+}
+
+/** "2026-05" minus N months → "2025-06" for N=11. */
+function subtractMonths(monthIso: string, n: number): string {
+  const [y, m] = monthIso.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 - n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 main().catch(err => {

@@ -9,6 +9,7 @@ import { parseTotalUnits } from "./parse-total-units.js";
 import { parsePastDue } from "./parse-past-due.js";
 import { parseGlDetail } from "./parse-gl-detail.js";
 import { parseReceivableDetail } from "./parse-receivable-detail.js";
+import { parseBudget } from "./parse-budget.js";
 import { sendSyncDigest, type DigestProperty } from "./digest.js";
 
 // Generated API surface lives in the parent project. We reference functions by
@@ -25,6 +26,7 @@ const FN = {
   enrichRent: "tenants:enrichRentByCode",
   bulkInsertGlTransactions: "glTransactions:bulkInsertByCode",
   bulkInsertReceivableDetails: "receivableDetails:bulkInsertByCode",
+  bulkUpsertLineBudgets: "lineBudgets:bulkUpsertByCode",
   recomputeMonthlyRevenue: "monthlyRevenue:recomputeFromLatest",
   recomputeMonthlyRevenueFromMonth: "monthlyRevenue:recomputeFromMonth",
   // extractInsights / getPropertyByCode no longer used — insights moved
@@ -287,6 +289,41 @@ export async function uploadRunToConvex(
               console.error(`   apply-past-due-from-RD failed: ${err?.message || err}`);
             }
           }
+        }
+      } else if (u.reportType === "twelve_month_budget") {
+        // Yardi 12-Month Budget → line_budgets table. The parser drops
+        // section headers + total/net rows; only leaf line items make it
+        // into Convex so the Budget vs Actuals UI can compare them
+        // directly against income_lines.
+        const parsed = parseBudget(u.filePath);
+        console.log(
+          `   parsed Budget ${u.fileName}: ${parsed.rows.length} line items (${parsed.periodHeader} → year=${parsed.year})`
+        );
+        if (parsed.rows.length === 0) {
+          console.warn(`   warning: budget parser returned 0 rows — Excel layout may not match expected`);
+        }
+        try {
+          const result: any = await client.mutation(FN.bulkUpsertLineBudgets as any, {
+            propertyCode: u.propertyCode,
+            year: parsed.year,
+            syncId: jobId,
+            snapshotDate,
+            rows: parsed.rows.map((r) => ({
+              lineItem: r.lineItem,
+              annualBudget: r.annualBudget,
+              monthlyBudgets: r.monthlyBudgets,
+              hierarchyLevel: r.hierarchyLevel,
+              parentLine: r.parentLine,
+            })),
+          });
+          console.log(
+            `   ingested Budget → ${result.inserted} rows · superseded ${result.supersededPrior} (year=${result.year})`
+          );
+          perFileRows = result.inserted;
+          totalRowsIngested += result.inserted;
+        } catch (err: any) {
+          console.error(`   budget upsert failed: ${err?.message || err}`);
+          throw err;
         }
       }
       await client.mutation(FN.setFileRecords as any, {

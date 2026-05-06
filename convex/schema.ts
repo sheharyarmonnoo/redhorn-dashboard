@@ -399,10 +399,16 @@ export default defineSchema({
     propertyId: v.id("properties"),
     year: v.string(),                    // "2026"
     lineItem: v.string(),                // matches income_lines.lineItem
-    annualBudget: v.number(),
+    annualBudget: v.number(),            // sum of monthlyBudgets when synced from Yardi
     notes: v.optional(v.string()),
     updatedAt: v.string(),
     updatedBy: v.optional(v.string()),
+    // Optional Yardi-sync metadata. Manual entries omit these.
+    monthlyBudgets: v.optional(v.array(v.number())),  // 12 numbers, in report column order (matches monthLabels)
+    hierarchyLevel: v.optional(v.number()),           // for parent-child rendering
+    parentLine: v.optional(v.string()),
+    syncId: v.optional(v.id("sync_jobs")),
+    snapshotDate: v.optional(v.string()),             // ISO timestamp of the Yardi sync that created this row
   })
     .index("by_property", ["propertyId"])
     .index("by_property_year", ["propertyId", "year"]),

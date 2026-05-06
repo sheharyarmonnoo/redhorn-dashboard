@@ -34,9 +34,25 @@ export default function FinancialsPage() {
   const [budgetYear, setBudgetYear] = useState<string>(String(new Date().getFullYear()));
   const { budgets, upsertBudget } = useLineBudgets(property?._id, budgetYear);
   const budgetByLine = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const b of budgets) m.set((b.lineItem || "").trim(), b.annualBudget || 0);
+    const m = new Map<string, { annualBudget: number; isSynced: boolean; snapshotDate?: string }>();
+    for (const b of budgets) {
+      const isSynced = (b as any).updatedBy === "yardi" || !!(b as any).syncId;
+      m.set((b.lineItem || "").trim(), {
+        annualBudget: b.annualBudget || 0,
+        isSynced,
+        snapshotDate: (b as any).snapshotDate || (b as any).updatedAt,
+      });
+    }
     return m;
+  }, [budgets]);
+  // Latest sync date across all Yardi-synced budget rows
+  const lastSyncDate = useMemo(() => {
+    const dates = budgets
+      .filter((b: any) => b.updatedBy === "yardi" || b.syncId)
+      .map((b: any) => b.snapshotDate || b.updatedAt)
+      .filter(Boolean);
+    if (dates.length === 0) return null;
+    return dates.sort().reverse()[0];
   }, [budgets]);
 
   // Derive the month from the latest income lines snapshot (period field)
@@ -171,6 +187,7 @@ export default function FinancialsPage() {
         <BudgetVsActuals
           lines={lines}
           budgetByLine={budgetByLine}
+          lastSyncDate={lastSyncDate}
           year={budgetYear}
           setYear={setBudgetYear}
           onSaveBudget={async (lineItem, annualBudget) => {
@@ -661,12 +678,14 @@ function PmContactPanel({
 function BudgetVsActuals({
   lines,
   budgetByLine,
+  lastSyncDate,
   year,
   setYear,
   onSaveBudget,
 }: {
   lines: any[];
-  budgetByLine: Map<string, number>;
+  budgetByLine: Map<string, { annualBudget: number; isSynced: boolean; snapshotDate?: string }>;
+  lastSyncDate: string | null;
   year: string;
   setYear: (y: string) => void;
   onSaveBudget: (lineItem: string, annualBudget: number) => Promise<void>;
@@ -705,7 +724,7 @@ function BudgetVsActuals({
     let ytdSum = 0;
     for (const l of budgetableLines) {
       const li = (l.lineItem || "").trim();
-      const b = budgetByLine.get(li) || 0;
+      const b = budgetByLine.get(li)?.annualBudget || 0;
       budgetSum += b;
       ytdSum += l.yearToDate || 0;
     }
@@ -717,8 +736,15 @@ function BudgetVsActuals({
       <div className="flex items-center justify-between mb-3">
         <div>
           <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">
-            Enter annual budget per line item; actuals come from the latest income statement YTD.
+            {lastSyncDate
+              ? "Annual budgets are synced from Yardi's 12-Month Budget report; actuals come from the latest income statement YTD."
+              : "Enter annual budget per line item; actuals come from the latest income statement YTD."}
           </p>
+          {lastSyncDate && (
+            <p className="text-[10px] text-[#16a34a] mt-0.5">
+              Synced from Yardi 12-Month Budget on {new Date(lastSyncDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+            </p>
+          )}
           <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">
             Budgeted: <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{formatCurrency(totals.budgetSum)}</span> ·
             YTD Actual: <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{formatCurrency(totals.ytdSum)}</span> ·
@@ -748,7 +774,9 @@ function BudgetVsActuals({
         {budgetableLines.map((line: any, i: number) => {
           const li = (line.lineItem || "").trim();
           const indent = Math.max(0, (line.hierarchyLevel - 1)) * 16;
-          const budget = budgetByLine.get(li) || 0;
+          const entry = budgetByLine.get(li);
+          const budget = entry?.annualBudget || 0;
+          const isSynced = !!entry?.isSynced;
           const ytd = line.yearToDate || 0;
           const variance = ytd - budget;
           const pctUsed = budget > 0 ? (ytd / budget) * 100 : 0;
@@ -759,15 +787,32 @@ function BudgetVsActuals({
               key={i}
               className="grid grid-cols-[1fr_140px_140px_140px_140px_80px] px-4 py-1.5 text-[12px] text-[#18181b] dark:text-[#fafafa] border-t border-[#f4f4f5] dark:border-[#27272a] items-center"
             >
-              <span style={{ paddingLeft: indent }} className="truncate">{li}</span>
+              <span style={{ paddingLeft: indent }} className="truncate flex items-center gap-1">
+                {li}
+                {isSynced && (
+                  <span className="text-[9px] font-medium text-[#16a34a] bg-[#dcfce7] dark:bg-[#14532d]/50 dark:text-[#86efac] px-1.5 py-0.5 rounded uppercase tracking-wide">
+                    Yardi
+                  </span>
+                )}
+              </span>
               <span className="text-right">
-                <input
-                  type="number"
-                  value={editing ? draft : (budget || "")}
-                  placeholder="—"
-                  onChange={e => setDrafts(d => ({ ...d, [li]: e.target.value }))}
-                  className="w-full text-[12px] text-right px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
-                />
+                {isSynced ? (
+                  // Read-only — Yardi sync overwrites manual input on each run
+                  <span
+                    title="Synced from Yardi 12-Month Budget — manual entry disabled"
+                    className="block w-full text-[12px] text-right px-2 py-1 text-[#18181b] dark:text-[#fafafa]"
+                  >
+                    {budget > 0 ? formatCurrency(budget) : "—"}
+                  </span>
+                ) : (
+                  <input
+                    type="number"
+                    value={editing ? draft : (budget || "")}
+                    placeholder="—"
+                    onChange={e => setDrafts(d => ({ ...d, [li]: e.target.value }))}
+                    className="w-full text-[12px] text-right px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+                  />
+                )}
               </span>
               <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">{ytd !== 0 ? formatCurrency(ytd) : "—"}</span>
               <span className={`text-right ${variance > 0 ? "text-[#dc2626]" : variance < 0 ? "text-[#16a34a]" : "text-[#a1a1aa]"}`}>
@@ -777,7 +822,7 @@ function BudgetVsActuals({
                 {budget > 0 ? `${Math.round(pctUsed)}%` : "—"}
               </span>
               <span className="text-right">
-                {editing && (
+                {!isSynced && editing && (
                   <button
                     onClick={() => handleSave(li)}
                     disabled={saving === li}
