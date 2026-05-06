@@ -1,9 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useMutation } from "convex/react";
+import { useState, useEffect, useMemo } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { api } from "../../convex/_generated/api";
-import { formatCurrency } from "@/hooks/useConvexData";
+import { formatCurrency, normalizeTenantName, useReceivableDetails } from "@/hooks/useConvexData";
 
 type Tenant = any;
 
@@ -26,8 +26,23 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   const { user } = useUser();
   const [draft, setDraft] = useState<any | null>(tenant);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<"details" | "ledger" | "electric">("details");
 
   useEffect(() => { setDraft(tenant); }, [tenant?.unit, tenant?.propertyId]);
+  useEffect(() => { setTab("details"); }, [tenant?.unit, tenant?.propertyId]);
+
+  // Pull all receivable_details for this property; filter to this tenant.
+  const allRows = useReceivableDetails(tenant?.propertyId);
+  const tenantTx = useMemo(() => {
+    if (!tenant?.tenant) return [];
+    const key = normalizeTenantName(tenant.tenant);
+    return allRows
+      .filter((r: any) => normalizeTenantName(r.tenantName || "") === key)
+      .filter((r: any) => r.transactionDate || r.description || r.charges !== 0 || r.receipts !== 0)
+      .sort((a: any, b: any) => (a.transactionDate || "").localeCompare(b.transactionDate || ""));
+  }, [allRows, tenant?.tenant]);
+
+  const electricTx = useMemo(() => tenantTx.filter((r: any) => /electric|electricity|cam-elec/i.test(r.description || "") || /electric|cam-elec/i.test(r.chargeCode || "")), [tenantTx]);
 
   if (!tenant || !draft) return null;
 
@@ -96,6 +111,34 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
           </div>
         </div>
 
+        {/* Tab switcher */}
+        <div className="px-5 pt-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex items-center gap-4 sticky top-[57px] bg-white dark:bg-[#18181b] z-10">
+          {([
+            { value: "details", label: "Details" },
+            { value: "ledger", label: `Ledger${tenantTx.length ? ` (${tenantTx.length})` : ""}` },
+            { value: "electric", label: `Electric${electricTx.length ? ` (${electricTx.length})` : ""}` },
+          ] as const).map(t => (
+            <button
+              key={t.value}
+              onClick={() => setTab(t.value as any)}
+              className={`text-[12px] font-medium pb-2 -mb-px border-b-2 transition-colors cursor-pointer ${
+                tab === t.value
+                  ? "border-[#18181b] dark:border-[#fafafa] text-[#18181b] dark:text-[#fafafa]"
+                  : "border-transparent text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "ledger" && (
+          <LedgerTable rows={tenantTx} emptyLabel={tenant.tenant ? "No transactions in receivable detail." : "Vacant unit."} />
+        )}
+        {tab === "electric" && (
+          <LedgerTable rows={electricTx} emptyLabel="No electric charges or payments for this tenant." />
+        )}
+        {tab === "details" && (
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Status">
@@ -165,7 +208,9 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
             </p>
           )}
         </div>
+        )}
 
+        {tab === "details" && (
         <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46] sticky bottom-0 bg-white dark:bg-[#18181b]">
           <button
             onClick={handleRevert}
@@ -190,9 +235,78 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
+}
+
+function LedgerTable({ rows, emptyLabel }: { rows: any[]; emptyLabel: string }) {
+  if (rows.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a]">{emptyLabel}</p>
+      </div>
+    );
+  }
+  // Group rows by post month so the timeline reads top-down by period.
+  const grouped: Record<string, any[]> = {};
+  for (const r of rows) {
+    const k = r.postMonth || (r.transactionDate ? r.transactionDate.slice(0, 7) : "—");
+    (grouped[k] = grouped[k] || []).push(r);
+  }
+  const monthKeys = Object.keys(grouped).sort().reverse();
+  return (
+    <div className="px-5 py-4 space-y-4">
+      {monthKeys.map(mk => {
+        const items = grouped[mk];
+        const monthCharges = items.reduce((s, r) => s + (r.charges || 0), 0);
+        const monthReceipts = items.reduce((s, r) => s + (r.receipts || 0), 0);
+        return (
+          <div key={mk} className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-[#fafafa] dark:bg-[#27272a] border-b border-[#e4e4e7] dark:border-[#3f3f46]">
+              <p className="text-[11px] font-semibold text-[#18181b] dark:text-[#fafafa]">{formatMonth(mk)}</p>
+              <p className="text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
+                Charged <span className="font-medium text-[#dc2626]">{formatCurrency(monthCharges)}</span>
+                <span className="mx-1.5">·</span>
+                Paid <span className="font-medium text-[#16a34a]">{formatCurrency(monthReceipts)}</span>
+              </p>
+            </div>
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider text-[9px] border-b border-[#e4e4e7] dark:border-[#3f3f46]">
+                  <th className="text-left px-3 py-1.5">Date</th>
+                  <th className="text-left px-3 py-1.5">Description</th>
+                  <th className="text-right px-3 py-1.5">Charge</th>
+                  <th className="text-right px-3 py-1.5">Payment</th>
+                  <th className="text-right px-3 py-1.5">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((r, i) => (
+                  <tr key={i} className="border-t border-[#f4f4f5] dark:border-[#27272a]">
+                    <td className="px-3 py-1.5 text-[#71717a] dark:text-[#a1a1aa] whitespace-nowrap">{r.transactionDate || "—"}</td>
+                    <td className="px-3 py-1.5 text-[#18181b] dark:text-[#fafafa]">{r.description || ""}</td>
+                    <td className="px-3 py-1.5 text-right text-[#dc2626] font-medium">{r.charges > 0 ? formatCurrency(r.charges) : ""}</td>
+                    <td className="px-3 py-1.5 text-right text-[#16a34a] font-medium">{r.receipts > 0 ? formatCurrency(r.receipts) : ""}</td>
+                    <td className="px-3 py-1.5 text-right text-[#71717a] dark:text-[#a1a1aa]">{formatCurrency(r.balance || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatMonth(m: string): string {
+  if (!m || m === "—") return "Undated";
+  const [y, mo] = m.split("-");
+  if (!y || !mo) return m;
+  const date = new Date(Number(y), Number(mo) - 1);
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
 function Field({ label, overridden, children }: { label: string; overridden?: boolean; children: React.ReactNode }) {

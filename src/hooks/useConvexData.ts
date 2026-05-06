@@ -207,6 +207,92 @@ export function useSyncJobsWithLoading() {
   return { jobs: jobs ?? [], loading: jobs === undefined };
 }
 
+// ===== RECEIVABLE DETAILS =====
+
+export function useReceivableDetails(propertyId: string | undefined) {
+  const rows = useQuery(
+    api.receivableDetails.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  return rows ?? [];
+}
+
+// Per-tenant per-month rollup: aggregates receivable_details rows by tenant
+// and charge category (rent / cam / electric / insurance / late fees / other)
+// for the most recent reporting month. Also returns current balance (last
+// transaction's running balance per tenant). Tenant key is normalized to
+// match how rent-roll matches lease names.
+export function useChargeSummary(propertyId: string | undefined) {
+  const rows = useReceivableDetails(propertyId);
+  return useChargeSummaryFromRows(rows);
+}
+
+function useChargeSummaryFromRows(rows: any[]) {
+  if (!rows.length) return { byTenant: new Map<string, ChargeSummary>(), latestMonth: null };
+  const months = rows.map(r => r.postMonth).filter(Boolean).sort();
+  const latestMonth = months[months.length - 1] || null;
+  const byTenant = new Map<string, ChargeSummary>();
+  for (const r of rows) {
+    const key = normalizeTenantName(r.tenantName || "");
+    if (!key) continue;
+    let entry = byTenant.get(key);
+    if (!entry) {
+      entry = { rent: 0, cam: 0, electric: 0, insurance: 0, lateFees: 0, other: 0, currentMonthCharges: 0, currentBalance: 0, _lastTxDate: "" };
+      byTenant.set(key, entry);
+    }
+    const cat = classifyCharge(r.description || "", r.chargeCode || "");
+    if (r.postMonth === latestMonth) {
+      entry.currentMonthCharges += r.charges || 0;
+      if (cat === "rent") entry.rent += r.charges || 0;
+      else if (cat === "cam") entry.cam += r.charges || 0;
+      else if (cat === "electric") entry.electric += r.charges || 0;
+      else if (cat === "insurance") entry.insurance += r.charges || 0;
+      else if (cat === "lateFees") entry.lateFees += r.charges || 0;
+      else entry.other += r.charges || 0;
+    }
+    // Track latest transaction's running balance as "current balance"
+    const txDate = r.transactionDate || "";
+    if (txDate && txDate >= entry._lastTxDate) {
+      entry._lastTxDate = txDate;
+      entry.currentBalance = r.balance || 0;
+    }
+  }
+  return { byTenant, latestMonth };
+}
+
+export interface ChargeSummary {
+  rent: number;
+  cam: number;
+  electric: number;
+  insurance: number;
+  lateFees: number;
+  other: number;
+  currentMonthCharges: number;
+  currentBalance: number;
+  _lastTxDate: string;
+}
+
+export function normalizeTenantName(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .replace(/[.,]/g, " ")
+    .replace(/\b(llc|inc|corp|co|ltd|llp)\b\.?/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function classifyCharge(description: string, chargeCode: string): "rent" | "cam" | "electric" | "insurance" | "lateFees" | "other" {
+  const d = (description || "").toLowerCase();
+  const c = (chargeCode || "").toLowerCase();
+  if (/electric|electricity|cam-elec/.test(d) || /electric|cam-elec/.test(c)) return "electric";
+  if (/cam-ins|insurance/.test(d) || /cam-ins|insurance/.test(c)) return "insurance";
+  if (/^cam\b|cam-cy|common\s*area/.test(d) || /^cam/.test(c)) return "cam";
+  if (/late\s*fee/.test(d) || /late/.test(c)) return "lateFees";
+  if (/^base\s*rent|^rent\b|rental\s*income/.test(d) || /^rent|^base/.test(c)) return "rent";
+  return "other";
+}
+
 // ===== INCOME LINES =====
 
 export function useIncomeLines(propertyId: string | undefined) {

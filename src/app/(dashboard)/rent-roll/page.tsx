@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
-import { useTenants, useUnits, useActiveProperty, formatCurrency, leasedUnitKeys } from "@/hooks/useConvexData";
+import { useTenants, useUnits, useActiveProperty, formatCurrency, leasedUnitKeys, useChargeSummary, normalizeTenantName } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
@@ -85,6 +85,7 @@ export default function RentRollPage() {
   const activeProperty = useActiveProperty();
   const tenantsLeased = useTenants(activeProperty?._id);
   const unitsAll = useUnits(activeProperty?._id);
+  const { byTenant: chargeSummary, latestMonth: chargeMonth } = useChargeSummary(activeProperty?._id);
 
   // Build one row per individual unit so the rent roll matches Yardi's
   // Total Units count.
@@ -115,6 +116,8 @@ export default function RentRollPage() {
       parts.forEach((unit: string, idx: number) => {
         const isPrimary = idx === 0;
         const matchedUnit = unitsByKey.get(norm(unit));
+        const chargeKey = normalizeTenantName(t.tenant || "");
+        const cs = isPrimary ? chargeSummary.get(chargeKey) : null;
         expanded.push({
           ...t,
           _id: parts.length > 1 ? `${t._id}-${unit}` : t._id,
@@ -130,6 +133,13 @@ export default function RentRollPage() {
           monthlyRent: isPrimary ? t.monthlyRent : 0,
           monthlyElectric: isPrimary ? t.monthlyElectric : 0,
           securityDeposit: isPrimary ? t.securityDeposit : 0,
+          // Charge summary derived from receivable_details for the latest
+          // posted month. Only on the primary row for multi-unit leases.
+          camCharge: cs?.cam ?? 0,
+          electricCharge: cs?.electric ?? 0,
+          insuranceCharge: cs?.insurance ?? 0,
+          currentMonthCharges: cs?.currentMonthCharges ?? 0,
+          currentBalance: cs?.currentBalance ?? 0,
           _multiUnitLease: parts.length > 1,
           _multiUnitPrimary: isPrimary,
         });
@@ -155,7 +165,7 @@ export default function RentRollPage() {
         propertyId: activeProperty?._id,
       }));
     return [...expanded, ...vacancies];
-  }, [tenantsLeased, unitsAll, activeProperty?._id]);
+  }, [tenantsLeased, unitsAll, activeProperty?._id, chargeSummary]);
 
   // Re-resolve the selected tenant from the live list each render so the
   // drawer reflects the latest override state from Convex without a re-click.
@@ -194,6 +204,24 @@ export default function RentRollPage() {
         valueFormatter: (p: any) => p.value > 0 ? `$${p.value.toFixed(2)}/SF` : "—" },
       { field: "securityDeposit", headerName: "Security Deposit", width: 140, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
+      // Per-tenant current-month charges from the receivable detail. Hidden
+      // by default — user enables via the column menu when they need them.
+      { field: "camCharge", headerName: "CAM", width: 110, type: "numericColumn",
+        hide: true, cellRenderer: CurrencyCellRenderer },
+      { field: "electricCharge", headerName: "Electric Chg", width: 120, type: "numericColumn",
+        hide: true, cellRenderer: CurrencyCellRenderer },
+      { field: "insuranceCharge", headerName: "Insurance", width: 110, type: "numericColumn",
+        hide: true, cellRenderer: CurrencyCellRenderer },
+      { field: "currentMonthCharges", headerName: "Curr Charges", width: 130, type: "numericColumn",
+        hide: false, cellRenderer: CurrencyCellRenderer },
+      { field: "currentBalance", headerName: "Curr Balance", width: 130, type: "numericColumn",
+        hide: false,
+        cellRenderer: (p: { value: number }) => {
+          const v = p.value || 0;
+          if (v === 0) return <span className="text-[#a1a1aa]">—</span>;
+          return <span className={v > 0 ? "text-[#dc2626] font-medium" : "text-[#16a34a]"}>{formatCurrency(Math.abs(v))}{v < 0 ? " CR" : ""}</span>;
+        },
+      },
       // Net-lease electric posting status. Filterable so the user can
       // pull up "Not Posted" rows for the close.
       { field: "electricPosted", headerName: "Electric", width: 130, cellRenderer: ElectricPostedCellRenderer, filter: true,
