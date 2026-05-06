@@ -31,6 +31,10 @@ export default defineSchema({
     notes: v.optional(v.string()),
     pastDueAmount: v.optional(v.number()),
     delinquencyStage: v.optional(v.string()),
+    // Manual entry until the Tenancy Schedule scraper lands. Date the rent
+    // bumps next + the new monthly rent post-bump.
+    nextRentIncrease: v.optional(v.string()),
+    nextRentIncreaseAmount: v.optional(v.number()),
     updatedAt: v.string(),
     updatedBy: v.optional(v.string()),
   })
@@ -352,6 +356,22 @@ export default defineSchema({
     createdAt: v.string(),
     updatedAt: v.string(),
   }).index("by_stage", ["stage"]),
+
+  // ===== LINE BUDGETS (manual input or Yardi budget export) =====
+  // Annual budget per income-statement line item per property per year.
+  // Compared against income_lines.currentPeriod (× 12 for full-year actual)
+  // to drive the Budget vs Actuals view.
+  line_budgets: defineTable({
+    propertyId: v.id("properties"),
+    year: v.string(),                    // "2026"
+    lineItem: v.string(),                // matches income_lines.lineItem
+    annualBudget: v.number(),
+    notes: v.optional(v.string()),
+    updatedAt: v.string(),
+    updatedBy: v.optional(v.string()),
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_property_year", ["propertyId", "year"]),
 
   // ===== PROPERTY DEBT (manual input) =====
   // Per-property debt info entered by the user in settings. DSCR =

@@ -11,6 +11,8 @@ const OVERRIDE_FIELDS = v.object({
   notes: v.optional(v.string()),
   pastDueAmount: v.optional(v.number()),
   delinquencyStage: v.optional(v.string()),
+  nextRentIncrease: v.optional(v.string()),
+  nextRentIncreaseAmount: v.optional(v.number()),
 });
 
 /**

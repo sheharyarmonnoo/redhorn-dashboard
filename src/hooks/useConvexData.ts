@@ -315,6 +315,19 @@ export function useDebt(propertyId: string | undefined) {
   return { debt: debt ?? null, loading: debt === undefined, upsertDebt, clearDebt };
 }
 
+// ===== LINE BUDGETS =====
+
+export function useLineBudgets(propertyId: string | undefined, year: string) {
+  const rows = useQuery(
+    api.lineBudgets.listByPropertyYear,
+    propertyId ? { propertyId: propertyId as any, year } : "skip"
+  );
+  const upsertBudget = useMutation(api.lineBudgets.upsert);
+  const bulkUpsertBudgets = useMutation(api.lineBudgets.bulkUpsert);
+  const removeBudget = useMutation(api.lineBudgets.remove);
+  return { budgets: rows ?? [], loading: rows === undefined, upsertBudget, bulkUpsertBudgets, removeBudget };
+}
+
 // ===== AGING RECORDS =====
 
 export function useAgingRecords(propertyId: string | undefined) {

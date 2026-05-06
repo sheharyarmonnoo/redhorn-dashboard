@@ -53,7 +53,9 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
     || draft.leaseTo !== tenant.leaseTo
     || draft.status !== tenant.status
     || (draft.notes || "") !== (tenant.notes || "")
-    || draft.pastDueAmount !== tenant.pastDueAmount;
+    || draft.pastDueAmount !== tenant.pastDueAmount
+    || (draft.nextRentIncrease || "") !== (tenant.nextRentIncrease || "")
+    || (draft.nextRentIncreaseAmount || 0) !== (tenant.nextRentIncreaseAmount || 0);
 
   async function handleSave() {
     if (!draft || !tenant.propertyId || !tenant.unit) return;
@@ -72,6 +74,8 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
       if (draft.status !== tenant.status) fields.status = strOrUndef(draft.status);
       if ((draft.notes || "") !== (tenant.notes || "")) fields.notes = strOrUndef(draft.notes);
       if (draft.pastDueAmount !== tenant.pastDueAmount) fields.pastDueAmount = numOrUndef(draft.pastDueAmount);
+      if ((draft.nextRentIncrease || "") !== (tenant.nextRentIncrease || "")) fields.nextRentIncrease = strOrUndef(draft.nextRentIncrease);
+      if ((draft.nextRentIncreaseAmount || 0) !== (tenant.nextRentIncreaseAmount || 0)) fields.nextRentIncreaseAmount = numOrUndef(draft.nextRentIncreaseAmount);
       if (Object.keys(fields).length === 0) return;
       await setOverride({
         propertyId: tenant.propertyId as any,
@@ -176,6 +180,18 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
             </Field>
             <Field label="Security Deposit" overridden={tenant.overrideFields?.includes("securityDeposit")}>
               <NumberInput value={draft.securityDeposit ?? 0} onChange={v => setDraft({ ...draft, securityDeposit: v })} />
+            </Field>
+
+            <Field label="Next Rent Increase Date" overridden={tenant.overrideFields?.includes("nextRentIncrease")}>
+              <input
+                type="date"
+                value={(draft.nextRentIncrease || "").slice(0, 10)}
+                onChange={(e) => setDraft({ ...draft, nextRentIncrease: e.target.value })}
+                className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+              />
+            </Field>
+            <Field label="New Monthly Rent" overridden={tenant.overrideFields?.includes("nextRentIncreaseAmount")}>
+              <NumberInput value={draft.nextRentIncreaseAmount ?? 0} onChange={v => setDraft({ ...draft, nextRentIncreaseAmount: v })} />
             </Field>
 
             {/* Monthly Electric + Past Due intentionally hidden — billback

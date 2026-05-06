@@ -12,6 +12,7 @@ function mergeOverride(tenant: any, override: any): any {
     "monthlyRent", "monthlyElectric", "securityDeposit",
     "leaseFrom", "leaseTo", "status", "notes",
     "pastDueAmount", "delinquencyStage",
+    "nextRentIncrease", "nextRentIncreaseAmount",
   ];
   for (const k of fieldKeys) {
     if (override[k] !== undefined && override[k] !== null) {

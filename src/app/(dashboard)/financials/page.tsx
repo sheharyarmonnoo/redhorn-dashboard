@@ -2,7 +2,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
-import { useActiveProperty, useIncomeLines, useMonthlyRevenue, useDebt, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useIncomeLines, useMonthlyRevenue, useDebt, useLineBudgets, formatCurrency } from "@/hooks/useConvexData";
 
 const SECTION_ORDER = ["income", "expense", "net"];
 
@@ -27,7 +27,14 @@ export default function FinancialsPage() {
   const { debt, upsertDebt, clearDebt } = useDebt(property?._id);
   const { user } = useUser();
 
-  const [view, setView] = useState<"statement" | "trend" | "debt">("statement");
+  const [view, setView] = useState<"statement" | "trend" | "budget" | "debt">("statement");
+  const [budgetYear, setBudgetYear] = useState<string>(String(new Date().getFullYear()));
+  const { budgets, upsertBudget } = useLineBudgets(property?._id, budgetYear);
+  const budgetByLine = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of budgets) m.set((b.lineItem || "").trim(), b.annualBudget || 0);
+    return m;
+  }, [budgets]);
 
   // Derive the month from the latest income lines snapshot (period field)
   const period = useMemo(() => {
@@ -133,7 +140,7 @@ export default function FinancialsPage() {
 
       {/* Tab switcher */}
       <div className="flex gap-1 mb-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
-        {(["statement", "trend", "debt"] as const).map(t => (
+        {(["statement", "trend", "budget", "debt"] as const).map(t => (
           <button
             key={t}
             onClick={() => setView(t)}
@@ -143,7 +150,7 @@ export default function FinancialsPage() {
                 : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
             }`}
           >
-            {t === "statement" ? "Income Statement" : t === "trend" ? "Monthly Trend" : "Debt & DSCR"}
+            {t === "statement" ? "Income Statement" : t === "trend" ? "Monthly Trend" : t === "budget" ? "Budget vs Actuals" : "Debt & DSCR"}
           </button>
         ))}
       </div>
@@ -157,6 +164,24 @@ export default function FinancialsPage() {
         </>
       )}
       {view === "trend" && <TrendTable trend={trend} formatMonth={formatMonth} />}
+      {view === "budget" && (
+        <BudgetVsActuals
+          lines={lines}
+          budgetByLine={budgetByLine}
+          year={budgetYear}
+          setYear={setBudgetYear}
+          onSaveBudget={async (lineItem, annualBudget) => {
+            if (!property?._id) return;
+            await upsertBudget({
+              propertyId: property._id as any,
+              year: budgetYear,
+              lineItem,
+              annualBudget,
+              updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
+            });
+          }}
+        />
+      )}
       {view === "debt" && (
         <DebtPanel
           debt={debt}
@@ -534,4 +559,144 @@ interface DebtForm {
   loanStartDate?: string;
   loanMaturityDate?: string;
   notes?: string;
+}
+
+function BudgetVsActuals({
+  lines,
+  budgetByLine,
+  year,
+  setYear,
+  onSaveBudget,
+}: {
+  lines: any[];
+  budgetByLine: Map<string, number>;
+  year: string;
+  setYear: (y: string) => void;
+  onSaveBudget: (lineItem: string, annualBudget: number) => Promise<void>;
+}) {
+  // Skip subtotals + net rows. They're computed from children, not budgeted.
+  const budgetableLines = useMemo(() => {
+    return lines.filter((l: any) => {
+      const li = (l.lineItem || "").trim();
+      if (!li) return false;
+      if (/^\s*total\b|^\s*net\b/i.test(li)) return false;
+      return true;
+    });
+  }, [lines]);
+
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const yearOptions = useMemo(() => {
+    const y = new Date().getFullYear();
+    return [String(y - 1), String(y), String(y + 1)];
+  }, []);
+
+  async function handleSave(lineItem: string) {
+    const raw = drafts[lineItem];
+    const val = Number(raw);
+    if (!Number.isFinite(val)) return;
+    setSaving(lineItem);
+    try {
+      await onSaveBudget(lineItem, val);
+      setDrafts(d => { const next = { ...d }; delete next[lineItem]; return next; });
+    } finally { setSaving(null); }
+  }
+
+  // Total budget vs total YTD actual to give a roll-up at the top.
+  const totals = useMemo(() => {
+    let budgetSum = 0;
+    let ytdSum = 0;
+    for (const l of budgetableLines) {
+      const li = (l.lineItem || "").trim();
+      const b = budgetByLine.get(li) || 0;
+      budgetSum += b;
+      ytdSum += l.yearToDate || 0;
+    }
+    return { budgetSum, ytdSum };
+  }, [budgetableLines, budgetByLine]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">
+            Enter annual budget per line item; actuals come from the latest income statement YTD.
+          </p>
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">
+            Budgeted: <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{formatCurrency(totals.budgetSum)}</span> ·
+            YTD Actual: <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{formatCurrency(totals.ytdSum)}</span> ·
+            Variance: <span className={`font-medium ${totals.ytdSum - totals.budgetSum > 0 ? "text-[#dc2626]" : "text-[#16a34a]"}`}>
+              {formatCurrency(totals.ytdSum - totals.budgetSum)}
+            </span>
+          </p>
+        </div>
+        <select
+          value={year}
+          onChange={e => setYear(e.target.value)}
+          className="text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+        >
+          {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
+        <div className="grid grid-cols-[1fr_140px_140px_140px_140px_80px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+          <span>Line Item</span>
+          <span className="text-right">Annual Budget</span>
+          <span className="text-right">YTD Actual</span>
+          <span className="text-right">Variance $</span>
+          <span className="text-right">% Used</span>
+          <span></span>
+        </div>
+        {budgetableLines.map((line: any, i: number) => {
+          const li = (line.lineItem || "").trim();
+          const indent = Math.max(0, (line.hierarchyLevel - 1)) * 16;
+          const budget = budgetByLine.get(li) || 0;
+          const ytd = line.yearToDate || 0;
+          const variance = ytd - budget;
+          const pctUsed = budget > 0 ? (ytd / budget) * 100 : 0;
+          const draft = drafts[li];
+          const editing = draft !== undefined;
+          return (
+            <div
+              key={i}
+              className="grid grid-cols-[1fr_140px_140px_140px_140px_80px] px-4 py-1.5 text-[12px] text-[#18181b] dark:text-[#fafafa] border-t border-[#f4f4f5] dark:border-[#27272a] items-center"
+            >
+              <span style={{ paddingLeft: indent }} className="truncate">{li}</span>
+              <span className="text-right">
+                <input
+                  type="number"
+                  value={editing ? draft : (budget || "")}
+                  placeholder="—"
+                  onChange={e => setDrafts(d => ({ ...d, [li]: e.target.value }))}
+                  className="w-full text-[12px] text-right px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+                />
+              </span>
+              <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">{ytd !== 0 ? formatCurrency(ytd) : "—"}</span>
+              <span className={`text-right ${variance > 0 ? "text-[#dc2626]" : variance < 0 ? "text-[#16a34a]" : "text-[#a1a1aa]"}`}>
+                {budget > 0 ? formatCurrency(variance) : "—"}
+              </span>
+              <span className={`text-right ${pctUsed > 100 ? "text-[#dc2626] font-medium" : pctUsed > 80 ? "text-[#d97706]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
+                {budget > 0 ? `${Math.round(pctUsed)}%` : "—"}
+              </span>
+              <span className="text-right">
+                {editing && (
+                  <button
+                    onClick={() => handleSave(li)}
+                    disabled={saving === li}
+                    className="text-[10px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] px-2 py-0.5 rounded cursor-pointer disabled:opacity-40"
+                  >
+                    {saving === li ? "…" : "Save"}
+                  </button>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-2">
+        Tip: paste budget figures directly into each row. Variance is YTD actual minus budget — positive means over budget on expense rows, under on income rows.
+      </p>
+    </div>
+  );
 }

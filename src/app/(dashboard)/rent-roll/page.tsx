@@ -222,6 +222,14 @@ export default function RentRollPage() {
           return <span className={v > 0 ? "text-[#dc2626] font-medium" : "text-[#16a34a]"}>{formatCurrency(Math.abs(v))}{v < 0 ? " CR" : ""}</span>;
         },
       },
+      // Manual entry until the Tenancy Schedule scraper lands. Hidden by
+      // default; user can toggle visibility via the column menu.
+      { field: "nextRentIncrease", headerName: "Next Rent ↑", width: 130, hide: true,
+        valueFormatter: (p: { value: string }) => p.value || "—",
+      },
+      { field: "nextRentIncreaseAmount", headerName: "New Rent", width: 110, hide: true,
+        type: "numericColumn", cellRenderer: CurrencyCellRenderer,
+      },
       // Net-lease electric posting status. Filterable so the user can
       // pull up "Not Posted" rows for the close.
       { field: "electricPosted", headerName: "Electric", width: 130, cellRenderer: ElectricPostedCellRenderer, filter: true,
