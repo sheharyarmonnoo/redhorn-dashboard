@@ -207,6 +207,16 @@ export function useSyncJobsWithLoading() {
   return { jobs: jobs ?? [], loading: jobs === undefined };
 }
 
+// ===== INCOME LINES =====
+
+export function useIncomeLines(propertyId: string | undefined) {
+  const lines = useQuery(
+    api.incomeLines.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  return lines ?? [];
+}
+
 // ===== AGING RECORDS =====
 
 export function useAgingRecords(propertyId: string | undefined) {

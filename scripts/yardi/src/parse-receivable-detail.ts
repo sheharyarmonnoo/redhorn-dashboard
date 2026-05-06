@@ -76,6 +76,15 @@ export function parseReceivableDetail(filePath: string): ParsedReceivableDetail 
       }
       const tx = readTransactions(grid, meta.nextRow, meta.tenantName, meta.unit);
       rows.push(...tx.rows);
+      // Back-fill aging data into the lease entry we just pushed.
+      if (tx.aging && leases.length > 0) {
+        const last = leases[leases.length - 1];
+        last.aging0_30 = tx.aging.aging0_30;
+        last.aging31_60 = tx.aging.aging31_60;
+        last.aging61_90 = tx.aging.aging61_90;
+        last.agingOver90 = tx.aging.agingOver90;
+        last.amountDue = tx.aging.amountDue;
+      }
       i = tx.nextRow;
     } else {
       i++;
@@ -155,21 +164,45 @@ function readLeaseMetadata(grid: any[][], startIdx: number): LeaseMeta {
   return { tenantName, unit, leaseType, sqft, leaseFrom, leaseTo, monthlyRent, nextRow: i };
 }
 
+interface AgingData {
+  aging0_30: number;
+  aging31_60: number;
+  aging61_90: number;
+  agingOver90: number;
+  amountDue: number;
+}
+
 function readTransactions(
   grid: any[][],
   startIdx: number,
   tenantName: string,
   unit: string
-): { rows: ParsedReceivableDetail["rows"]; nextRow: number } {
+): { rows: ParsedReceivableDetail["rows"]; nextRow: number; aging?: AgingData } {
   const rows: ParsedReceivableDetail["rows"] = [];
   let i = startIdx;
+  let aging: AgingData | undefined;
   while (i < grid.length) {
     const row = grid[i] || [];
     const c1 = (row[1] || "").toString().trim();
     const c2 = (row[2] || "").toString().trim();
 
-    // Stop on aging row or next lease block
-    if (/^0-?\s*30/.test(c1) || /Days/i.test(c1)) break;
+    // Aging row closes each lease section. Read bucket amounts then stop.
+    // Column layout (verified from Yardi SSRS): c1=0-30 label, c4=31-60,
+    // c6=61-90, c9=over90, c15=Amount Due (total balance outstanding).
+    if (/^0-?\s*30/.test(c1) || /Days/i.test(c1)) {
+      aging = {
+        aging0_30: toNumber(row[1]),
+        aging31_60: toNumber(row[4]),
+        aging61_90: toNumber(row[6]),
+        agingOver90: toNumber(row[9]),
+        amountDue: toNumber(row[15]),
+      };
+      // If c1 is the "0-30 Days" label (text not number), the 0-30 amount
+      // may be in c2 or c3 instead. Fallback: use c2 if c1 parsed as 0.
+      if (aging.aging0_30 === 0) aging.aging0_30 = toNumber(row[2]);
+      i++;
+      break;
+    }
     if (c1 === "Lease Information") break;
 
     const dateRaw = c1;
@@ -201,7 +234,7 @@ function readTransactions(
     }
     i++;
   }
-  return { rows, nextRow: i };
+  return { rows, nextRow: i, aging };
 }
 
 function toNumber(v: any): number {

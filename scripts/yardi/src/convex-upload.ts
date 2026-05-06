@@ -259,6 +259,28 @@ export async function uploadRunToConvex(
               console.error(`   enrich-from-RD failed: ${err?.message || err}`);
             }
           }
+
+          // Apply past-due balances from aging data. The Lease Ledger's aging
+          // row at the end of each section is the authoritative balance — use
+          // it to auto-derive status instead of requiring a separate panel export.
+          const pastDueRows = parsed.leases
+            .filter(l => (l.unit || l.tenantName) && typeof l.amountDue === "number")
+            .map(l => ({
+              leaseName: l.tenantName,
+              unit: (l.unit || "").trim() || undefined,
+              pastDueAmount: l.amountDue ?? 0,
+            }));
+          if (pastDueRows.length > 0) {
+            try {
+              const pd: any = await client.mutation(FN.applyPastDue as any, {
+                propertyCode: u.propertyCode,
+                rows: pastDueRows,
+              });
+              console.log(`   applied past-due from RD → matched ${pd.matched}/${pd.tenants} tenants · cleared ${pd.cleared}`);
+            } catch (err: any) {
+              console.error(`   apply-past-due-from-RD failed: ${err?.message || err}`);
+            }
+          }
         }
       }
       await client.mutation(FN.setFileRecords as any, {

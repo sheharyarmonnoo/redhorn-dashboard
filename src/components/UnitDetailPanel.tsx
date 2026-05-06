@@ -373,7 +373,7 @@ function StatusToggle({ tenant, onSet }: {
         </span>
       </div>
       <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">
-        Current ↔ Past Due is manual. Expiring is auto-set from lease end date.
+        Auto-derived from Yardi data. Override here if needed.
       </p>
     </div>
   );

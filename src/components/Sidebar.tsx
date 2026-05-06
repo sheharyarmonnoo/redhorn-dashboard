@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Activity, Sun, Moon, UserCircle, CheckSquare } from "lucide-react";
+import { LayoutDashboard, Map, Table, CalendarClock, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Activity, Sun, Moon, UserCircle, CheckSquare, TrendingUp } from "lucide-react";
 import { UserButton, useUser } from "@clerk/nextjs";
 import { useProperties, useActivePropertyId } from "@/hooks/useConvexData";
 import { useTheme } from "@/components/ThemeProvider";
@@ -22,6 +22,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/site-plan", label: "Site Plan", icon: Map },
       { href: "/rent-roll", label: "Rent Roll", icon: Table },
+      { href: "/financials", label: "Financials", icon: TrendingUp },
       { href: "/leases", label: "Lease Expirations", icon: CalendarClock },
       { href: "/alerts", label: "Alerts", icon: AlertTriangle },
     ],
