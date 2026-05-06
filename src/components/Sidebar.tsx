@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Map, Table, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Activity, Sun, Moon, UserCircle, CheckSquare, TrendingUp, Briefcase, Wrench } from "lucide-react";
+import { LayoutDashboard, Map, Table, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Activity, Sun, Moon, UserCircle, TrendingUp, Briefcase, Wrench } from "lucide-react";
 import { UserButton, useUser } from "@clerk/nextjs";
 import { useProperties, useActivePropertyId } from "@/hooks/useConvexData";
 import { useTheme } from "@/components/ThemeProvider";
@@ -29,7 +29,6 @@ const navGroups: NavGroup[] = [
   {
     label: "Workspace",
     items: [
-      { href: "/tasks", label: "Tasks", icon: CheckSquare },
       { href: "/maintenance", label: "Maintenance", icon: Wrench },
       { href: "/deals", label: "Deal Pipeline", icon: Briefcase },
       { href: "/activity", label: "Activity", icon: Activity },

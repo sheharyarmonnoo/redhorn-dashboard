@@ -4,8 +4,9 @@ import KPICard from "@/components/KPICard";
 import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
 import RevenueFilter from "@/components/RevenueFilter";
-import ActionItems from "@/components/ActionItems";
-import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, formatCurrency, useDashboardLoading, isExpiringWithin, leasedUnitKeys } from "@/hooks/useConvexData";
+import Link from "next/link";
+import { Wrench } from "lucide-react";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, useMaintenance, formatCurrency, useDashboardLoading, isExpiringWithin, leasedUnitKeys } from "@/hooks/useConvexData";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
@@ -28,7 +29,7 @@ export default function DashboardPage() {
   const monthlyRevenue = useMemo(() => {
     const today = new Date();
     const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-    return monthlyRevenueRaw.filter((m: any) => m.month && m.month >= "2026-01" && m.month < cutoff);
+    return monthlyRevenueRaw.filter((m: any) => m.month && m.month >= "2026-01" && m.month <= cutoff);
   }, [monthlyRevenueRaw]);
   const loading = useDashboardLoading(property?._id);
   const { theme } = useTheme();
@@ -167,7 +168,7 @@ export default function DashboardPage() {
 
       <LatestInsights propertyId={property._id} />
 
-      <ActionItems heading="Tasks" compact readOnly />
+      <MaintenanceSummary propertyId={property._id} />
 
       <KPIDrawer open={!!kpiDrawer} kpiKey={kpiDrawer} onClose={() => setKpiDrawer(null)} />
     </div>
@@ -708,6 +709,73 @@ function DashboardSkeleton() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MaintenanceSummary({ propertyId }: { propertyId: string }) {
+  const { items } = useMaintenance(propertyId);
+  const today = new Date().toISOString().slice(0, 10);
+  const open = items.filter((i: any) => i.status !== "completed");
+  const overdue = open.filter((i: any) =>
+    i.isRecurring ? (i.nextDueDate && i.nextDueDate < today) : (i.date && i.date < today)
+  );
+  const recurring = items.filter((i: any) => i.isRecurring);
+  // Take the next 5 actionable items to show: overdue first, then upcoming.
+  const upcoming = [...overdue, ...open.filter((i: any) => !overdue.includes(i))].slice(0, 5);
+
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4 mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Wrench size={14} className="text-[#71717a] dark:text-[#a1a1aa]" />
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Maintenance</p>
+          {overdue.length > 0 && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-950/40 text-[#dc2626]">
+              {overdue.length} overdue
+            </span>
+          )}
+        </div>
+        <Link href="/maintenance" className="text-[11px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]">
+          View all →
+        </Link>
+      </div>
+      <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+        <Stat label="Open" value={open.length} />
+        <Stat label="Overdue" value={overdue.length} color="text-[#dc2626]" />
+        <Stat label="Routine" value={recurring.length} color="text-[#2563eb]" />
+      </div>
+      {upcoming.length === 0 ? (
+        <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] italic py-2">No open maintenance items.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {upcoming.map((it: any) => {
+            const dueDate = it.isRecurring ? it.nextDueDate : it.date;
+            const isOverdue = dueDate && dueDate < today;
+            return (
+              <div key={it._id} className="flex items-center justify-between gap-3 text-[12px] py-1.5 border-t border-[#f4f4f5] dark:border-[#27272a] first:border-0">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {it.isRecurring && <span className="text-[9px] font-medium text-[#2563eb] dark:text-[#60a5fa] uppercase tracking-wide flex-shrink-0">Routine</span>}
+                  <span className="truncate text-[#18181b] dark:text-[#fafafa]">{it.type || it.description || "—"}</span>
+                  {it.unit && <span className="text-[10px] text-[#a1a1aa] flex-shrink-0">· {it.unit}</span>}
+                </div>
+                <span className={`text-[11px] flex-shrink-0 ${isOverdue ? "text-[#dc2626] font-medium" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
+                  {dueDate || "—"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, color }: { label: string; value: number; color?: string }) {
+  return (
+    <div className="bg-[#fafafa] dark:bg-[#27272a] rounded p-2">
+      <p className={`text-[18px] font-semibold ${color || "text-[#18181b] dark:text-[#fafafa]"}`}>{value}</p>
+      <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">{label}</p>
     </div>
   );
 }

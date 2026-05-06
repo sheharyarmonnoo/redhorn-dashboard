@@ -39,7 +39,7 @@ function RevenueDetail() {
   // month (which may carry a stale phantom value from an old sync run).
   const today = new Date();
   const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-  const monthlyRevenue = monthlyRevenueRaw.filter((m: any) => m.month && m.month >= "2026-01" && m.month < cutoff);
+  const monthlyRevenue = monthlyRevenueRaw.filter((m: any) => m.month && m.month >= "2026-01" && m.month <= cutoff);
   const occupied = tenants.filter((t: any) => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant?.includes("Owner"));
   const totalRent = occupied.reduce((s: number, t: any) => s + t.monthlyRent, 0);
   const totalElectric = occupied.reduce((s: number, t: any) => s + t.monthlyElectric, 0);
