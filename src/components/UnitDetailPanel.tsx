@@ -1,9 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { useMutation } from "convex/react";
-import { useUser } from "@clerk/nextjs";
-import { api } from "../../convex/_generated/api";
 import { useUnitNotes, useTenantMutations, formatCurrency } from "@/hooks/useConvexData";
 
 interface Props {
@@ -26,8 +23,6 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
     tenant?.unit
   );
   const { updateElectricPosted } = useTenantMutations();
-  const setOverride = useMutation(api.tenantOverrides.setOverride);
-  const { user } = useUser();
 
   useEffect(() => {
     if (tenantProp) {
@@ -89,7 +84,7 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-[60] flex justify-end">
       <div className={`absolute inset-0 bg-black/20 dark:bg-black/60 rh-backdrop${closing ? " is-closing" : ""}`} onClick={onClose} />
       <div className={`relative w-full sm:w-[520px] bg-white dark:bg-[#18181b] h-full overflow-y-auto border-l border-[#e4e4e7] dark:border-[#3f3f46] rh-drawer${closing ? " is-closing" : ""}`}>
         {/* Header */}
@@ -184,23 +179,8 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
                 </div>
               )}
 
-              {/* Status toggle — Current ↔ Past Due (manual). Expiring is
-                  read-only, derived from leaseTo (set during Yardi ingest if
-                  the lease ends within 90 days). User overrides persist
-                  across syncs via tenantOverrides. */}
-              <StatusToggle
-                tenant={tenant}
-                onSet={async (next) => {
-                  if (!tenant.propertyId || !tenant.unit) return;
-                  await setOverride({
-                    propertyId: tenant.propertyId,
-                    unit: tenant.unit,
-                    fields: { status: next },
-                    updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
-                  });
-                  onUpdated?.();
-                }}
-              />
+              {/* Status — auto-derived from Yardi data */}
+              <StatusBadge status={tenant.status} />
 
               {/* Past Due */}
               {tenant.pastDueAmount > 0 && (
@@ -318,63 +298,22 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
   );
 }
 
-function StatusToggle({ tenant, onSet }: {
-  tenant: any;
-  onSet: (next: string) => Promise<void>;
-}) {
-  const [busy, setBusy] = useState(false);
-  const status = (tenant.status as string) || "current";
-  const isExpiring = status === "expiring_soon";
-  // We let the user toggle Current ↔ Past Due. Expiring shows as a passive
-  // chip when the lease end date triggered it during ingest — clicking it
-  // doesn't make sense (the data, not the user, decides expiration).
-  const opts = [
-    { value: "current", label: "Current" },
-    { value: "past_due", label: "Past Due" },
-  ];
-
-  async function setStatus(next: string) {
-    if (busy || status === next) return;
-    setBusy(true);
-    try { await onSet(next); } finally { setBusy(false); }
-  }
-
+function StatusBadge({ status }: { status: string }) {
+  const s = status || "current";
+  const configs: Record<string, { label: string; cls: string }> = {
+    current:       { label: "Current",       cls: "bg-green-100 dark:bg-green-950/40 text-[#16a34a] border-green-200 dark:border-green-900" },
+    past_due:      { label: "Past Due",      cls: "bg-red-100 dark:bg-red-950/40 text-[#dc2626] border-red-200 dark:border-red-900" },
+    expiring_soon: { label: "Expiring Soon", cls: "bg-blue-100 dark:bg-blue-950/40 text-[#2563eb] border-blue-200 dark:border-blue-900" },
+    locked_out:    { label: "Locked Out",    cls: "bg-orange-100 dark:bg-orange-950/40 text-[#d97706] border-orange-200 dark:border-orange-900" },
+  };
+  const cfg = configs[s] || { label: s, cls: "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] border-[#e4e4e7] dark:border-[#3f3f46]" };
   return (
     <div>
       <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Status</p>
-      <div className="flex flex-wrap gap-1.5">
-        {opts.map(o => {
-          const active = status === o.value;
-          const isPastDue = o.value === "past_due";
-          return (
-            <button
-              key={o.value}
-              onClick={() => setStatus(o.value)}
-              disabled={busy}
-              className={`text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors disabled:opacity-50 ${
-                active
-                  ? (isPastDue ? "bg-[#dc2626] text-white" : "bg-[#16a34a] text-white")
-                  : "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa] hover:bg-[#e4e4e7] dark:hover:bg-[#3f3f46]"
-              }`}
-            >
-              {o.label}
-            </button>
-          );
-        })}
-        <span
-          title="Set automatically when the lease ends within 90 days"
-          className={`text-[11px] font-medium px-2.5 py-1 rounded cursor-default border ${
-            isExpiring
-              ? "bg-[#2563eb] text-white border-[#2563eb]"
-              : "bg-transparent text-[#a1a1aa] dark:text-[#52525b] border-[#e4e4e7] dark:border-[#3f3f46]"
-          }`}
-        >
-          Expiring
-        </span>
-      </div>
-      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">
-        Auto-derived from Yardi data. Override here if needed.
-      </p>
+      <span className={`inline-block text-[11px] font-semibold px-2.5 py-1 rounded border ${cfg.cls}`}>
+        {cfg.label}
+      </span>
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">Auto-derived from Yardi sync data.</p>
     </div>
   );
 }
