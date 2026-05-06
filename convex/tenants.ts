@@ -382,6 +382,14 @@ export const enrichRentByCode = mutation({
         leaseTo: v.optional(v.string()),
         leaseType: v.optional(v.string()),
         sqft: v.optional(v.number()),
+        // Show Detail rent roll fields
+        leaseTermMonths: v.optional(v.number()),
+        monthlyRentPerSF: v.optional(v.number()),
+        annualRent: v.optional(v.number()),
+        annualRentPerSF: v.optional(v.number()),
+        annualRecPerSF: v.optional(v.number()),
+        annualMiscPerSF: v.optional(v.number()),
+        locAmount: v.optional(v.number()),
       })
     ),
   },
@@ -432,6 +440,14 @@ export const enrichRentByCode = mutation({
       if (typeof hit.sqft === "number" && hit.sqft > 0 && (!t.sqft || t.sqft === 0)) {
         patch.sqft = hit.sqft;
       }
+      // Show Detail rent roll fields — write whenever the source has them.
+      if (typeof hit.leaseTermMonths === "number" && hit.leaseTermMonths > 0) patch.leaseTermMonths = hit.leaseTermMonths;
+      if (typeof hit.monthlyRentPerSF === "number" && hit.monthlyRentPerSF > 0) patch.monthlyRentPerSF = hit.monthlyRentPerSF;
+      if (typeof hit.annualRent === "number" && hit.annualRent > 0) patch.annualRent = hit.annualRent;
+      if (typeof hit.annualRentPerSF === "number" && hit.annualRentPerSF > 0) patch.annualRentPerSF = hit.annualRentPerSF;
+      if (typeof hit.annualRecPerSF === "number" && hit.annualRecPerSF > 0) patch.annualRecPerSF = hit.annualRecPerSF;
+      if (typeof hit.annualMiscPerSF === "number" && hit.annualMiscPerSF > 0) patch.annualMiscPerSF = hit.annualMiscPerSF;
+      if (typeof hit.locAmount === "number" && hit.locAmount > 0) patch.locAmount = hit.locAmount;
       if (Object.keys(patch).length > 0) {
         await ctx.db.patch(t._id, patch);
         matched++;

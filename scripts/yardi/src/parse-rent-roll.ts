@@ -14,9 +14,16 @@ export interface RentRollRow {
   sqft?: number;
   leaseFrom?: string;
   leaseTo?: string;
+  leaseTermMonths?: number;
   monthlyRent?: number;
+  monthlyRentPerSF?: number;
+  annualRent?: number;
+  annualRentPerSF?: number;
+  annualRecPerSF?: number;       // CAM / recoveries per SF
+  annualMiscPerSF?: number;      // misc charges per SF
   monthlyElectric?: number;
   securityDeposit?: number;
+  locAmount?: number;            // letter of credit / bank guarantee
   status?: string;
   pastDueAmount?: number;
 }
@@ -67,22 +74,54 @@ export function parseRentRoll(filePath: string): ParsedRentRoll {
     return -1;
   };
 
-  const cols = {
-    propertyId: idx("property id"),
-    unit: idx("unit id", "unit", "unit #"),
-    building: idx("building", "bldg"),
-    tenant: idx("lease name", "tenant", "customer", "lessee"),
-    customerId: idx("customer id"),
-    leaseType: idx("lease type", "type"),
-    sqft: idx("area", "sqft", "sq ft", "square feet"),
-    leaseFrom: idx("lease from", "start", "begin", "lease start", "from date"),
-    leaseTo: idx("expiration date", "lease to", "end", "expire", "lease end"),
-    monthlyRent: idx("monthly rent", "rent", "base rent"),
-    monthlyElectric: idx("electric", "utility"),
-    securityDeposit: idx("deposit", "security"),
-    status: idx("status"),
-    pastDueAmount: idx("past due", "balance"),
+  // Header strings can wrap onto multiple lines in the Show Detail export
+  // (e.g. "Monthly\nRent\nPer Area"). We've already lowercased them; collapse
+  // whitespace too so the matchers don't have to care about line breaks.
+  const flatHeaders = headers.map(h => h.replace(/\s+/g, " ").trim());
+  const flatIdx = (...names: string[]) => {
+    for (const n of names) {
+      const needle = n.toLowerCase();
+      const i = flatHeaders.findIndex(h => h === needle || h.includes(needle));
+      if (i !== -1) return i;
+    }
+    return -1;
   };
+
+  const cols = {
+    propertyId: flatIdx("property id"),
+    unit: flatIdx("unit(s)", "unit id", "unit", "unit #"),
+    building: flatIdx("building", "bldg"),
+    tenant: flatIdx("lease name", "lease", "tenant", "customer", "lessee"),
+    customerId: flatIdx("customer id"),
+    leaseType: flatIdx("lease type", "type"),
+    sqft: flatIdx("area", "sqft", "sq ft", "square feet"),
+    leaseFrom: flatIdx("lease from", "start", "begin", "lease start", "from date"),
+    leaseTo: flatIdx("expiration date", "lease to", "end", "expire", "lease end"),
+    leaseTerm: flatIdx("term"),
+    monthlyRent: flatIdx("monthly rent per area", "monthly rent", "rent", "base rent"),
+    monthlyRentPerSF: flatIdx("monthly rent per area"),
+    annualRent: flatIdx("annual rent per area", "annual rent"),
+    annualRentPerSF: flatIdx("annual rent per area"),
+    annualRecPerSF: flatIdx("annual rec. per area", "annual rec per area", "annual recovery per area"),
+    annualMiscPerSF: flatIdx("annual misc per area", "annual misc. per area"),
+    monthlyElectric: flatIdx("electric", "utility"),
+    securityDeposit: flatIdx("security deposit", "deposit"),
+    locAmount: flatIdx("loc amount", "bank guarantee"),
+    status: flatIdx("status"),
+    pastDueAmount: flatIdx("past due", "balance"),
+  };
+
+  // The "monthly rent" lookup above can match "monthly rent per area" first
+  // since includes() is permissive — fix it by re-locating monthlyRent only
+  // if monthlyRentPerSF resolved to the same column.
+  if (cols.monthlyRent === cols.monthlyRentPerSF && cols.monthlyRentPerSF !== -1) {
+    // Walk for a header that is "monthly rent" (no per area suffix)
+    cols.monthlyRent = flatHeaders.findIndex(h => /^monthly rent$/.test(h) || (h.startsWith("monthly rent") && !h.includes("per area")));
+  }
+  // Same for annual rent
+  if (cols.annualRent === cols.annualRentPerSF && cols.annualRentPerSF !== -1) {
+    cols.annualRent = flatHeaders.findIndex(h => /^annual rent$/.test(h) || (h.startsWith("annual rent") && !h.includes("per area")));
+  }
 
   const rows: RentRollRow[] = [];
   for (let i = headerRowIdx + 1; i < grid.length; i++) {
@@ -99,9 +138,16 @@ export function parseRentRoll(filePath: string): ParsedRentRoll {
       sqft: cols.sqft >= 0 ? toNumber(r[cols.sqft]) : 0,
       leaseFrom: cols.leaseFrom >= 0 ? formatDate(r[cols.leaseFrom]) : "",
       leaseTo: cols.leaseTo >= 0 ? formatDate(r[cols.leaseTo]) : "",
+      leaseTermMonths: cols.leaseTerm >= 0 ? toNumber(r[cols.leaseTerm]) : 0,
       monthlyRent: cols.monthlyRent >= 0 ? toNumber(r[cols.monthlyRent]) : 0,
+      monthlyRentPerSF: cols.monthlyRentPerSF >= 0 ? toNumber(r[cols.monthlyRentPerSF]) : 0,
+      annualRent: cols.annualRent >= 0 ? toNumber(r[cols.annualRent]) : 0,
+      annualRentPerSF: cols.annualRentPerSF >= 0 ? toNumber(r[cols.annualRentPerSF]) : 0,
+      annualRecPerSF: cols.annualRecPerSF >= 0 ? toNumber(r[cols.annualRecPerSF]) : 0,
+      annualMiscPerSF: cols.annualMiscPerSF >= 0 ? toNumber(r[cols.annualMiscPerSF]) : 0,
       monthlyElectric: cols.monthlyElectric >= 0 ? toNumber(r[cols.monthlyElectric]) : 0,
       securityDeposit: cols.securityDeposit >= 0 ? toNumber(r[cols.securityDeposit]) : 0,
+      locAmount: cols.locAmount >= 0 ? toNumber(r[cols.locAmount]) : 0,
       status: cols.status >= 0 ? String(r[cols.status] ?? "").trim().toLowerCase() : "",
       pastDueAmount: cols.pastDueAmount >= 0 ? toNumber(r[cols.pastDueAmount]) : 0,
     });

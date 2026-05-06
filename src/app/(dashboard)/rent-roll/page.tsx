@@ -181,6 +181,17 @@ export default function RentRollPage() {
         valueFormatter: (p: { value: string }) => p.value || "—" },
       { field: "monthlyRent", headerName: "Rent", width: 110, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
+      // Prefer the Show Detail rent roll's monthlyRentPerSF column; fall
+      // back to monthlyRent / sqft for properties not yet on the full
+      // export. Display as $X.XX/SF.
+      { field: "monthlyRentPerSF", headerName: "Rent / SF", width: 110, type: "numericColumn",
+        valueGetter: (p: any) => {
+          const d = p.data || {};
+          if (typeof d.monthlyRentPerSF === "number" && d.monthlyRentPerSF > 0) return d.monthlyRentPerSF;
+          if (d.monthlyRent > 0 && d.sqft > 0) return d.monthlyRent / d.sqft;
+          return 0;
+        },
+        valueFormatter: (p: any) => p.value > 0 ? `$${p.value.toFixed(2)}/SF` : "—" },
       { field: "securityDeposit", headerName: "Security Deposit", width: 140, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
       // Net-lease electric posting status. Filterable so the user can

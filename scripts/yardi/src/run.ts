@@ -3,9 +3,9 @@ import { getProperties } from "./properties.js";
 import { runIncomeStatementForProperty } from "./reports/income-statement.js";
 import { runRentRollForProperty, runTotalUnitsForProperty } from "./reports/rent-roll.js";
 import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
+import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
 // Held back:
 //   import { runPastDueForProperty } from "./reports/rent-roll.js";
-//   import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
 //   import { runGlDetailForProperty } from "./reports/gl-detail.js";
 import { latestClosedMonth } from "./paths.js";
 import { uploadRunToConvex } from "./convex-upload.js";
@@ -95,6 +95,20 @@ async function main() {
         const msg = err?.message || String(err);
         console.error(`   RD FAILED — ${msg}`);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "receivable_detail", ok: false, error: msg });
+      }
+
+      // Rent Roll (Show Detail / Commercial Analytics) — full export with
+      // monthly rent / SF, annual rent, recoveries, security deposit, and
+      // LOC amount per lease. Soft-fails if the report URL doesn't load on
+      // this Yardi instance — the dashboard panel above still gets us the
+      // basic columns either way.
+      try {
+        const path = await runRentRollFullForProperty(voyager, property, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll_full", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   RR-full FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll_full", ok: false, error: msg });
       }
     }
 

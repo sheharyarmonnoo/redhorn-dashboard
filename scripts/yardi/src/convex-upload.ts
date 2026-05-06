@@ -169,6 +169,10 @@ export async function uploadRunToConvex(
       } else if (u.reportType === "rent_roll_full") {
         const parsed = parseRentRoll(u.filePath);
         console.log(`   parsed RR-full ${u.fileName}: ${parsed.rows.length} rows`);
+        // Show Detail rent roll has the rich columns: rent/SF, annual rent,
+        // recoveries per SF, security deposit, LOC. Pass the whole bag
+        // through to enrichRentByCode — server only writes non-zero values
+        // so partial Yardi outputs don't blow away other data.
         const result: any = await client.mutation(FN.enrichRent as any, {
           propertyCode: u.propertyCode,
           rows: parsed.rows.map(r => ({
@@ -179,6 +183,15 @@ export async function uploadRunToConvex(
             securityDeposit: r.securityDeposit,
             leaseFrom: r.leaseFrom,
             leaseTo: r.leaseTo,
+            leaseType: r.leaseType,
+            sqft: r.sqft,
+            leaseTermMonths: r.leaseTermMonths,
+            monthlyRentPerSF: r.monthlyRentPerSF,
+            annualRent: r.annualRent,
+            annualRentPerSF: r.annualRentPerSF,
+            annualRecPerSF: r.annualRecPerSF,
+            annualMiscPerSF: r.annualMiscPerSF,
+            locAmount: r.locAmount,
           })),
         });
         console.log(`   enriched RR-full → matched ${result.matched}/${result.tenants} tenants`);

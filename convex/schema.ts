@@ -84,6 +84,15 @@ export default defineSchema({
     monthlyRent: v.number(),
     monthlyElectric: v.number(),
     securityDeposit: v.number(),
+    // Show Detail rent roll columns — populated when the
+    // Commercial Analytics rent roll runs successfully.
+    leaseTermMonths: v.optional(v.number()),
+    monthlyRentPerSF: v.optional(v.number()),
+    annualRent: v.optional(v.number()),
+    annualRentPerSF: v.optional(v.number()),
+    annualRecPerSF: v.optional(v.number()),
+    annualMiscPerSF: v.optional(v.number()),
+    locAmount: v.optional(v.number()),
     status: v.string(),
     pastDueAmount: v.number(),
     electricPosted: v.boolean(),
