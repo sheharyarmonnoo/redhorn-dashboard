@@ -37,7 +37,11 @@ export default function DashboardPage() {
   const tenantUnitKeys = leasedUnitKeys(tenants);
   const vacantUnits = units.filter((u: any) => !tenantUnitKeys.has((u.unit || "").trim().toLowerCase()));
   const totalUnits = units.length > 0 ? units.length : tenants.length;
-  const occupancyPct = totalUnits > 0 ? Math.round((occupied.length / totalUnits) * 100) : 0;
+  // Occupancy is unit-level, not lease-level: count distinct leased units
+  // (with multi-unit leases expanded). Using occupied.length (tenant rows)
+  // would under-count by the number of multi-unit leases.
+  const occupiedCount = tenantUnitKeys.size;
+  const occupancyPct = totalUnits > 0 ? Math.round((occupiedCount / totalUnits) * 100) : 0;
   const totalVacantSqft = vacantUnits.reduce((s: number, u: any) => s + (u.sqft || 0), 0);
   // Prefer the monthly_revenue rollup (derived from the income statement) when
   // present — Yardi's dashboard rent-roll panel doesn't carry rent figures, so
@@ -136,7 +140,7 @@ export default function DashboardPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 mb-6">
         <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} sparkline={monthlyRevenue.map(m => m.total)} onClick={() => setKpiDrawer("revenue")} />
-        <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupied.length} of ${totalUnits} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
+        <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupiedCount} of ${totalUnits} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
         <KPICard title="Past Due" value={String(pastDueCount)} subtitle={pastDueAmount > 0 ? `${formatCurrency(pastDueAmount)} owed` : `${pastDueCount === 1 ? "unit" : "units"} past due`} color={pastDueCount > 0 ? "text-[#dc2626]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("pastdue")} />
         <KPICard title="Vacant" value={String(vacantUnits.length)} subtitle={`${totalVacantSqft.toLocaleString()} SF`} onClick={() => setKpiDrawer("vacant")} />
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />

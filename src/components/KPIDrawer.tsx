@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, formatCurrency, isExpiringWithin } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, formatCurrency, isExpiringWithin, leasedUnitKeys } from "@/hooks/useConvexData";
 
 function useKpiData() {
   const property = useActiveProperty();
@@ -76,14 +76,17 @@ function OccupancyDetail() {
     : tenants.reduce((s: number, t: any) => s + (t.sqft || 0), 0);
   const occSqft = occupied.reduce((s: number, t: any) => s + (t.sqft || 0), 0);
   const buildings = Array.from(new Set(units.map((u: any) => u.building).filter(Boolean))).sort() as string[];
-  const tenantUnitKeys = new Set(tenants.map((t: any) => (t.unit || "").trim().toLowerCase()));
+  // Multi-unit leases pack several units into one tenant row — expand on
+  // comma so the count is unit-level, not lease-level.
+  const tenantUnitKeys = leasedUnitKeys(tenants);
+  const occupiedCount = tenantUnitKeys.size;
   return (
     <div className="space-y-5">
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Occupancy Summary</p>
-        <Field label="Occupied Units" value={`${occupied.length} of ${totalUnitsCount}`} />
+        <Field label="Occupied Units" value={`${occupiedCount} of ${totalUnitsCount}`} />
         <Field label="Occupied SF" value={`${occSqft.toLocaleString()} of ${totalSqft.toLocaleString()}`} />
-        <Field label="Occupancy Rate" value={totalUnitsCount > 0 ? `${Math.round((occupied.length / totalUnitsCount) * 100)}%` : "—"} color="text-[#16a34a]" />
+        <Field label="Occupancy Rate" value={totalUnitsCount > 0 ? `${Math.round((occupiedCount / totalUnitsCount) * 100)}%` : "—"} color="text-[#16a34a]" />
       </div>
       {buildings.length > 0 && (
         <div>
