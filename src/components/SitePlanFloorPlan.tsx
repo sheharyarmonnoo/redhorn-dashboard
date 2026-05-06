@@ -92,7 +92,14 @@ const STATUS_FILL: Record<string, string> = {
   past_due:      "rgba(220,38,38,0.16)",
   expiring_soon: "rgba(217,119,6,0.14)",
   locked_out:    "rgba(217,119,6,0.14)",
-  vacant:        "rgba(161,161,170,0.06)",
+  vacant:        "transparent",
+};
+const HOVER_FILL: Record<string, string> = {
+  current:       "rgba(22,163,74,0.16)",
+  past_due:      "rgba(220,38,38,0.22)",
+  expiring_soon: "rgba(217,119,6,0.20)",
+  locked_out:    "rgba(217,119,6,0.20)",
+  vacant:        "rgba(100,116,139,0.16)",
 };
 const STATUS_STROKE: Record<string, string> = {
   current:       "rgba(22,163,74,0.55)",
@@ -190,7 +197,11 @@ export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSele
           const dec = decorated[r.unit!];
           const isSelected = selectedUnit === r.unit;
           const isHovered = hovered === r.unit;
-          const fill = isSelected || isHovered ? STATUS_FILL[dec.status] : "rgba(255,255,255,0.0)";
+          const fill = isHovered
+            ? HOVER_FILL[dec.status]
+            : isSelected
+              ? STATUS_FILL[dec.status]
+              : "transparent";
           const stroke = isSelected ? STATUS_STROKE[dec.status] : "#1f2937";
           const strokeWidth = isSelected ? 3 : 2;
           return (
@@ -247,25 +258,8 @@ export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSele
         })}
       </svg>
 
-      {/* Hover info pill */}
-      {hovered && decorated[hovered] && (
-        <div className="pointer-events-none absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:max-w-xs bg-white/95 dark:bg-[#18181b]/95 backdrop-blur border border-[#e4e4e7] dark:border-[#3f3f46] rounded-md px-3 py-2 shadow-lg">
-          <div className="flex items-center justify-between gap-2 mb-0.5">
-            <p className="text-[11px] font-semibold text-[#18181b] dark:text-[#fafafa]">{hovered}</p>
-            {decorated[hovered].sqft > 0 && (
-              <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{decorated[hovered].sqft.toLocaleString()} SF</span>
-            )}
-          </div>
-          <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] truncate">
-            {decorated[hovered].tenant ? (decorated[hovered].tenant!.tenant || "—") : "Vacant"}
-          </p>
-          {decorated[hovered].status && decorated[hovered].status !== "vacant" && decorated[hovered].status !== "current" && (
-            <p className="text-[10px] mt-0.5 capitalize" style={{ color: STATUS_STROKE[decorated[hovered].status] }}>
-              {decorated[hovered].status.replace(/_/g, " ")}
-            </p>
-          )}
-        </div>
-      )}
+      {/* Hover info pill removed — the in-cell color shift is the cue;
+          full unit details surface in the drawer on click. */}
 
       {/* Legend */}
       <div className="absolute top-3 right-3 bg-white/90 dark:bg-[#18181b]/90 backdrop-blur border border-[#e4e4e7] dark:border-[#3f3f46] rounded-md px-2.5 py-1.5 flex items-center gap-3 text-[10px] text-[#71717a] dark:text-[#a1a1aa]">

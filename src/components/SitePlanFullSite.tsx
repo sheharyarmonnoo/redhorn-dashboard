@@ -126,16 +126,25 @@ const BUILDINGS: BuildingDef[] = [
   },
 ];
 
-// Status colors mirror SitePlanFloorPlan. Vacant uses a transparent fill
-// so the card background (white in light mode, dark in dark mode) shows
-// through — that way the unit text contrast is always against a known
-// surface and never becomes "white on light gray" in dark mode.
+// Status colors. Vacant default is transparent (so the card bg shows
+// through and unit text stays legible in both themes); on hover we
+// flash a subtle slate so vacants get a clear hit-area cue.
 const STATUS_FILL: Record<string, string> = {
   current:       "rgba(22,163,74,0.10)",
   past_due:      "rgba(220,38,38,0.16)",
   expiring_soon: "rgba(217,119,6,0.14)",
   locked_out:    "rgba(217,119,6,0.14)",
   vacant:        "transparent",
+};
+// Hover fills — vacant gets a slate-gray lift; everything else uses the
+// status color (the user feels the cell react without needing the info
+// pill that used to sit in the bottom-right corner).
+const HOVER_FILL: Record<string, string> = {
+  current:       "rgba(22,163,74,0.16)",
+  past_due:      "rgba(220,38,38,0.22)",
+  expiring_soon: "rgba(217,119,6,0.20)",
+  locked_out:    "rgba(217,119,6,0.20)",
+  vacant:        "rgba(100,116,139,0.16)",
 };
 const STATUS_STROKE: Record<string, string> = {
   current:       "rgba(22,163,74,0.55)",
@@ -215,7 +224,11 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
               const dec = decorated[r.unit];
               const isSelected = selectedUnit === r.unit;
               const isHovered = hovered === r.unit;
-              const fill = isSelected || isHovered ? STATUS_FILL[dec.status] : STATUS_FILL.vacant;
+              const fill = isHovered
+                ? HOVER_FILL[dec.status]
+                : isSelected
+                  ? STATUS_FILL[dec.status]
+                  : STATUS_FILL.vacant;
               const stroke = isSelected ? STATUS_STROKE[dec.status] : "#3f3f46";
               const strokeWidth = isSelected ? 2.5 : 1;
               return (
@@ -306,26 +319,6 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
           Parking
         </text>
       </svg>
-
-      {/* Hover info pill */}
-      {hovered && decorated[hovered] && (
-        <div className="pointer-events-none absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:max-w-xs bg-white/95 dark:bg-[#18181b]/95 backdrop-blur border border-[#e4e4e7] dark:border-[#3f3f46] rounded-md px-3 py-2 shadow-lg">
-          <div className="flex items-center justify-between gap-2 mb-0.5">
-            <p className="text-[11px] font-semibold text-[#18181b] dark:text-[#fafafa]">{hovered}</p>
-            {decorated[hovered].sqft > 0 && (
-              <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">{decorated[hovered].sqft.toLocaleString()} SF</span>
-            )}
-          </div>
-          <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] truncate">
-            {decorated[hovered].tenant ? (decorated[hovered].tenant!.tenant || "—") : "Vacant"}
-          </p>
-          {decorated[hovered].status && decorated[hovered].status !== "vacant" && decorated[hovered].status !== "current" && (
-            <p className="text-[10px] mt-0.5 capitalize" style={{ color: STATUS_STROKE[decorated[hovered].status] }}>
-              {decorated[hovered].status.replace(/_/g, " ")}
-            </p>
-          )}
-        </div>
-      )}
 
       {/* Legend */}
       <div className="absolute top-3 right-3 bg-white/90 dark:bg-[#18181b]/90 backdrop-blur border border-[#e4e4e7] dark:border-[#3f3f46] rounded-md px-2.5 py-1.5 flex items-center gap-3 text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
