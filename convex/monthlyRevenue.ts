@@ -151,6 +151,24 @@ export const recomputeFromLatest = mutation({
  * for the historical month, which is fine for a YTD chart and matches what
  * the user would expect when looking back.
  */
+/**
+ * Drop a single (propertyId, month) row. Used to clean up phantom rows
+ * left over from older sync runs that fell back to today's date as the
+ * month key when the IS period header wasn't being parsed yet.
+ */
+export const removeByMonth = mutation({
+  args: { propertyId: v.id("properties"), month: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("monthly_revenue")
+      .withIndex("by_month", (q) => q.eq("propertyId", args.propertyId).eq("month", args.month))
+      .first();
+    if (!existing) return { removed: 0 };
+    await ctx.db.delete(existing._id);
+    return { removed: 1 };
+  },
+});
+
 export const recomputeFromMonth = mutation({
   args: {
     propertyCode: v.string(),

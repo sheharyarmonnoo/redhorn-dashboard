@@ -1,5 +1,6 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useActiveProperty, useTenants, useUnits, leasedUnitKeys } from "@/hooks/useConvexData";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
@@ -124,12 +125,15 @@ export default function SitePlanPage() {
 
       <UnitDetailPanel tenant={selected} onClose={() => setSelectedUnit(null)} />
 
-      {/* Executive Suites focus modal — full-screen with zoom-in animation
-          so the floor plan gets the breathing room it needs. Click backdrop
-          or hit Escape to dismiss. */}
-      {execOpen && (
+      {/* Executive Suites focus modal — portaled to document.body so the
+          fixed-position inset-0 actually pins to the viewport. Without the
+          portal, MainContent's transition-all on the layout creates a
+          containing block that scopes "fixed" to MainContent's bounds,
+          and the modal renders left-skewed (squeezed next to the sidebar).
+          Click backdrop or hit Escape to dismiss. */}
+      {execOpen && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 dark:bg-black/60 p-4 sm:p-6 rh-backdrop"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 p-4 sm:p-6 rh-backdrop"
           onClick={() => setExecOpen(false)}
         >
           <div
@@ -165,7 +169,8 @@ export default function SitePlanPage() {
               />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -126,13 +126,16 @@ const BUILDINGS: BuildingDef[] = [
   },
 ];
 
-// Status colors mirror SitePlanFloorPlan
+// Status colors mirror SitePlanFloorPlan. Vacant uses a transparent fill
+// so the card background (white in light mode, dark in dark mode) shows
+// through — that way the unit text contrast is always against a known
+// surface and never becomes "white on light gray" in dark mode.
 const STATUS_FILL: Record<string, string> = {
   current:       "rgba(22,163,74,0.10)",
   past_due:      "rgba(220,38,38,0.16)",
   expiring_soon: "rgba(217,119,6,0.14)",
   locked_out:    "rgba(217,119,6,0.14)",
-  vacant:        "rgba(244,244,245,1)",
+  vacant:        "transparent",
 };
 const STATUS_STROKE: Record<string, string> = {
   current:       "rgba(22,163,74,0.55)",
