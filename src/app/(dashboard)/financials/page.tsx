@@ -1,7 +1,8 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
-import { useActiveProperty, useIncomeLines, useMonthlyRevenue, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useIncomeLines, useMonthlyRevenue, useDebt, formatCurrency } from "@/hooks/useConvexData";
 
 const SECTION_ORDER = ["income", "expense", "net"];
 
@@ -23,8 +24,10 @@ export default function FinancialsPage() {
   const property = useActiveProperty();
   const rawLines = useIncomeLines(property?._id);
   const monthlyRevenue = useMonthlyRevenue(property?._id);
+  const { debt, upsertDebt, clearDebt } = useDebt(property?._id);
+  const { user } = useUser();
 
-  const [view, setView] = useState<"statement" | "trend">("statement");
+  const [view, setView] = useState<"statement" | "trend" | "debt">("statement");
 
   // Derive the month from the latest income lines snapshot (period field)
   const period = useMemo(() => {
@@ -47,6 +50,41 @@ export default function FinancialsPage() {
     const row = rawLines.find((l: any) => /^\s*total\s+income\s*$/i.test((l.lineItem || "").trim()));
     return row?.currentPeriod || 0;
   }, [rawLines]);
+
+  // Total operating expenses + NOI lookup. Match common Yardi labels.
+  const totalExpense = useMemo(() => {
+    const row = rawLines.find((l: any) => /^\s*total\s+(operating\s+)?expense/i.test((l.lineItem || "").trim()));
+    return row?.currentPeriod || 0;
+  }, [rawLines]);
+
+  const noi = useMemo(() => {
+    const row = rawLines.find((l: any) => /net\s+operating\s+income|^\s*noi\s*$/i.test((l.lineItem || "").trim()));
+    if (row) return row.currentPeriod;
+    return totalIncome - totalExpense;
+  }, [rawLines, totalIncome, totalExpense]);
+
+  // Expense recoveries = lines under any "Misc Income" (or Recoverable Income)
+  // parent in the income statement.
+  const recoveries = useMemo(() => {
+    const parents = new Set(
+      rawLines
+        .filter((l: any) => /misc\s+income|recoverable\s+income|recoveries/i.test((l.lineItem || "").trim()))
+        .map((l: any) => (l.lineItem || "").trim())
+    );
+    if (!parents.size) return { total: 0, items: [] as any[] };
+    const items = rawLines.filter((l: any) => l.parentLine && parents.has(l.parentLine));
+    const total = items.reduce((s: number, l: any) => s + (l.currentPeriod || 0), 0);
+    return { total, items };
+  }, [rawLines]);
+
+  // DSCR = annualized NOI ÷ annual debt service
+  const dscr = useMemo(() => {
+    if (!debt || debt.monthlyDebtService <= 0) return null;
+    const annualNOI = noi * 12;
+    const annualDS = debt.monthlyDebtService * 12;
+    if (annualDS <= 0) return null;
+    return annualNOI / annualDS;
+  }, [debt, noi]);
 
   // Trend data — last 12 months, sorted ascending
   const trend = useMemo(() => {
@@ -79,9 +117,23 @@ export default function FinancialsPage() {
         subtitle={period ? `Income Statement · ${formatPeriod(period)}` : "Income Statement"}
       />
 
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mb-4">
+        <KPIBox label="Total Income" value={formatCurrency(totalIncome)} />
+        <KPIBox label="Total Expense" value={formatCurrency(totalExpense)} color="text-[#dc2626]" />
+        <KPIBox label="NOI" value={formatCurrency(noi)} color={noi >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"} />
+        <KPIBox label="Recoveries" value={formatCurrency(recoveries.total)} />
+        <KPIBox
+          label="DSCR"
+          value={dscr === null ? "—" : `${dscr.toFixed(2)}×`}
+          color={dscr === null ? undefined : dscr >= 1.25 ? "text-[#16a34a]" : dscr >= 1.0 ? "text-[#d97706]" : "text-[#dc2626]"}
+          hint={dscr === null ? "Set debt service" : `NOI ÷ debt service`}
+        />
+      </div>
+
       {/* Tab switcher */}
       <div className="flex gap-1 mb-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
-        {(["statement", "trend"] as const).map(t => (
+        {(["statement", "trend", "debt"] as const).map(t => (
           <button
             key={t}
             onClick={() => setView(t)}
@@ -91,16 +143,50 @@ export default function FinancialsPage() {
                 : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
             }`}
           >
-            {t === "statement" ? "Income Statement" : "Monthly Trend"}
+            {t === "statement" ? "Income Statement" : t === "trend" ? "Monthly Trend" : "Debt & DSCR"}
           </button>
         ))}
       </div>
 
-      {view === "statement" ? (
-        <IncomeStatement lines={lines} totalIncome={totalIncome} />
-      ) : (
-        <TrendTable trend={trend} formatMonth={formatMonth} />
+      {view === "statement" && (
+        <>
+          <IncomeStatement lines={lines} totalIncome={totalIncome} />
+          {recoveries.items.length > 0 && (
+            <RecoveriesPanel items={recoveries.items} total={recoveries.total} />
+          )}
+        </>
       )}
+      {view === "trend" && <TrendTable trend={trend} formatMonth={formatMonth} />}
+      {view === "debt" && (
+        <DebtPanel
+          debt={debt}
+          noi={noi}
+          dscr={dscr}
+          onSave={async (form) => {
+            if (!property?._id) return;
+            await upsertDebt({
+              propertyId: property._id as any,
+              ...form,
+              updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
+            });
+          }}
+          onClear={async () => {
+            if (!property?._id) return;
+            if (!window.confirm("Remove debt info for this property? DSCR will stop calculating until re-entered.")) return;
+            await clearDebt({ propertyId: property._id as any });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function KPIBox({ label, value, color, hint }: { label: string; value: string; color?: string; hint?: string }) {
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3">
+      <p className={`text-[18px] sm:text-[20px] font-semibold tracking-tight ${color || "text-[#18181b] dark:text-[#fafafa]"}`}>{value}</p>
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] font-medium uppercase tracking-wide mt-0.5">{label}</p>
+      {hint && <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5 normal-case truncate">{hint}</p>}
     </div>
   );
 }
@@ -242,4 +328,210 @@ function TrendTable({ trend, formatMonth }: { trend: any[]; formatMonth: (m: str
       })}
     </div>
   );
+}
+
+function RecoveriesPanel({ items, total }: { items: any[]; total: number }) {
+  return (
+    <div className="mt-4 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-[#fafafa] dark:bg-[#27272a] border-b border-[#e4e4e7] dark:border-[#3f3f46]">
+        <p className="text-[12px] font-semibold text-[#18181b] dark:text-[#fafafa]">Expense Recoveries</p>
+        <p className="text-[12px] font-semibold text-[#16a34a]">{formatCurrency(total)}</p>
+      </div>
+      <div className="divide-y divide-[#f4f4f5] dark:divide-[#27272a]">
+        {items.map((it, i) => (
+          <div key={i} className="grid grid-cols-[1fr_120px_120px] px-4 py-1.5 text-[12px] text-[#18181b] dark:text-[#fafafa]">
+            <span style={{ paddingLeft: Math.max(0, (it.hierarchyLevel - 1)) * 16 }}>{it.lineItem.trim()}</span>
+            <span className="text-right">{formatCurrency(it.currentPeriod || 0)}</span>
+            <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">YTD {formatCurrency(it.yearToDate || 0)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DebtPanel({
+  debt,
+  noi,
+  dscr,
+  onSave,
+  onClear,
+}: {
+  debt: any | null;
+  noi: number;
+  dscr: number | null;
+  onSave: (form: DebtForm) => Promise<void>;
+  onClear: () => Promise<void>;
+}) {
+  const [form, setForm] = useState<DebtForm>({
+    totalDebt: 0,
+    monthlyDebtService: 0,
+    interestRate: undefined,
+    lender: undefined,
+    loanStartDate: undefined,
+    loanMaturityDate: undefined,
+    notes: undefined,
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (debt) {
+      setForm({
+        totalDebt: debt.totalDebt ?? 0,
+        monthlyDebtService: debt.monthlyDebtService ?? 0,
+        interestRate: debt.interestRate,
+        lender: debt.lender,
+        loanStartDate: debt.loanStartDate,
+        loanMaturityDate: debt.loanMaturityDate,
+        notes: debt.notes,
+      });
+    }
+  }, [debt?._id, debt?.updatedAt]);
+
+  async function handleSave() {
+    setSaving(true);
+    try { await onSave(form); } finally { setSaving(false); }
+  }
+
+  const annualNOI = noi * 12;
+  const annualDS = (form.monthlyDebtService || 0) * 12;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-5">
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-4">Loan Details</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <DebtField label="Total Debt (Outstanding Balance)">
+            <NumInput value={form.totalDebt} onChange={v => setForm({ ...form, totalDebt: v })} prefix="$" />
+          </DebtField>
+          <DebtField label="Monthly Debt Service (P&I)">
+            <NumInput value={form.monthlyDebtService} onChange={v => setForm({ ...form, monthlyDebtService: v })} prefix="$" />
+          </DebtField>
+          <DebtField label="Interest Rate (%)">
+            <NumInput value={form.interestRate ?? 0} onChange={v => setForm({ ...form, interestRate: v })} suffix="%" />
+          </DebtField>
+          <DebtField label="Lender">
+            <input
+              type="text"
+              value={form.lender || ""}
+              onChange={e => setForm({ ...form, lender: e.target.value })}
+              className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            />
+          </DebtField>
+          <DebtField label="Loan Start">
+            <input
+              type="date"
+              value={form.loanStartDate || ""}
+              onChange={e => setForm({ ...form, loanStartDate: e.target.value })}
+              className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            />
+          </DebtField>
+          <DebtField label="Loan Maturity">
+            <input
+              type="date"
+              value={form.loanMaturityDate || ""}
+              onChange={e => setForm({ ...form, loanMaturityDate: e.target.value })}
+              className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            />
+          </DebtField>
+        </div>
+        <div className="mt-4">
+          <DebtField label="Notes">
+            <textarea
+              value={form.notes || ""}
+              onChange={e => setForm({ ...form, notes: e.target.value })}
+              rows={2}
+              className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] resize-none"
+            />
+          </DebtField>
+        </div>
+        <div className="flex items-center justify-between mt-5">
+          <button
+            onClick={onClear}
+            disabled={!debt || saving}
+            className="text-[12px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#dc2626] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+          >
+            Clear debt info
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || form.totalDebt < 0 || form.monthlyDebtService < 0}
+            className="text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-4 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+        {debt?.updatedAt && (
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-2">
+            Last updated {new Date(debt.updatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+            {debt.updatedBy ? ` by ${debt.updatedBy}` : ""}
+          </p>
+        )}
+      </div>
+
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-5">
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">DSCR Calculation</p>
+        <div className="space-y-1.5 text-[12px]">
+          <Row label="NOI (current period × 12)" value={formatCurrency(annualNOI)} />
+          <Row label="Annual debt service" value={formatCurrency(annualDS)} />
+          <div className="border-t border-[#e4e4e7] dark:border-[#3f3f46] pt-2 mt-2 flex items-center justify-between">
+            <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">DSCR (NOI ÷ Debt Service)</p>
+            <p className={`text-[18px] font-semibold tracking-tight ${
+              dscr === null ? "text-[#a1a1aa]" :
+              dscr >= 1.25 ? "text-[#16a34a]" :
+              dscr >= 1.0 ? "text-[#d97706]" : "text-[#dc2626]"
+            }`}>
+              {dscr === null ? "—" : `${dscr.toFixed(2)}×`}
+            </p>
+          </div>
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-2">
+            Lender covenant typically requires DSCR ≥ 1.20–1.25×. Below 1.0× means NOI alone doesn't cover debt service.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DebtField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide mb-1 block">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function NumInput({ value, onChange, prefix, suffix }: { value: number; onChange: (v: number) => void; prefix?: string; suffix?: string }) {
+  return (
+    <div className="relative">
+      {prefix && <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[12px] text-[#a1a1aa]">{prefix}</span>}
+      <input
+        type="number"
+        value={Number.isFinite(value) ? value : 0}
+        onChange={e => onChange(Number(e.target.value) || 0)}
+        className={`w-full text-[12px] py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] ${prefix ? "pl-6" : "pl-2"} ${suffix ? "pr-6" : "pr-2"}`}
+      />
+      {suffix && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-[#a1a1aa]">{suffix}</span>}
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[#71717a] dark:text-[#a1a1aa]">{label}</span>
+      <span className="text-[#18181b] dark:text-[#fafafa] font-medium">{value}</span>
+    </div>
+  );
+}
+
+interface DebtForm {
+  totalDebt: number;
+  monthlyDebtService: number;
+  interestRate?: number;
+  lender?: string;
+  loanStartDate?: string;
+  loanMaturityDate?: string;
+  notes?: string;
 }

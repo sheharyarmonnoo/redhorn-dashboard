@@ -353,6 +353,23 @@ export default defineSchema({
     updatedAt: v.string(),
   }).index("by_stage", ["stage"]),
 
+  // ===== PROPERTY DEBT (manual input) =====
+  // Per-property debt info entered by the user in settings. DSCR =
+  // annualized NOI ÷ annual debt service. Yardi's IS only carries
+  // interest, not principal, so we capture the full debt service here.
+  property_debt: defineTable({
+    propertyId: v.id("properties"),
+    totalDebt: v.number(),                 // outstanding loan balance
+    monthlyDebtService: v.number(),        // P&I (or interest-only) per month
+    interestRate: v.optional(v.number()),  // annual %, informational
+    lender: v.optional(v.string()),
+    loanStartDate: v.optional(v.string()),
+    loanMaturityDate: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    updatedAt: v.string(),
+    updatedBy: v.optional(v.string()),
+  }).index("by_property", ["propertyId"]),
+
   // ===== UNIT NOTES =====
   unit_notes: defineTable({
     propertyId: v.id("properties"),

@@ -303,6 +303,18 @@ export function useIncomeLines(propertyId: string | undefined) {
   return lines ?? [];
 }
 
+// ===== PROPERTY DEBT (manual input for DSCR) =====
+
+export function useDebt(propertyId: string | undefined) {
+  const debt = useQuery(
+    api.propertyDebt.getByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  const upsertDebt = useMutation(api.propertyDebt.upsert);
+  const clearDebt = useMutation(api.propertyDebt.clear);
+  return { debt: debt ?? null, loading: debt === undefined, upsertDebt, clearDebt };
+}
+
 // ===== AGING RECORDS =====
 
 export function useAgingRecords(propertyId: string | undefined) {

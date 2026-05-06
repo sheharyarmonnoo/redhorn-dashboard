@@ -20,6 +20,7 @@ import type * as http from "../http.js";
 import type * as incomeLines from "../incomeLines.js";
 import type * as monthlyRevenue from "../monthlyRevenue.js";
 import type * as properties from "../properties.js";
+import type * as propertyDebt from "../propertyDebt.js";
 import type * as receivableDetails from "../receivableDetails.js";
 import type * as syncJobs from "../syncJobs.js";
 import type * as tenantOverrides from "../tenantOverrides.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   incomeLines: typeof incomeLines;
   monthlyRevenue: typeof monthlyRevenue;
   properties: typeof properties;
+  propertyDebt: typeof propertyDebt;
   receivableDetails: typeof receivableDetails;
   syncJobs: typeof syncJobs;
   tenantOverrides: typeof tenantOverrides;
