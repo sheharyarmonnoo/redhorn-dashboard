@@ -43,6 +43,30 @@ function CurrencyCellRenderer(props: { value: number }) {
   return <span>{props.value > 0 ? formatCurrency(props.value) : "—"}</span>;
 }
 
+// Electric posting only applies to net-lease tenants — gross leases include
+// utilities in base rent. Renders one of: "—" for vacant or non-net-lease,
+// green "Posted" or red "Not Posted" otherwise.
+function ElectricPostedCellRenderer(props: { data: any }) {
+  const t = props.data || {};
+  const isVacant = t.status === "vacant";
+  const isNet = typeof t.leaseType === "string" && /net\s*lease/i.test(t.leaseType);
+  if (isVacant || !isNet) {
+    return <span className="text-[11px] text-[#d4d4d8] dark:text-[#52525b]">—</span>;
+  }
+  // Secondary rows of multi-unit leases inherit the primary row's posting
+  // state — show as not applicable to avoid duplicate "Not Posted" warnings.
+  if (t._multiUnitLease && !t._multiUnitPrimary) {
+    return <span className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">—</span>;
+  }
+  const posted = !!t.electricPosted;
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[11px] ${posted ? "text-[#16a34a]" : "text-[#dc2626] font-medium"}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${posted ? "bg-[#16a34a]" : "bg-[#dc2626]"}`} />
+      {posted ? "Posted" : "Not Posted"}
+    </span>
+  );
+}
+
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -157,8 +181,17 @@ export default function RentRollPage() {
         valueFormatter: (p: { value: string }) => p.value || "—" },
       { field: "monthlyRent", headerName: "Rent", width: 110, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
-      // Security Deposit, Monthly Electric, and Past Due intentionally hidden
-      // from the grid — drawer still surfaces them per-unit when needed.
+      // Net-lease electric posting status. Filterable so the user can
+      // pull up "Not Posted" rows for the close.
+      { field: "electricPosted", headerName: "Electric", width: 130, cellRenderer: ElectricPostedCellRenderer, filter: true,
+        valueGetter: (p: any) => {
+          const d = p.data || {};
+          if (d.status === "vacant") return "n/a";
+          if (typeof d.leaseType === "string" && !/net\s*lease/i.test(d.leaseType)) return "n/a";
+          return d.electricPosted ? "Posted" : "Not Posted";
+        } },
+      // Security Deposit, Monthly Electric ($ amount), and Past Due
+      // intentionally hidden from the grid — drawer still surfaces them.
       { field: "status", headerName: "Status", width: 130, cellRenderer: StatusCellRenderer, filter: true },
     ];
   }, [isMobile]);
