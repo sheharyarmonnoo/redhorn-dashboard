@@ -95,34 +95,33 @@ const BUILDINGS: BuildingDef[] = [
       { unit: "C-100", x: 250, y: 860, w: 90, h: 130 },
     ],
   },
-  // Building B — Office/Warehouse, right-middle
+  // Building B — Office/Warehouse, right-middle. Shifted left so the
+  // layout sits more centered within the viewBox (was 1080).
   {
     name: "Building B",
     subtitle: "Office / Warehouse",
-    outline: { x: 1080, y: 220, w: 200, h: 600 },
+    outline: { x: 900, y: 220, w: 200, h: 600 },
     outlineColor: "#dc2626",
     units: [
-      { unit: "B-115", x: 1090, y: 230, w: 180, h: 80 },
-      { unit: "B-145", x: 1090, y: 320, w: 90,  h: 80 },
-      { unit: "B-130", x: 1190, y: 320, w: 80,  h: 90 },
-      { unit: "B-120", x: 1090, y: 410, w: 180, h: 80 },
-      { unit: "B-110", x: 1190, y: 500, w: 80,  h: 50 },
-      { unit: "B-105", x: 1090, y: 560, w: 180, h: 130 },
-      { unit: "B-100", x: 1090, y: 700, w: 110, h: 110 },
-      { unit: "B-398", x: 1210, y: 700, w: 60,  h: 110 },
+      { unit: "B-115", x: 910, y: 230, w: 180, h: 80 },
+      { unit: "B-145", x: 910, y: 320, w: 90,  h: 80 },
+      { unit: "B-130", x: 1010, y: 320, w: 80,  h: 90 },
+      { unit: "B-120", x: 910, y: 410, w: 180, h: 80 },
+      { unit: "B-110", x: 1010, y: 500, w: 80,  h: 50 },
+      { unit: "B-105", x: 910, y: 560, w: 180, h: 130 },
+      { unit: "B-100", x: 910, y: 700, w: 110, h: 110 },
+      { unit: "B-398", x: 1030, y: 700, w: 60,  h: 110 },
     ],
   },
-  // Building A — Manufacturing, far right (with Exec Suites annex)
+  // Building A — Manufacturing, far right (with Exec Suites annex).
+  // Shifted left in lockstep with Building B (was 1320).
   {
     name: "Building A",
     subtitle: "Manufacturing",
-    outline: { x: 1320, y: 220, w: 220, h: 600 },
+    outline: { x: 1140, y: 220, w: 220, h: 600 },
     outlineColor: "#16a34a",
     units: [
-      // A-150 occupies the main manufacturing block. The Exec Suites annex
-      // sits below it as a separate clickable region (handled outside this
-      // unit list since clicking it opens the focus modal, not the drawer).
-      { unit: "A-150", x: 1330, y: 230, w: 200, h: 470 },
+      { unit: "A-150", x: 1150, y: 230, w: 200, h: 470 },
     ],
   },
 ];
@@ -171,13 +170,13 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
   }, [tenants, units]);
 
   return (
-    <div className="relative w-full rounded-lg border border-[#e4e4e7] dark:border-[#3f3f46] bg-white dark:bg-[#18181b] shadow-sm overflow-hidden">
-      <svg viewBox="0 0 1600 1100" className="block w-full h-auto" style={{ maxHeight: "78vh" }}>
+    <div className="relative w-full max-w-5xl mx-auto rounded-lg border border-[#e4e4e7] dark:border-[#3f3f46] bg-white dark:bg-[#18181b] shadow-sm overflow-hidden">
+      <svg viewBox="0 0 1420 1100" className="block w-full h-auto" style={{ maxHeight: "78vh" }} preserveAspectRatio="xMidYMid meet">
         {/* No background rect — let the card's bg shine through so there's
             no gray-vs-white seam between the SVG and its container. */}
 
         {/* "Hollister Street" label at bottom */}
-        <text x={800} y={1075} textAnchor="middle" fontSize={13} fontWeight={600} fill="#a1a1aa" letterSpacing="0.15em">
+        <text x={710} y={1075} textAnchor="middle" fontSize={13} fontWeight={600} fill="#a1a1aa" letterSpacing="0.15em">
           16261 HOLLISTER STREET
         </text>
 
@@ -278,7 +277,7 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
           style={{ cursor: "pointer" }}
         >
           <rect
-            x={1330}
+            x={1150}
             y={710}
             width={200}
             height={100}
@@ -288,19 +287,19 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
             rx={4}
             style={{ transition: "fill 160ms ease" }}
           />
-          <text x={1430} y={748} textAnchor="middle" fontSize={14} fontWeight={700} fill="#15803d">
+          <text x={1250} y={748} textAnchor="middle" fontSize={14} fontWeight={700} fill="#15803d">
             Executive Suites
           </text>
-          <text x={1430} y={768} textAnchor="middle" fontSize={11} fill="#15803d">
+          <text x={1250} y={768} textAnchor="middle" fontSize={11} fill="#15803d">
             A-101 → A-130
           </text>
-          <text x={1430} y={794} textAnchor="middle" fontSize={10} fontWeight={600} fill="#15803d" style={{ letterSpacing: "0.06em" }}>
+          <text x={1250} y={794} textAnchor="middle" fontSize={10} fontWeight={600} fill="#15803d" style={{ letterSpacing: "0.06em" }}>
             VIEW FLOOR PLAN ›
           </text>
         </g>
 
         {/* Parking */}
-        <text x={760} y={520} textAnchor="middle" fontSize={11} fontStyle="italic" fill="#a1a1aa">
+        <text x={700} y={520} textAnchor="middle" fontSize={11} fontStyle="italic" fill="#a1a1aa">
           Parking
         </text>
       </svg>
