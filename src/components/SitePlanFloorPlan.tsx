@@ -33,9 +33,9 @@ const ROOMS: Room[] = [
   { unit: "A-106A", x: 560, y: 100, w: 120, h: 110, type: "unit" },
   { unit: "A-103", x: 680, y: 100, w: 220, h: 170, type: "unit" },
 
-  // Top-left: Break Room/Kitchen with EXIT (door at top of break room)
+  // Top-left: Break Room/Kitchen with EXIT marker beside it (no box)
   { label: "Break Room / Kitchen", x: 100, y: 100, w: 190, h: 110, type: "common" },
-  { label: "EXIT", x: 195, y: 78, w: 60, h: 22, type: "exit" },
+  { label: "EXIT", x: 200, y: 70, w: 50, h: 16, type: "exit" },
 
   // Restrooms cluster
   { label: "Womans", x: 100, y: 230, w: 70, h: 70, type: "common", fontSize: 12 },
@@ -48,7 +48,7 @@ const ROOMS: Room[] = [
   { unit: "A-120", x: 100, y: 310, w: 140, h: 230, type: "unit" },
   { unit: "A-113", x: 250, y: 310, w: 100, h: 200, type: "unit" },
   { unit: "A-110", x: 360, y: 310, w: 110, h: 160, type: "unit" },
-  { unit: "A-85",  x: 380, y: 480, w: 90,  h: 90,  type: "unit" },
+  { unit: "A-85",  x: 380, y: 480, w: 90,  h: 70,  type: "unit" },
 
   // Tiny W/M (between A-120 and the rest of inner cluster — moved down to
   // a less crowded spot)
@@ -71,8 +71,8 @@ const ROOMS: Room[] = [
   { unit: "A-85A", x: 660, y: 555, w: 90, h: 130, type: "unit" },
   { unit: "A-90",  x: 750, y: 555, w: 60, h: 130, type: "unit" },
 
-  // EXIT (right side, between A-90 and A-100)
-  { label: "EXIT", x: 815, y: 600, w: 60, h: 22, type: "exit" },
+  // EXIT (right side, between A-90 and A-100 — outside the building wall)
+  { label: "EXIT", x: 815, y: 690, w: 50, h: 16, type: "exit" },
 
   // Bottom-spanning suite
   { unit: "A-130", x: 200, y: 695, w: 520, h: 75, type: "unit" },
@@ -158,10 +158,14 @@ export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSele
 
         {ROOMS.map((r, i) => {
           if (r.type === "exit") {
+            // Subtle door marker — no box, no dashed border. Just a small
+            // red triangle pointing outward + tiny "EXIT" label so the
+            // floor plan doesn't shout fire-drill chrome at the user.
             return (
               <g key={`exit-${i}`}>
-                <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="none" stroke="#dc2626" strokeWidth={1.5} strokeDasharray="4 3" />
-                <text x={r.x + r.w / 2} y={r.y + r.h / 2 + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#dc2626" letterSpacing="0.05em">EXIT</text>
+                <text x={r.x + r.w / 2} y={r.y + 11} textAnchor="middle" fontSize={9} fontWeight={600} fill="#dc2626" letterSpacing="0.08em" style={{ opacity: 0.7 }}>
+                  ↑ EXIT
+                </text>
               </g>
             );
           }

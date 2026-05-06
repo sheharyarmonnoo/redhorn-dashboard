@@ -47,50 +47,52 @@ const BUILDINGS: BuildingDef[] = [
       { unit: "D-130", x: 580, y: 70, w: 230, h: 110 },
     ],
   },
-  // Building C — multi-column storage / commercial, left-middle
+  // Building C — multi-column storage / commercial, left-middle.
+  // Pushed down +60 from Building D's bottom edge so the building label
+  // has breathing room and doesn't crash into D's unit row above.
   {
     name: "Building C",
     subtitle: "Storage + commercial",
-    outline: { x: 60, y: 220, w: 480, h: 720 },
+    outline: { x: 60, y: 280, w: 480, h: 720 },
     outlineColor: "#eab308",
     units: [
       // Far-left column (C-205 down)
-      { unit: "C-205", x: 70,  y: 230, w: 90, h: 50 },
-      { unit: "C-204", x: 70,  y: 285, w: 90, h: 50 },
-      { unit: "C-203", x: 70,  y: 340, w: 90, h: 50 },
-      { unit: "C-202", x: 70,  y: 395, w: 90, h: 50 },
-      { unit: "C-201", x: 70,  y: 450, w: 90, h: 50 },
-      { unit: "C-200", x: 70,  y: 505, w: 90, h: 50 },
-      { unit: "C-194", x: 70,  y: 560, w: 90, h: 50 },
-      { unit: "C-192", x: 70,  y: 615, w: 90, h: 50 },
-      { unit: "C-301", x: 70,  y: 680, w: 90, h: 50 },
-      { unit: "C-302", x: 70,  y: 735, w: 90, h: 50 },
-      { unit: "C-303", x: 70,  y: 790, w: 90, h: 50 },
-      { unit: "C-304", x: 70,  y: 845, w: 90, h: 50 },
-      { unit: "C-305", x: 70,  y: 900, w: 90, h: 35 },
+      { unit: "C-205", x: 70,  y: 290, w: 90, h: 50 },
+      { unit: "C-204", x: 70,  y: 345, w: 90, h: 50 },
+      { unit: "C-203", x: 70,  y: 400, w: 90, h: 50 },
+      { unit: "C-202", x: 70,  y: 455, w: 90, h: 50 },
+      { unit: "C-201", x: 70,  y: 510, w: 90, h: 50 },
+      { unit: "C-200", x: 70,  y: 565, w: 90, h: 50 },
+      { unit: "C-194", x: 70,  y: 620, w: 90, h: 50 },
+      { unit: "C-192", x: 70,  y: 675, w: 90, h: 50 },
+      { unit: "C-301", x: 70,  y: 740, w: 90, h: 50 },
+      { unit: "C-302", x: 70,  y: 795, w: 90, h: 50 },
+      { unit: "C-303", x: 70,  y: 850, w: 90, h: 50 },
+      { unit: "C-304", x: 70,  y: 905, w: 90, h: 50 },
+      { unit: "C-305", x: 70,  y: 960, w: 90, h: 35 },
       // Middle column (C-212A down)
-      { unit: "C-212A", x: 165, y: 230, w: 80, h: 50 },
-      { unit: "C-211",  x: 165, y: 285, w: 80, h: 50 },
-      { unit: "C-210",  x: 165, y: 340, w: 80, h: 50 },
-      { unit: "C-209",  x: 165, y: 395, w: 80, h: 50 },
-      { unit: "C-208",  x: 165, y: 450, w: 80, h: 50 },
-      { unit: "C-207",  x: 165, y: 505, w: 80, h: 50 },
-      { unit: "C-206",  x: 165, y: 560, w: 80, h: 50 },
-      { unit: "C-103",  x: 165, y: 615, w: 80, h: 50 },
-      { unit: "C-102",  x: 165, y: 670, w: 80, h: 50 },
-      { unit: "C-101",  x: 165, y: 725, w: 80, h: 50 },
-      { unit: "C-306",  x: 165, y: 780, w: 80, h: 50 },
-      { unit: "C-307",  x: 165, y: 835, w: 80, h: 50 },
-      { unit: "C-308",  x: 165, y: 890, w: 80, h: 45 },
+      { unit: "C-212A", x: 165, y: 290, w: 80, h: 50 },
+      { unit: "C-211",  x: 165, y: 345, w: 80, h: 50 },
+      { unit: "C-210",  x: 165, y: 400, w: 80, h: 50 },
+      { unit: "C-209",  x: 165, y: 455, w: 80, h: 50 },
+      { unit: "C-208",  x: 165, y: 510, w: 80, h: 50 },
+      { unit: "C-207",  x: 165, y: 565, w: 80, h: 50 },
+      { unit: "C-206",  x: 165, y: 620, w: 80, h: 50 },
+      { unit: "C-103",  x: 165, y: 675, w: 80, h: 50 },
+      { unit: "C-102",  x: 165, y: 730, w: 80, h: 50 },
+      { unit: "C-101",  x: 165, y: 785, w: 80, h: 50 },
+      { unit: "C-306",  x: 165, y: 840, w: 80, h: 50 },
+      { unit: "C-307",  x: 165, y: 895, w: 80, h: 50 },
+      { unit: "C-308",  x: 165, y: 950, w: 80, h: 45 },
       // Right column (C-218 down)
-      { unit: "C-218", x: 250, y: 230, w: 90, h: 50 },
-      { unit: "C-217", x: 250, y: 285, w: 90, h: 50 },
-      { unit: "C-216", x: 250, y: 340, w: 90, h: 50 },
-      { unit: "C-215", x: 250, y: 395, w: 90, h: 50 },
-      { unit: "C-214", x: 250, y: 450, w: 90, h: 50 },
-      { unit: "C-213", x: 250, y: 505, w: 90, h: 50 },
-      { unit: "C-212", x: 250, y: 560, w: 90, h: 50 },
-      { unit: "C-100", x: 250, y: 800, w: 90, h: 130 },
+      { unit: "C-218", x: 250, y: 290, w: 90, h: 50 },
+      { unit: "C-217", x: 250, y: 345, w: 90, h: 50 },
+      { unit: "C-216", x: 250, y: 400, w: 90, h: 50 },
+      { unit: "C-215", x: 250, y: 455, w: 90, h: 50 },
+      { unit: "C-214", x: 250, y: 510, w: 90, h: 50 },
+      { unit: "C-213", x: 250, y: 565, w: 90, h: 50 },
+      { unit: "C-212", x: 250, y: 620, w: 90, h: 50 },
+      { unit: "C-100", x: 250, y: 860, w: 90, h: 130 },
     ],
   },
   // Building B — Office/Warehouse, right-middle
@@ -170,12 +172,12 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
 
   return (
     <div className="relative w-full rounded-lg border border-[#e4e4e7] dark:border-[#3f3f46] bg-white dark:bg-[#18181b] shadow-sm overflow-hidden">
-      <svg viewBox="0 0 1600 1000" className="block w-full h-auto" style={{ maxHeight: "75vh" }}>
-        {/* Soft grass / lot background tint */}
-        <rect x={0} y={0} width={1600} height={1000} fill="#fafafa" className="dark:[fill:#0f0f10]" />
+      <svg viewBox="0 0 1600 1100" className="block w-full h-auto" style={{ maxHeight: "78vh" }}>
+        {/* No background rect — let the card's bg shine through so there's
+            no gray-vs-white seam between the SVG and its container. */}
 
         {/* "Hollister Street" label at bottom */}
-        <text x={800} y={985} textAnchor="middle" fontSize={13} fontWeight={600} fill="#a1a1aa" letterSpacing="0.15em">
+        <text x={800} y={1075} textAnchor="middle" fontSize={13} fontWeight={600} fill="#a1a1aa" letterSpacing="0.15em">
           16261 HOLLISTER STREET
         </text>
 
