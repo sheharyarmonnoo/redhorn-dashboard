@@ -4,60 +4,87 @@ import { YardiProperty } from "../properties.js";
 import { downloadDirFor, slugForProperty } from "../paths.js";
 
 /**
- * Run Yardi's full Commercial Rent Roll report (the one under
- * Reports > Tenant Reports / Commercial > Rent Roll) for one property and
- * save the Excel.
+ * Run Yardi's Commercial Analytics > Property > Rent Roll for one property.
  *
- * Difference from the dashboard "Current Leases" panel: this report includes
- * Base Rent, Recovery / CAM, lease start dates, and security deposits — which
- * the dashboard panel does NOT carry. We use it to populate the rent + start
- * columns on the dashboard's Rent Roll page.
+ * URL: pages/CommReportPropertySummary.aspx?sMenuSet=iAnalytics
+ * (verified 2026-05; the legacy `CmrRentl.aspx` family does not exist on
+ * this Yardi instance.)
  *
- * Yardi versions name this report differently. We probe a set of likely
- * URLs and use the first one whose form actually renders. The form fields
- * are consistent across versions (PropertyID + AsOfDate + Excel_Button).
+ * Form fields (from probe-comm-analytics.ts):
+ *   PropertyId_LookupCode       — property code (lowercase d in "Id")
+ *   PropertyId_Description      — property name
+ *   ReportType_DropDownList     — value="2" for "Rent Roll"
+ *   FromDate_TextBox            — MM/DD/YYYY (we use first day of month)
+ *   PeriodType_DropDownList     — "1" Monthly (default)
+ *   SummarizeBy_DropDownList    — "1" Property (default)
+ *   chkIsDetail_CheckBox        — Show Detail (default checked)
+ *   YsiChkShowActiveLease_CheckBox / chkShowSpecialtyLeases_CheckBox / etc.
+ *   Excel_Button                — triggers the xlsx download
+ *
+ * The exported Excel ("Rent Roll" sheet "Report1") has 16 columns including
+ * Security Deposit (col 14) and LOC Amount/Bank Guarantee (col 15) — these
+ * are exactly what the dashboard "Current Leases" panel scrape was missing.
  */
-const CANDIDATE_URLS = [
-  "CmrRentl.aspx",      // most common: Commercial Rent Roll (classic)
-  "CMRR.aspx",
-  "CMRRChrgs.aspx",     // Rent Roll with Charges
-  "CMRRRecur.aspx",     // Recurring Rent Roll
-  "RentRoll.aspx",
-  "RRollByLease.aspx",
-];
-
 export async function runRentRollFullForProperty(
   voyagerPage: Page,
   property: YardiProperty,
   asOfMonthIso: string
 ): Promise<string> {
-  console.log(`\n→ ${property.name} (${property.code}) — Rent Roll (full) for ${asOfMonthIso}`);
+  console.log(`\n→ ${property.name} (${property.code}) — Rent Roll (Commercial Analytics) for ${asOfMonthIso}`);
 
-  const frame = await openRentRollForm(voyagerPage);
-  if (!frame) {
-    throw new Error(
-      `Rent roll form did not render at any candidate URL. Tried: ${CANDIDATE_URLS.join(", ")}`
-    );
+  await openCommercialAnalytics(voyagerPage);
+
+  const frame = voyagerPage.frame({ name: "filter" });
+  if (!frame) throw new Error("Voyager 'filter' iframe not found.");
+
+  // Wait for the Property field to render (signal the form is ready)
+  await frame.locator("#PropertyId_LookupCode").waitFor({ timeout: 30_000 });
+
+  // 1. Property — set both LookupCode + Description so Yardi doesn't fall back
+  //    to the multi-property default ("bel^.redhorn^hol")
+  await frame.evaluate(({ code, name }: any) => {
+    const codeEl = document.getElementById("PropertyId_LookupCode") as HTMLInputElement | null;
+    const descEl = document.getElementById("PropertyId_Description") as HTMLInputElement | null;
+    if (codeEl) {
+      codeEl.value = code;
+      codeEl.dispatchEvent(new Event("change", { bubbles: true }));
+      codeEl.dispatchEvent(new Event("blur", { bubbles: true }));
+    }
+    if (descEl) {
+      descEl.value = name;
+      descEl.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }, { code: property.code, name: property.name });
+
+  const settledCode = await frame.locator("#PropertyId_LookupCode").inputValue().catch(() => "");
+  console.log(`   PropertyId set to: "${settledCode}"`);
+
+  // 2. Report Type = Rent Roll
+  await frame.locator("#ReportType_DropDownList").selectOption("2");
+
+  // 3. From Date = first day of as-of month (e.g. "05/01/2026")
+  const [y, m] = asOfMonthIso.split("-").map(Number);
+  const mmddyyyy = `${String(m).padStart(2, "0")}/01/${y}`;
+  const dateField = frame.locator("#FromDate_TextBox");
+  await dateField.click();
+  await dateField.press("Control+A");
+  await dateField.fill(mmddyyyy);
+  await dateField.press("Tab");
+  console.log(`   FromDate = ${mmddyyyy}`);
+
+  // 4. Make sure Show Detail is checked (gives us the per-lease rows we need)
+  const showDetail = frame.locator("#chkIsDetail_CheckBox");
+  if ((await showDetail.count()) > 0) {
+    if (!(await showDetail.isChecked().catch(() => false))) {
+      await showDetail.check().catch(() => {});
+    }
   }
 
-  // Property
-  await setLookupDirect(frame, "PropertyID", property.code, property.name);
-
-  // As-of date — either a separate AsOfDate textbox or a Period MM/YYYY pair.
-  // Try AsOfDate first (commercial rent roll classic), fall back to MM/YY pair.
-  const [y, m] = asOfMonthIso.split("-").map(Number);
-  // Use end-of-month for snapshot semantics
-  const lastDay = new Date(y, m, 0).getDate();
-  const mmddyyyy = `${String(m).padStart(2, "0")}/${String(lastDay).padStart(2, "0")}/${y}`;
-  const mmyy = `${String(m).padStart(2, "0")}/${y}`;
-  const dateFieldSet = await trySetAsOfDate(frame, mmddyyyy, mmyy);
-  console.log(`   date field set via: ${dateFieldSet}`);
-
+  // 5. Click Excel and capture the download
   const outPath = resolve(
     downloadDirFor(asOfMonthIso),
     `${slugForProperty(property.code)}-rent-roll-full.xlsx`
   );
-
   const excelBtn = frame.locator("#Excel_Button");
   const [download] = await Promise.all([
     voyagerPage.waitForEvent("download", { timeout: 180_000 }),
@@ -69,105 +96,26 @@ export async function runRentRollFullForProperty(
   return outPath;
 }
 
-/**
- * Probe each candidate URL in order. A URL "works" when the filter iframe
- * renders a `#PropertyID_LookupCode` field within a few seconds — that's the
- * universal Yardi signal that the form loaded.
- */
-async function openRentRollForm(page: Page) {
+async function openCommercialAnalytics(page: Page) {
+  // Force a fresh load so Yardi resets the form (otherwise it can carry stale
+  // ViewState from the previous property's submit).
   const baseUrl = new URL(page.url());
-  const baseDir = baseUrl.pathname.replace(/[^/]*$/, "");
-  for (const candidate of CANDIDATE_URLS) {
-    const url = `${baseUrl.origin}${baseDir}${candidate}?sMenuSet=iData&_=${Date.now()}`;
-    try {
-      const frame = page.frame({ name: "filter" });
-      if (frame) {
-        await frame.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
-      } else {
-        await page.evaluate((u) => {
-          const f = document.querySelector('iframe[name="filter"]') as HTMLIFrameElement | null;
-          if (f) f.src = u;
-        }, url);
-      }
+  const formUrl =
+    `${baseUrl.origin}${baseUrl.pathname.replace(/[^/]*$/, "")}CommReportPropertySummary.aspx?sMenuSet=iAnalytics&_=${Date.now()}`;
 
-      // Wait briefly for the property field to appear; if it does, we found the form.
-      const ok = await page.waitForFunction(
-        () => {
-          const f = document.querySelector('iframe[name="filter"]') as HTMLIFrameElement | null;
-          return !!f?.contentDocument?.getElementById("PropertyID_LookupCode");
-        },
-        { timeout: 6_000 }
-      ).then(() => true).catch(() => false);
-
-      if (ok) {
-        const matched = page.frame({ name: "filter" });
-        if (matched) {
-          console.log(`   matched rent roll URL → ${candidate}`);
-          return matched;
-        }
-      } else {
-        console.log(`   ${candidate}: form did not render`);
-      }
-    } catch (err: any) {
-      console.log(`   ${candidate}: ${err?.message || err}`);
-    }
+  const filterFrame = page.frame({ name: "filter" });
+  if (filterFrame) {
+    await filterFrame.goto(formUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  } else {
+    await page.evaluate((url) => {
+      const f = document.querySelector('iframe[name="filter"]') as HTMLIFrameElement | null;
+      if (f) f.src = url;
+    }, formUrl);
   }
-  return null;
-}
 
-async function trySetAsOfDate(frame: any, mmddyyyy: string, mmyy: string): Promise<string> {
-  // Common Yardi date inputs for rent-roll: AsOfDate, As_Of_Date, RptDate, FromDate
-  const dateCandidates = [
-    "#AsOfDate", "#AsOfDate_TextBox",
-    "#As_Of_Date", "#AsOf_Date_TextBox",
-    "#RptDate", "#RptDate_TextBox",
-    "#FromDate", "#FromDate_TextBox",
-  ];
-  for (const sel of dateCandidates) {
-    const loc = frame.locator(sel).first();
-    if ((await loc.count()) > 0) {
-      await loc.click();
-      await loc.press("Control+A");
-      await loc.fill(mmddyyyy);
-      await loc.press("Tab");
-      return sel;
-    }
-  }
-  // Fall back to the period MM/YY pair used by financial reports
-  const pairCandidates: Array<[string, string]> = [
-    ["#FromMMYY_TextBox", "#ToMMYY_TextBox"],
-    ["#FromPeriod", "#ToPeriod"],
-  ];
-  for (const [from, to] of pairCandidates) {
-    const f = frame.locator(from).first();
-    const t = frame.locator(to).first();
-    if ((await f.count()) > 0 && (await t.count()) > 0) {
-      for (const loc of [f, t]) {
-        await loc.click();
-        await loc.press("Control+A");
-        await loc.fill(mmyy);
-        await loc.press("Tab");
-      }
-      return `${from} + ${to}`;
-    }
-  }
-  return "(none — form has no recognized date field)";
-}
-
-async function setLookupDirect(frame: any, prefix: string, code: string, description: string) {
-  const codeId = `${prefix}_LookupCode`;
-  const descId = `${prefix}_Description`;
-  await frame.evaluate(({ codeId, descId, code, description }: any) => {
-    const codeEl = document.getElementById(codeId) as HTMLInputElement | null;
-    const descEl = document.getElementById(descId) as HTMLInputElement | null;
-    if (codeEl) {
-      codeEl.value = code;
-      codeEl.dispatchEvent(new Event("change", { bubbles: true }));
-      codeEl.dispatchEvent(new Event("blur", { bubbles: true }));
-    }
-    if (descEl) {
-      descEl.value = description;
-      descEl.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  }, { codeId, descId, code, description });
+  await page.waitForFunction(() => {
+    const f = document.querySelector('iframe[name="filter"]') as HTMLIFrameElement | null;
+    return !!f?.contentDocument?.getElementById("PropertyId_LookupCode")
+      && !!f.contentDocument.getElementById("ReportType_DropDownList");
+  }, { timeout: 60_000 });
 }

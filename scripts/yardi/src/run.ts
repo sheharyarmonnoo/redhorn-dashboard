@@ -97,11 +97,13 @@ async function main() {
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "receivable_detail", ok: false, error: msg });
       }
 
-      // Rent Roll (Show Detail / Commercial Analytics) — full export with
-      // monthly rent / SF, annual rent, recoveries, security deposit, and
-      // LOC amount per lease. Soft-fails if the report URL doesn't load on
-      // this Yardi instance — the dashboard panel above still gets us the
-      // basic columns either way.
+      // Rent Roll (Commercial Analytics > Property > Rent Roll) — primary
+      // rent roll source. Verified URL: pages/CommReportPropertySummary.aspx
+      // with ReportType_DropDownList=2. This export has the rich columns
+      // (Security Deposit, LOC, Annual Rec/SF, Term) that the dashboard
+      // "Current Leases" panel does NOT carry. The dashboard panel above
+      // still runs as a redundant cross-check for unit-level coverage, but
+      // this report is now the authoritative source for tenant enrichment.
       try {
         const path = await runRentRollFullForProperty(voyager, property, month);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll_full", ok: true, path });
