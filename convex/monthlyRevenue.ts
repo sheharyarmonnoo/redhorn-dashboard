@@ -64,24 +64,35 @@ export const recomputeFromLatest = mutation({
       )
       .collect();
 
-    // Tally revenue categories from current-period column
-    let rent = 0, cam = 0, electric = 0, lateFees = 0, totalIncome = 0;
+    // Tally revenue categories from current-period column for the chart
+    // breakdown. Skip subtotal / NET lines so we don't double-count when
+    // we're walking individual line items.
+    let rent = 0, cam = 0, electric = 0, lateFees = 0;
     for (const r of lines) {
       const li = (r.lineItem || "").toLowerCase();
       const cp = r.currentPeriod || 0;
-      // Skip subtotals / TOTAL lines so we don't double-count
       if (/^\s*total\b/i.test(r.lineItem) || /^\s*net\b/i.test(r.lineItem)) continue;
       if (/rent|rental income|storage rent/.test(li) && !/expense/.test(li)) rent += cp;
       else if (/electric|utility/.test(li) && !/expense/.test(li)) electric += cp;
       else if (/cam|common area/.test(li) && !/expense/.test(li)) cam += cp;
       else if (/late fee/.test(li)) lateFees += cp;
-      // Sum any positive income line for total
-      if (cp > 0 && /income|rent|recovery|fee/i.test(li) && !/expense/i.test(li)) {
-        totalIncome += cp;
-      }
     }
 
-    // Occupancy = current leases / total units
+    // Headline total comes from the income statement's own "TOTAL INCOME"
+    // line — that's what matches the GL and what the Yardi user expects to
+    // see on the dashboard. Falls back to a category sum if no such line
+    // exists (e.g. on partial / non-standard income statements).
+    const totalIncomeLine = lines.find(r =>
+      /^\s*total\s+income\s*$/i.test((r.lineItem || "").trim())
+    );
+    const total = totalIncomeLine && (totalIncomeLine.currentPeriod || 0) > 0
+      ? totalIncomeLine.currentPeriod
+      : (rent + cam + electric + lateFees);
+
+    // Occupancy is unit-level: expand multi-unit leases (tenant.unit can be
+    // "A-103, A-112, A-85" — three units in one lease row) before counting.
+    // Otherwise multi-unit leases under-count and Hollister reads 65% when
+    // the real number is 82%.
     const tenants = await ctx.db
       .query("tenants")
       .withIndex("by_property_latest", (q) =>
@@ -92,9 +103,16 @@ export const recomputeFromLatest = mutation({
       .query("units")
       .withIndex("by_property", (q) => q.eq("propertyId", property._id))
       .collect();
-    const occupancy = units.length > 0 ? Math.round((tenants.length / units.length) * 100) : 0;
-
-    const total = totalIncome > 0 ? totalIncome : (rent + cam + electric + lateFees);
+    const leasedKeys = new Set<string>();
+    for (const t of tenants) {
+      const raw = (t.unit || "").trim();
+      if (!raw) continue;
+      for (const part of raw.split(",")) {
+        const k = part.trim().toLowerCase();
+        if (k) leasedKeys.add(k);
+      }
+    }
+    const occupancy = units.length > 0 ? Math.round((leasedKeys.size / units.length) * 100) : 0;
 
     // Upsert
     const existing = await ctx.db
@@ -162,7 +180,7 @@ export const recomputeFromMonth = mutation({
       .reverse()[0];
     const lines = inMonth.filter((r) => r.snapshotDate === latestSnapshot);
 
-    let rent = 0, cam = 0, electric = 0, lateFees = 0, totalIncome = 0;
+    let rent = 0, cam = 0, electric = 0, lateFees = 0;
     for (const r of lines) {
       const li = (r.lineItem || "").toLowerCase();
       const cp = r.currentPeriod || 0;
@@ -171,10 +189,14 @@ export const recomputeFromMonth = mutation({
       else if (/electric|utility/.test(li) && !/expense/.test(li)) electric += cp;
       else if (/cam|common area/.test(li) && !/expense/.test(li)) cam += cp;
       else if (/late fee/.test(li)) lateFees += cp;
-      if (cp > 0 && /income|rent|recovery|fee/i.test(li) && !/expense/i.test(li)) {
-        totalIncome += cp;
-      }
     }
+
+    const totalIncomeLine = lines.find(r =>
+      /^\s*total\s+income\s*$/i.test((r.lineItem || "").trim())
+    );
+    const total = totalIncomeLine && (totalIncomeLine.currentPeriod || 0) > 0
+      ? totalIncomeLine.currentPeriod
+      : (rent + cam + electric + lateFees);
 
     const tenants = await ctx.db
       .query("tenants")
@@ -186,9 +208,16 @@ export const recomputeFromMonth = mutation({
       .query("units")
       .withIndex("by_property", (q) => q.eq("propertyId", property._id))
       .collect();
-    const occupancy = units.length > 0 ? Math.round((tenants.length / units.length) * 100) : 0;
-
-    const total = totalIncome > 0 ? totalIncome : (rent + cam + electric + lateFees);
+    const leasedKeys = new Set<string>();
+    for (const t of tenants) {
+      const raw = (t.unit || "").trim();
+      if (!raw) continue;
+      for (const part of raw.split(",")) {
+        const k = part.trim().toLowerCase();
+        if (k) leasedKeys.add(k);
+      }
+    }
+    const occupancy = units.length > 0 ? Math.round((leasedKeys.size / units.length) * 100) : 0;
 
     const existing = await ctx.db
       .query("monthly_revenue")
