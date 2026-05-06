@@ -41,7 +41,7 @@ function RevenueDetail() {
   // value (e.g. 2026-04 = 2026-05 = $162,825).
   const today = new Date();
   const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-  const monthlyRevenue = monthlyRevenueRaw.filter((m: any) => m.month && m.month < cutoff);
+  const monthlyRevenue = monthlyRevenueRaw.filter((m: any) => m.month && m.month <= cutoff);
   const occupied = tenants.filter((t: any) => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant?.includes("Owner"));
   const totalRent = occupied.reduce((s: number, t: any) => s + t.monthlyRent, 0);
   const totalElectric = occupied.reduce((s: number, t: any) => s + t.monthlyElectric, 0);

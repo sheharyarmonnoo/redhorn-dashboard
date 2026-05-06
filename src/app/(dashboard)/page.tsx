@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const monthlyRevenue = useMemo(() => {
     const today = new Date();
     const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-    return monthlyRevenueRaw.filter((m: any) => m.month && m.month < cutoff);
+    return monthlyRevenueRaw.filter((m: any) => m.month && m.month <= cutoff);
   }, [monthlyRevenueRaw]);
   const loading = useDashboardLoading(property?._id);
   const { theme } = useTheme();

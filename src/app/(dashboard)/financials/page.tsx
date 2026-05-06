@@ -53,7 +53,7 @@ export default function FinancialsPage() {
     const today = new Date();
     const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
     return [...monthlyRevenue]
-      .filter((m: any) => m.month && m.month < cutoff)
+      .filter((m: any) => m.month && m.month <= cutoff)
       .sort((a: any, b: any) => a.month.localeCompare(b.month))
       .slice(-12);
   }, [monthlyRevenue]);
