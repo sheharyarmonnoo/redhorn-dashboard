@@ -12,6 +12,11 @@ export default defineSchema({
     hasData: v.boolean(),
     sitePlanSvg: v.optional(v.string()),
     isActive: v.boolean(),
+    // Property manager contact for the "Email PM" action
+    pmName: v.optional(v.string()),
+    pmEmail: v.optional(v.string()),
+    pmPhone: v.optional(v.string()),
+    pmCompany: v.optional(v.string()),
   }).index("by_code", ["code"]),
 
   // ===== TENANT OVERRIDES =====
@@ -35,6 +40,10 @@ export default defineSchema({
     // bumps next + the new monthly rent post-bump.
     nextRentIncrease: v.optional(v.string()),
     nextRentIncreaseAmount: v.optional(v.number()),
+    // Manual contact info — tenant emails aren't in Yardi exports
+    tenantEmail: v.optional(v.string()),
+    tenantPhone: v.optional(v.string()),
+    tenantContactName: v.optional(v.string()),
     updatedAt: v.string(),
     updatedBy: v.optional(v.string()),
   })
@@ -356,6 +365,30 @@ export default defineSchema({
     createdAt: v.string(),
     updatedAt: v.string(),
   }).index("by_stage", ["stage"]),
+
+  // ===== EMAIL LOG =====
+  // Audit trail of every email sent through the dashboard. Each row carries
+  // the SMTP response so a delivery failure can be diagnosed later.
+  email_log: defineTable({
+    propertyId: v.optional(v.id("properties")),
+    relatedType: v.optional(v.string()),   // "tenant" | "alert" | "general"
+    relatedId: v.optional(v.string()),     // unit code, alert id, etc.
+    toEmail: v.string(),
+    toName: v.optional(v.string()),
+    cc: v.optional(v.array(v.string())),
+    bcc: v.optional(v.array(v.string())),
+    subject: v.string(),
+    body: v.string(),
+    isHtml: v.optional(v.boolean()),
+    sentBy: v.string(),
+    sentAt: v.string(),
+    status: v.string(),                    // "sent" | "failed"
+    smtpMessageId: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_related", ["relatedType", "relatedId"])
+    .index("by_recipient", ["toEmail"]),
 
   // ===== LINE BUDGETS (manual input or Yardi budget export) =====
   // Annual budget per income-statement line item per property per year.

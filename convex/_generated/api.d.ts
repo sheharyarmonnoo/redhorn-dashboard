@@ -14,6 +14,7 @@ import type * as agingRecords from "../agingRecords.js";
 import type * as alerts from "../alerts.js";
 import type * as deals from "../deals.js";
 import type * as delinquentCases from "../delinquentCases.js";
+import type * as emails from "../emails.js";
 import type * as files from "../files.js";
 import type * as glTransactions from "../glTransactions.js";
 import type * as http from "../http.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   alerts: typeof alerts;
   deals: typeof deals;
   delinquentCases: typeof delinquentCases;
+  emails: typeof emails;
   files: typeof files;
   glTransactions: typeof glTransactions;
   http: typeof http;

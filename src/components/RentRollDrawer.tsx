@@ -2,8 +2,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/nextjs";
+import { Mail } from "lucide-react";
 import { api } from "../../convex/_generated/api";
-import { formatCurrency, normalizeTenantName, useReceivableDetails } from "@/hooks/useConvexData";
+import { formatCurrency, normalizeTenantName, useReceivableDetails, useProperties } from "@/hooks/useConvexData";
+import EmailComposer, { type EmailContext } from "./EmailComposer";
 
 type Tenant = any;
 
@@ -27,6 +29,9 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   const [draft, setDraft] = useState<any | null>(tenant);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"details" | "ledger" | "electric">("details");
+  const [emailCtx, setEmailCtx] = useState<EmailContext | null>(null);
+  const { properties } = useProperties();
+  const property = useMemo(() => properties.find((p: any) => p._id === tenant?.propertyId) || null, [properties, tenant?.propertyId]);
 
   useEffect(() => { setDraft(tenant); }, [tenant?.unit, tenant?.propertyId]);
   useEffect(() => { setTab("details"); }, [tenant?.unit, tenant?.propertyId]);
@@ -55,7 +60,9 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
     || (draft.notes || "") !== (tenant.notes || "")
     || draft.pastDueAmount !== tenant.pastDueAmount
     || (draft.nextRentIncrease || "") !== (tenant.nextRentIncrease || "")
-    || (draft.nextRentIncreaseAmount || 0) !== (tenant.nextRentIncreaseAmount || 0);
+    || (draft.nextRentIncreaseAmount || 0) !== (tenant.nextRentIncreaseAmount || 0)
+    || (draft.tenantEmail || "") !== (tenant.tenantEmail || "")
+    || (draft.tenantPhone || "") !== (tenant.tenantPhone || "");
 
   async function handleSave() {
     if (!draft || !tenant.propertyId || !tenant.unit) return;
@@ -76,6 +83,8 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
       if (draft.pastDueAmount !== tenant.pastDueAmount) fields.pastDueAmount = numOrUndef(draft.pastDueAmount);
       if ((draft.nextRentIncrease || "") !== (tenant.nextRentIncrease || "")) fields.nextRentIncrease = strOrUndef(draft.nextRentIncrease);
       if ((draft.nextRentIncreaseAmount || 0) !== (tenant.nextRentIncreaseAmount || 0)) fields.nextRentIncreaseAmount = numOrUndef(draft.nextRentIncreaseAmount);
+      if ((draft.tenantEmail || "") !== (tenant.tenantEmail || "")) fields.tenantEmail = strOrUndef(draft.tenantEmail);
+      if ((draft.tenantPhone || "") !== (tenant.tenantPhone || "")) fields.tenantPhone = strOrUndef(draft.tenantPhone);
       if (Object.keys(fields).length === 0) return;
       await setOverride({
         propertyId: tenant.propertyId as any,
@@ -108,6 +117,26 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
             <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] truncate">{tenant.tenant || "— Vacant —"}</p>
           </div>
           <div className="flex items-center gap-2">
+            {tenant.tenantEmail && (
+              <button
+                onClick={() => setEmailCtx(buildTenantEmail(tenant, property))}
+                className="flex items-center gap-1 text-[10px] font-medium text-[#2563eb] dark:text-[#60a5fa] hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-1 rounded cursor-pointer"
+                title={`Email ${tenant.tenantEmail}`}
+              >
+                <Mail size={11} />
+                Tenant
+              </button>
+            )}
+            {property?.pmEmail && (
+              <button
+                onClick={() => setEmailCtx(buildPmEmail(tenant, property))}
+                className="flex items-center gap-1 text-[10px] font-medium text-[#2563eb] dark:text-[#60a5fa] hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-1 rounded cursor-pointer"
+                title={`Email PM (${property.pmEmail})`}
+              >
+                <Mail size={11} />
+                PM
+              </button>
+            )}
             {tenant.hasOverride && (
               <span className="text-[10px] font-medium text-[#d97706] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 px-2 py-0.5 rounded">Modified</span>
             )}
@@ -194,6 +223,24 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
               <NumberInput value={draft.nextRentIncreaseAmount ?? 0} onChange={v => setDraft({ ...draft, nextRentIncreaseAmount: v })} />
             </Field>
 
+            <Field label="Tenant Email" overridden={tenant.overrideFields?.includes("tenantEmail")}>
+              <input
+                type="email"
+                value={draft.tenantEmail || ""}
+                onChange={(e) => setDraft({ ...draft, tenantEmail: e.target.value })}
+                placeholder="contact@example.com"
+                className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+              />
+            </Field>
+            <Field label="Tenant Phone" overridden={tenant.overrideFields?.includes("tenantPhone")}>
+              <input
+                type="tel"
+                value={draft.tenantPhone || ""}
+                onChange={(e) => setDraft({ ...draft, tenantPhone: e.target.value })}
+                className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+              />
+            </Field>
+
             {/* Monthly Electric + Past Due intentionally hidden — billback
                 values aren't stable; the synced data still flows through
                 Convex but isn't surfaced here. */}
@@ -253,8 +300,58 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
         </div>
         )}
       </div>
+      <EmailComposer open={!!emailCtx} context={emailCtx} onClose={() => setEmailCtx(null)} />
     </div>
   );
+}
+
+function buildTenantEmail(tenant: any, property: any): EmailContext {
+  const subject = `Regarding ${property?.name || "your lease"} — Unit ${tenant.unit}`;
+  const greeting = tenant.tenantContactName ? `Hi ${tenant.tenantContactName},` : "Hello,";
+  const balanceLine = tenant.pastDueAmount > 0
+    ? `\n\nOur records show a balance of ${formatCurrency(tenant.pastDueAmount)} on this account.`
+    : "";
+  const body =
+`${greeting}
+
+I'm reaching out about your lease at ${property?.name || ""} — Unit ${tenant.unit}.${balanceLine}
+
+Please let me know if you have any questions.
+
+Best regards,`;
+  return {
+    propertyId: tenant.propertyId,
+    relatedType: "tenant",
+    relatedId: tenant.unit,
+    toEmail: tenant.tenantEmail || "",
+    toName: tenant.tenantContactName || tenant.tenant,
+    subject,
+    body,
+  };
+}
+
+function buildPmEmail(tenant: any, property: any): EmailContext {
+  const subject = `${property?.name || "Property"} — Unit ${tenant.unit} (${tenant.tenant})`;
+  const balanceLine = tenant.pastDueAmount > 0
+    ? `\n\nThis tenant has a current balance of ${formatCurrency(tenant.pastDueAmount)}.`
+    : "";
+  const body =
+`Hi ${property?.pmName || "team"},
+
+Following up on Unit ${tenant.unit} — ${tenant.tenant} at ${property?.name || ""}.${balanceLine}
+
+${property?.pmCompany ? `\n— ${property.pmCompany}` : ""}
+
+Best regards,`;
+  return {
+    propertyId: tenant.propertyId,
+    relatedType: "tenant",
+    relatedId: tenant.unit,
+    toEmail: property?.pmEmail || "",
+    toName: property?.pmName,
+    subject,
+    body,
+  };
 }
 
 function LedgerTable({ rows, emptyLabel }: { rows: any[]; emptyLabel: string }) {

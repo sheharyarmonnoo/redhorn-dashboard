@@ -13,6 +13,9 @@ const OVERRIDE_FIELDS = v.object({
   delinquencyStage: v.optional(v.string()),
   nextRentIncrease: v.optional(v.string()),
   nextRentIncreaseAmount: v.optional(v.number()),
+  tenantEmail: v.optional(v.string()),
+  tenantPhone: v.optional(v.string()),
+  tenantContactName: v.optional(v.string()),
 });
 
 /**

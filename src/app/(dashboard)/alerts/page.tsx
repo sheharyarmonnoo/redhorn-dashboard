@@ -8,7 +8,8 @@ import { useMutation } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { api } from "../../../../convex/_generated/api";
 import PageHeader from "@/components/PageHeader";
-import { Zap, DollarSign, CalendarClock, AlertTriangle } from "lucide-react";
+import EmailComposer, { type EmailContext } from "@/components/EmailComposer";
+import { Zap, DollarSign, CalendarClock, AlertTriangle, Mail } from "lucide-react";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -486,6 +487,9 @@ export default function AlertsPage() {
         }}
         onMarkCompleted={handleMarkCompleted}
         onMarkFalseFlag={(row) => setFlagging({ row })}
+        propertyId={activeProperty?._id}
+        tenants={tenants}
+        propertyPm={activeProperty ? { name: activeProperty.pmName, email: activeProperty.pmEmail, company: activeProperty.pmCompany } : null}
       />
 
       {flagging && (
@@ -652,14 +656,18 @@ function AlertModal({
 }
 
 function AlertDrawer({
-  alert: alertProp, onClose, onSave, onMarkCompleted, onMarkFalseFlag,
+  alert: alertProp, onClose, onSave, onMarkCompleted, onMarkFalseFlag, propertyId, tenants, propertyPm,
 }: {
   alert: AlertRow | null;
   onClose: () => void;
   onSave: (updates: Partial<AlertRow>) => void;
   onMarkCompleted: (row: AlertRow) => void | Promise<void>;
   onMarkFalseFlag: (row: AlertRow) => void;
+  propertyId?: string;
+  tenants: any[];
+  propertyPm: { name?: string; email?: string; company?: string } | null;
 }) {
+  const [emailCtx, setEmailCtx] = useState<EmailContext | null>(null);
   const [cached, setCached] = useState<AlertRow | null>(alertProp);
   const [closing, setClosing] = useState(false);
   const alert = alertProp ?? cached;
@@ -797,7 +805,7 @@ function AlertDrawer({
         </div>
 
         <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46] sticky bottom-0 bg-white dark:bg-[#18181b]">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => onMarkCompleted(alert)}
               className="text-[12px] font-medium bg-[#16a34a] text-white hover:bg-[#15803d] px-3 py-1.5 rounded cursor-pointer"
@@ -812,6 +820,13 @@ function AlertDrawer({
                 Mark as False Flag
               </button>
             )}
+            <button
+              onClick={() => setEmailCtx(buildAlertEmail(alert, tenants, propertyPm, propertyId))}
+              className="flex items-center gap-1.5 text-[12px] font-medium border border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#60a5fa] hover:bg-blue-50 dark:hover:bg-blue-950/30 px-3 py-1.5 rounded cursor-pointer"
+            >
+              <Mail size={13} />
+              Email
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -832,8 +847,56 @@ function AlertDrawer({
           </div>
         </div>
       </div>
+      <EmailComposer open={!!emailCtx} context={emailCtx} onClose={() => setEmailCtx(null)} />
     </div>
   );
+}
+
+function buildAlertEmail(
+  alert: AlertRow,
+  tenants: any[],
+  pm: { name?: string; email?: string; company?: string } | null,
+  propertyId?: string
+): EmailContext {
+  // Prefer the tenant's email if we have it. Otherwise fall back to PM.
+  const t = alert.unit ? tenants.find((x: any) => (x.unit || "").toLowerCase() === alert.unit.toLowerCase()) : null;
+  const tenantEmail = t?.tenantEmail;
+  const toEmail = tenantEmail || pm?.email || "";
+  const toName = tenantEmail ? (t?.tenantContactName || t?.tenant) : pm?.name;
+
+  const subject = alert.title
+    ? `${alert.title}${alert.unit ? ` — Unit ${alert.unit}` : ""}`
+    : `${alert.category} — Unit ${alert.unit || ""}`;
+
+  const cleanDetail = (alert.detail || "").replace(/\*\*/g, "").replace(/^- /gm, "• ");
+  const greeting = tenantEmail
+    ? (t?.tenantContactName ? `Hi ${t.tenantContactName},` : "Hello,")
+    : (pm?.name ? `Hi ${pm.name},` : "Hi team,");
+
+  const subject_intro = tenantEmail
+    ? `I'm reaching out about your unit:`
+    : `Following up on Unit ${alert.unit} — ${alert.tenant || ""}:`;
+
+  const body =
+`${greeting}
+
+${subject_intro}
+
+${cleanDetail}
+
+Please let me know if you have questions or need more context.
+
+Best regards,`;
+
+  return {
+    propertyId,
+    relatedType: "alert",
+    relatedId: alert.id,
+    toEmail,
+    toName,
+    subject,
+    body,
+  };
 }
 
 function FalseFlagModal({ title, onCancel, onSubmit }: {

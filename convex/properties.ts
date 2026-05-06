@@ -38,6 +38,10 @@ export const update = mutation({
     location: v.optional(v.string()),
     sqft: v.optional(v.string()),
     hasData: v.optional(v.boolean()),
+    pmName: v.optional(v.string()),
+    pmEmail: v.optional(v.string()),
+    pmPhone: v.optional(v.string()),
+    pmCompany: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;

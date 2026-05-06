@@ -1,0 +1,181 @@
+"use client";
+import { useState, useEffect } from "react";
+import { useAction } from "convex/react";
+import { useUser } from "@clerk/nextjs";
+import { X, Send } from "lucide-react";
+import { api } from "../../convex/_generated/api";
+
+export interface EmailContext {
+  propertyId?: string;
+  relatedType?: "tenant" | "alert" | "general";
+  relatedId?: string;
+  toEmail: string;
+  toName?: string;
+  subject: string;
+  body: string;
+  ccDefault?: string[];
+}
+
+interface Props {
+  open: boolean;
+  context: EmailContext | null;
+  onClose: () => void;
+  onSent?: () => void;
+}
+
+export default function EmailComposer({ open, context, onClose, onSent }: Props) {
+  const sendEmail = useAction(api.emails.send);
+  const { user } = useUser();
+  const [toEmail, setToEmail] = useState("");
+  const [toName, setToName] = useState("");
+  const [cc, setCc] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    if (open && context) {
+      setToEmail(context.toEmail || "");
+      setToName(context.toName || "");
+      setCc((context.ccDefault || []).join(", "));
+      setSubject(context.subject || "");
+      setBody(context.body || "");
+      setResult(null);
+    }
+  }, [open, context]);
+
+  if (!open || !context) return null;
+
+  async function handleSend() {
+    if (!toEmail.trim() || !subject.trim() || !body.trim()) return;
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await sendEmail({
+        propertyId: context!.propertyId as any,
+        relatedType: context!.relatedType,
+        relatedId: context!.relatedId,
+        toEmail: toEmail.trim(),
+        toName: toName.trim() || undefined,
+        cc: cc.split(",").map(s => s.trim()).filter(Boolean),
+        subject: subject.trim(),
+        body,
+        sentBy: user?.fullName || user?.primaryEmailAddress?.emailAddress || "User",
+      });
+      if (res.ok) {
+        setResult({ ok: true, message: "Sent successfully." });
+        onSent?.();
+        setTimeout(() => onClose(), 1200);
+      } else {
+        setResult({ ok: false, message: res.error || "Send failed." });
+      }
+    } catch (err: any) {
+      setResult({ ok: false, message: err?.message || "Send failed." });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 dark:bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
+          <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">New Email</p>
+          <button onClick={onClose} className="p-1 hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] rounded cursor-pointer">
+            <X size={16} className="text-[#a1a1aa]" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          <Field label="To">
+            <div className="grid grid-cols-[1fr_180px] gap-2">
+              <input
+                type="email"
+                value={toEmail}
+                onChange={e => setToEmail(e.target.value)}
+                placeholder="recipient@example.com"
+                className="text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+              />
+              <input
+                type="text"
+                value={toName}
+                onChange={e => setToName(e.target.value)}
+                placeholder="Name (optional)"
+                className="text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+              />
+            </div>
+          </Field>
+
+          <Field label="CC">
+            <input
+              type="text"
+              value={cc}
+              onChange={e => setCc(e.target.value)}
+              placeholder="comma-separated emails (optional)"
+              className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            />
+          </Field>
+
+          <Field label="Subject">
+            <input
+              type="text"
+              value={subject}
+              onChange={e => setSubject(e.target.value)}
+              className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            />
+          </Field>
+
+          <Field label="Body">
+            <textarea
+              value={body}
+              onChange={e => setBody(e.target.value)}
+              rows={12}
+              className="w-full text-[12px] px-3 py-2 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] resize-none leading-relaxed font-mono"
+            />
+          </Field>
+
+          {result && (
+            <div className={`text-[12px] px-3 py-2 rounded ${
+              result.ok
+                ? "bg-green-50 dark:bg-green-950/30 text-[#16a34a] border border-green-200 dark:border-green-900/40"
+                : "bg-red-50 dark:bg-red-950/30 text-[#dc2626] border border-red-200 dark:border-red-900/40"
+            }`}>
+              {result.message}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46]">
+          <button
+            onClick={onClose}
+            disabled={sending}
+            className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] px-3 py-1.5 rounded cursor-pointer disabled:opacity-30"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={sending || !toEmail.trim() || !subject.trim() || !body.trim()}
+            className="flex items-center gap-1.5 text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-4 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Send size={13} />
+            {sending ? "Sending…" : "Send"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide mb-1 block">{label}</label>
+      {children}
+    </div>
+  );
+}

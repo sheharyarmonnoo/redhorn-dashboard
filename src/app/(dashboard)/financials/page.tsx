@@ -1,7 +1,9 @@
 "use client";
 import { useMemo, useState, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
+import { useMutation } from "convex/react";
 import PageHeader from "@/components/PageHeader";
+import { api } from "../../../../convex/_generated/api";
 import { useActiveProperty, useIncomeLines, useMonthlyRevenue, useDebt, useLineBudgets, formatCurrency } from "@/hooks/useConvexData";
 
 const SECTION_ORDER = ["income", "expense", "net"];
@@ -25,6 +27,7 @@ export default function FinancialsPage() {
   const rawLines = useIncomeLines(property?._id);
   const monthlyRevenue = useMonthlyRevenue(property?._id);
   const { debt, upsertDebt, clearDebt } = useDebt(property?._id);
+  const updateProperty = useMutation(api.properties.update);
   const { user } = useUser();
 
   const [view, setView] = useState<"statement" | "trend" | "budget" | "debt">("statement");
@@ -183,24 +186,33 @@ export default function FinancialsPage() {
         />
       )}
       {view === "debt" && (
-        <DebtPanel
-          debt={debt}
-          noi={noi}
-          dscr={dscr}
-          onSave={async (form) => {
-            if (!property?._id) return;
-            await upsertDebt({
-              propertyId: property._id as any,
-              ...form,
-              updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
-            });
-          }}
-          onClear={async () => {
-            if (!property?._id) return;
-            if (!window.confirm("Remove debt info for this property? DSCR will stop calculating until re-entered.")) return;
-            await clearDebt({ propertyId: property._id as any });
-          }}
-        />
+        <div className="space-y-4">
+          <PmContactPanel
+            property={property}
+            onSave={async (form) => {
+              if (!property?._id) return;
+              await updateProperty({ id: property._id as any, ...form });
+            }}
+          />
+          <DebtPanel
+            debt={debt}
+            noi={noi}
+            dscr={dscr}
+            onSave={async (form) => {
+              if (!property?._id) return;
+              await upsertDebt({
+                propertyId: property._id as any,
+                ...form,
+                updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
+              });
+            }}
+            onClear={async () => {
+              if (!property?._id) return;
+              if (!window.confirm("Remove debt info for this property? DSCR will stop calculating until re-entered.")) return;
+              await clearDebt({ propertyId: property._id as any });
+            }}
+          />
+        </div>
       )}
     </div>
   );
@@ -559,6 +571,91 @@ interface DebtForm {
   loanStartDate?: string;
   loanMaturityDate?: string;
   notes?: string;
+}
+
+function PmContactPanel({
+  property,
+  onSave,
+}: {
+  property: any;
+  onSave: (form: { pmName?: string; pmEmail?: string; pmPhone?: string; pmCompany?: string }) => Promise<void>;
+}) {
+  const [form, setForm] = useState({
+    pmName: property?.pmName || "",
+    pmEmail: property?.pmEmail || "",
+    pmPhone: property?.pmPhone || "",
+    pmCompany: property?.pmCompany || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number>(0);
+
+  useEffect(() => {
+    setForm({
+      pmName: property?.pmName || "",
+      pmEmail: property?.pmEmail || "",
+      pmPhone: property?.pmPhone || "",
+      pmCompany: property?.pmCompany || "",
+    });
+  }, [property?._id, property?.pmEmail]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(form);
+      setSavedAt(Date.now());
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-5">
+      <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-1">Property Manager Contact</p>
+      <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mb-4">Used by the "Email PM" action across rent roll and alerts.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <DebtField label="PM Name">
+          <input
+            type="text"
+            value={form.pmName}
+            onChange={e => setForm({ ...form, pmName: e.target.value })}
+            className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+          />
+        </DebtField>
+        <DebtField label="Company">
+          <input
+            type="text"
+            value={form.pmCompany}
+            onChange={e => setForm({ ...form, pmCompany: e.target.value })}
+            className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+          />
+        </DebtField>
+        <DebtField label="Email">
+          <input
+            type="email"
+            value={form.pmEmail}
+            onChange={e => setForm({ ...form, pmEmail: e.target.value })}
+            placeholder="pm@example.com"
+            className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+          />
+        </DebtField>
+        <DebtField label="Phone">
+          <input
+            type="tel"
+            value={form.pmPhone}
+            onChange={e => setForm({ ...form, pmPhone: e.target.value })}
+            className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+          />
+        </DebtField>
+      </div>
+      <div className="flex items-center justify-end mt-4">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-4 py-1.5 rounded cursor-pointer disabled:opacity-40"
+        >
+          {saving ? "Saving…" : savedAt ? "Saved" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function BudgetVsActuals({
