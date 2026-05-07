@@ -1133,7 +1133,7 @@ function BudgetVsActuals({
               title={isSynced ? "Synced from Yardi 12-Month Budget — manual entry disabled" : undefined}
               className="block w-full text-[12px] text-right px-2 py-1 text-[#18181b] dark:text-[#fafafa]"
             >
-              {showBudget ? formatCurrency(budgetRaw) : "—"}
+              {showBudget ? formatCurrency(Math.round(budgetRaw)) : "—"}
             </span>
           )}
         </span>
@@ -1187,10 +1187,10 @@ function BudgetVsActuals({
             </p>
           )}
           <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">
-            Budgeted: <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{formatCurrency(totals.budgetSum)}</span> ·
+            Budgeted: <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{formatCurrency(Math.round(totals.budgetSum))}</span> ·
             YTD Actual: <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{formatCurrency(totals.ytdSum)}</span> ·
             Variance: <span className={`font-medium ${totals.ytdSum - totals.budgetSum > 0 ? "text-[#dc2626]" : "text-[#16a34a]"}`}>
-              {formatCurrency(totals.ytdSum - totals.budgetSum)}
+              {formatCurrency(Math.round(totals.ytdSum - totals.budgetSum))}
             </span>
           </p>
         </div>
@@ -1595,7 +1595,7 @@ function BudgetVsActualsHighLevel({
               {monthActual === 0 ? "—" : formatCurrency(Math.abs(monthActual))}
             </span>
             <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">
-              {hasBudget ? formatCurrency(Math.abs(monthBudget)) : "—"}
+              {hasBudget ? formatCurrency(Math.round(Math.abs(monthBudget))) : "—"}
             </span>
             <span className={`text-right ${monthVarPct === null ? "text-[#a1a1aa]" : monthVarPct >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
               {monthVarPct === null ? "—" : `${monthVarPct >= 0 ? "+" : ""}${monthVarPct.toFixed(0)}%`}
@@ -1604,7 +1604,7 @@ function BudgetVsActualsHighLevel({
               {ytdActual === 0 ? "—" : formatCurrency(Math.abs(ytdActual))}
             </span>
             <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">
-              {hasBudget ? formatCurrency(Math.abs(ytdBudget)) : "—"}
+              {hasBudget ? formatCurrency(Math.round(Math.abs(ytdBudget))) : "—"}
             </span>
             <span className={`text-right ${ytdVarPct === null ? "text-[#a1a1aa]" : ytdVarPct >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
               {ytdVarPct === null ? "—" : `${ytdVarPct >= 0 ? "+" : ""}${ytdVarPct.toFixed(0)}%`}
