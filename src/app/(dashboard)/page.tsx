@@ -176,7 +176,7 @@ export default function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Meeting Dashboard"
+        title="Dashboard"
         subtitle={(() => {
           const latestMonth = monthlyRevenue.length > 0 ? monthlyRevenue[monthlyRevenue.length - 1].month : "";
           // "2026-03" → "March 2026"; leaves anything that isn't a YYYY-MM alone
