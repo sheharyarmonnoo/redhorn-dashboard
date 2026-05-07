@@ -99,6 +99,35 @@ export const probeNamesByCode = query({
   },
 });
 
+export const probeUnitsByCode = query({
+  args: { propertyCode: v.string(), units: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const property = await ctx.db
+      .query("properties")
+      .withIndex("by_code", (q) => q.eq("code", args.propertyCode))
+      .first();
+    if (!property) return { error: "property not found" };
+    const all = await ctx.db
+      .query("receivable_details")
+      .withIndex("by_property", (q) => q.eq("propertyId", property._id))
+      .take(5000);
+    const norm = (s: string) => (s || "").trim().toLowerCase();
+    const result: any[] = [];
+    for (const target of args.units) {
+      const t = norm(target);
+      const matches = all.filter((r) => {
+        const rowUnit = norm(r.unit || "");
+        if (!rowUnit) return false;
+        if (rowUnit === t) return true;
+        return rowUnit.split(",").map(p => p.trim()).includes(t);
+      });
+      const distinctNames = Array.from(new Set(matches.map((m) => m.tenantName))).sort();
+      result.push({ unit: target, rows: matches.length, distinctNames });
+    }
+    return { propertyCode: args.propertyCode, totalLedgerRows: all.length, hits: result };
+  },
+});
+
 export const listByProperty = query({
   args: {
     propertyId: v.id("properties"),

@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Plus, X, Check, Trash2, RotateCcw, Pencil } from "lucide-react";
+import { Plus, X, Check, Trash2, RotateCcw, Pencil, MessageSquare } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
 import { useActiveProperty, useUnits, useMaintenance, formatCurrency } from "@/hooks/useConvexData";
@@ -94,14 +95,18 @@ function blankForm(): FormState {
 
 export default function MaintenancePage() {
   const property = useActiveProperty();
-  const { items, loading, create, update, remove, markCompleted } = useMaintenance(property?._id);
+  const { items, loading, create, update, remove, markCompleted, addMeetingNote, removeMeetingNote } = useMaintenance(property?._id);
   const units = useUnits(property?._id);
+  const { user } = useUser();
+  const currentUser = user?.fullName || user?.primaryEmailAddress?.emailAddress || "User";
 
   const [tab, setTab] = useState<Tab>("active");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(blankForm());
   const [saving, setSaving] = useState(false);
+
+  const editingItem = editingId ? items.find((i: any) => i._id === editingId) : null;
 
   // Stats — computed off the full unfiltered list so they don't change as
   // the user toggles tabs.
@@ -298,6 +303,16 @@ export default function MaintenancePage() {
           saving={saving}
           editing={!!editingId}
           unitOptions={units.map((u: any) => u.unit).filter(Boolean)}
+          meetingNotes={editingItem?.meetingNotes || []}
+          canAddNotes={!!editingId}
+          onAddNote={async (text: string) => {
+            if (!editingId) return;
+            await addMeetingNote({ id: editingId as any, text, author: currentUser });
+          }}
+          onRemoveNote={async (noteId: string) => {
+            if (!editingId) return;
+            await removeMeetingNote({ id: editingId as any, noteId });
+          }}
         />
       )}
     </div>
@@ -384,6 +399,12 @@ function ItemList({
                   Next due: {formatShortDate(r.nextDueDate)}
                 </span>
               )}
+              {r.meetingNotes && r.meetingNotes.length > 0 && (
+                <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
+                  <MessageSquare className="w-2.5 h-2.5" />
+                  {r.meetingNotes.length} {r.meetingNotes.length === 1 ? "note" : "notes"}
+                </span>
+              )}
             </button>
             <span className="text-[#71717a] dark:text-[#a1a1aa]">{r.unit || "—"}</span>
             <span className="text-[#71717a] dark:text-[#a1a1aa]">{r.cost ? formatCurrency(r.cost) : "—"}</span>
@@ -432,6 +453,10 @@ function ItemModal({
   saving,
   editing,
   unitOptions,
+  meetingNotes,
+  canAddNotes,
+  onAddNote,
+  onRemoveNote,
 }: {
   form: FormState;
   setForm: (f: FormState) => void;
@@ -440,7 +465,26 @@ function ItemModal({
   saving: boolean;
   editing: boolean;
   unitOptions: string[];
+  meetingNotes: Array<{ id: string; text: string; author: string; createdAt: number }>;
+  canAddNotes: boolean;
+  onAddNote: (text: string) => Promise<void>;
+  onRemoveNote: (noteId: string) => Promise<void>;
 }) {
+  const [noteDraft, setNoteDraft] = useState("");
+  const [postingNote, setPostingNote] = useState(false);
+
+  async function handleAddNote() {
+    const text = noteDraft.trim();
+    if (!text) return;
+    setPostingNote(true);
+    try {
+      await onAddNote(text);
+      setNoteDraft("");
+    } finally {
+      setPostingNote(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
@@ -581,6 +625,84 @@ function ItemModal({
               </select>
             </Field>
           )}
+
+          {/* Meeting notes thread — only available for existing tasks since
+              we need a saved row to attach notes to. */}
+          <div className="pt-3 border-t border-[#e4e4e7] dark:border-[#3f3f46]">
+            <p className="text-[10px] uppercase tracking-wide font-semibold text-[#a1a1aa] dark:text-[#71717a] mb-2 flex items-center gap-1.5">
+              <MessageSquare className="w-3 h-3" />
+              Meeting Notes {meetingNotes.length > 0 && (
+                <span className="text-[#71717a]">({meetingNotes.length})</span>
+              )}
+            </p>
+            {!canAddNotes ? (
+              <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] italic">
+                Save the task first, then reopen it to add meeting notes.
+              </p>
+            ) : (
+              <>
+                {meetingNotes.length > 0 && (
+                  <div className="space-y-2 mb-3 max-h-[180px] overflow-y-auto">
+                    {[...meetingNotes].sort((a, b) => b.createdAt - a.createdAt).map((n) => (
+                      <div
+                        key={n.id}
+                        className="bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <span className="text-[10px] font-medium text-[#18181b] dark:text-[#fafafa]">
+                            {n.author}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] tabular-nums">
+                              {new Date(n.createdAt).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            <button
+                              onClick={() => onRemoveNote(n.id)}
+                              title="Delete note"
+                              className="text-[#a1a1aa] hover:text-[#dc2626] cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] whitespace-pre-wrap leading-relaxed">
+                          {n.text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <textarea
+                  rows={2}
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      handleAddNote();
+                    }
+                  }}
+                  placeholder="Add a meeting note… (Cmd/Ctrl + Enter to post)"
+                  className={inputCls}
+                />
+                <div className="flex justify-end mt-2">
+                  <button
+                    onClick={handleAddNote}
+                    disabled={postingNote || !noteDraft.trim()}
+                    className="text-[11px] font-medium px-2.5 py-1 rounded bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:opacity-90 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {postingNote ? "Posting…" : "Post Note"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46]">

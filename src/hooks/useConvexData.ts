@@ -472,6 +472,8 @@ export function useMaintenance(propertyId: string | undefined) {
   const update = useMutation(api.maintenanceLog.update);
   const remove = useMutation(api.maintenanceLog.remove);
   const markCompleted = useMutation(api.maintenanceLog.markCompleted);
+  const addMeetingNote = useMutation(api.maintenanceLog.addMeetingNote);
+  const removeMeetingNote = useMutation(api.maintenanceLog.removeMeetingNote);
   return {
     items: items ?? [],
     loading: items === undefined,
@@ -479,6 +481,8 @@ export function useMaintenance(propertyId: string | undefined) {
     update,
     remove,
     markCompleted,
+    addMeetingNote,
+    removeMeetingNote,
   };
 }
 

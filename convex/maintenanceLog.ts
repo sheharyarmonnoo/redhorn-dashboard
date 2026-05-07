@@ -117,6 +117,40 @@ export const markCompleted = mutation({
   },
 });
 
+export const addMeetingNote = mutation({
+  args: {
+    id: v.id("maintenance_log"),
+    text: v.string(),
+    author: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.id);
+    if (!row) return;
+    const note = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: args.text,
+      author: args.author,
+      createdAt: Date.now(),
+    };
+    const next = [...(row.meetingNotes || []), note];
+    await ctx.db.patch(args.id, { meetingNotes: next });
+    return note;
+  },
+});
+
+export const removeMeetingNote = mutation({
+  args: {
+    id: v.id("maintenance_log"),
+    noteId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.id);
+    if (!row) return;
+    const next = (row.meetingNotes || []).filter((n) => n.id !== args.noteId);
+    await ctx.db.patch(args.id, { meetingNotes: next });
+  },
+});
+
 // Add `frequency` to an ISO yyyy-mm-dd date and return the new ISO date.
 // Falls back to "annually" if the frequency string isn't recognized so the
 // item still gets a valid future due date instead of silently breaking.
