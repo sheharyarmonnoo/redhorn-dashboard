@@ -140,15 +140,14 @@ export default function FinancialsPage() {
     return indexByLineItem(snap);
   }, [allHistoricLines, comparePeriod]);
 
-  // Toggle that exposes leaf rows in the IS view. Default OFF -> Yardi-style
-  // high-level summary (level-1 headers + TOTAL/NET subtotal rows only).
-  const [showAllLines, setShowAllLines] = useState(false);
-
-  // Sort lines by hierarchy so subtotals follow their children
+  // Yardi inserts rows in income-statement order; preserve that by sorting on
+  // _creationTime ascending. Previous code sorted alphabetically, which broke
+  // the natural P&L hierarchy (INCOME -> children -> TOTAL -> EXPENSE -> ...).
   const lines = useMemo(() => {
     return [...rawLines].sort((a: any, b: any) => {
-      if (a.hierarchyLevel !== b.hierarchyLevel) return a.hierarchyLevel - b.hierarchyLevel;
-      return (a.lineItem || "").localeCompare(b.lineItem || "");
+      const ta = a._creationTime ?? 0;
+      const tb = b._creationTime ?? 0;
+      return ta - tb;
     });
   }, [rawLines]);
 
@@ -265,8 +264,6 @@ export default function FinancialsPage() {
             availablePeriods={availablePeriods}
             onChangeComparePeriod={setComparePeriod}
             compareIndex={compareIndex}
-            showAllLines={showAllLines}
-            onToggleShowAll={() => setShowAllLines(v => !v)}
           />
           {recoveries.items.length > 0 && (
             <RecoveriesPanel items={recoveries.items} total={recoveries.total} />
@@ -347,8 +344,6 @@ function IncomeStatement({
   availablePeriods,
   onChangeComparePeriod,
   compareIndex,
-  showAllLines,
-  onToggleShowAll,
 }: {
   lines: any[];
   totalIncome: number;
@@ -357,9 +352,64 @@ function IncomeStatement({
   availablePeriods: string[];
   onChangeComparePeriod: (p: string | null) => void;
   compareIndex: Map<string, { currentPeriod: number; yearToDate: number }> | null;
-  showAllLines: boolean;
-  onToggleShowAll: () => void;
 }) {
+  // Group rows into "blocks". A block = one level-1 header + every row until
+  // the next level-1 header. children = level-3 leaves; totals = level-16
+  // subtotals or level-24 grand totals. Grand totals that fall outside any
+  // header (e.g. NOI at the very end) become headerless blocks so they
+  // always render.
+  type Block = {
+    header: any | null;        // level-1 row, or null for orphan trailing totals
+    children: any[];           // level-3 rows
+    totals: any[];             // level-16 / level-24 rows
+    sectionTotal: any | null;  // last total in block — used for inline value
+                                // when the section is collapsed
+    isExpense: boolean;        // for the larger gap between INCOME and EXPENSE
+  };
+
+  const blocks: Block[] = useMemo(() => {
+    const out: Block[] = [];
+    let cur: Block | null = null;
+    for (const line of lines) {
+      const lvl = line.hierarchyLevel;
+      if (lvl === 1) {
+        if (cur) out.push(cur);
+        cur = {
+          header: line,
+          children: [],
+          totals: [],
+          sectionTotal: null,
+          isExpense: /expense/i.test(line.lineItem || ""),
+        };
+      } else if (cur) {
+        if (lvl >= 16) cur.totals.push(line);
+        else cur.children.push(line);
+      } else {
+        // Orphan rows before any header (or after a header was flushed) get
+        // their own headerless block so totals are still visible.
+        if (!out.length || out[out.length - 1].header) {
+          out.push({ header: null, children: [], totals: [], sectionTotal: null, isExpense: false });
+        }
+        const last = out[out.length - 1];
+        if (lvl >= 16) last.totals.push(line);
+        else last.children.push(line);
+      }
+    }
+    if (cur) out.push(cur);
+
+    // Inline-total heuristic: pick the LAST level-16/24 row inside the block.
+    // In Yardi's export each section closes with its TOTAL line, so "last
+    // total in block" reliably picks the right subtotal (e.g. INCOME -> TOTAL
+    // RENTAL REVENUE, OPERATING EXPENSE -> TOTAL OPERATING EXPENSE).
+    for (const b of out) {
+      if (b.totals.length) b.sectionTotal = b.totals[b.totals.length - 1];
+    }
+    return out;
+  }, [lines]);
+
+  // Per-section expand state, keyed by header lineItem. Default: all collapsed.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
   if (!lines.length) {
     return (
       <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-8 text-center">
@@ -368,48 +418,92 @@ function IncomeStatement({
     );
   }
 
-  // Apply the "high-level" filter unless the user has toggled "Show all lines".
-  // High-level = level-1 headers (INCOME, OPERATING EXPENSE, ...) + every
-  // TOTAL/NET subtotal row (TOTAL RENTAL REVENUE, NET OPERATING INCOME, etc).
-  const filteredLines = useMemo(() => {
-    if (showAllLines) return lines;
-    return lines.filter((l: any) => {
-      const li = (l.lineItem || "").trim();
-      if (!li) return false;
-      const isSubtotal = /^total\b|^net\b/i.test(li);
-      return l.hierarchyLevel <= 1 || isSubtotal;
-    });
-  }, [lines, showAllLines]);
-
-  // Compare-period options for the picker (exclude the current period).
   const periodOptions = availablePeriods.filter(p => p !== currentPeriod);
-
-  // Separate income vs expense vs net sections based on parentLine grouping
-  const sections: { header: string; rows: any[]; isNet?: boolean }[] = [];
-  let currentSection: { header: string; rows: any[]; isNet?: boolean } | null = null;
-
-  for (const line of filteredLines) {
-    const isTotal = /^\s*total\b/i.test(line.lineItem) || /^\s*net\b/i.test(line.lineItem);
-    const isHeader = line.hierarchyLevel === 0 && !isTotal;
-
-    if (isHeader) {
-      if (currentSection) sections.push(currentSection);
-      currentSection = { header: line.lineItem.trim(), rows: [] };
-    } else if (currentSection) {
-      currentSection.rows.push(line);
-    } else {
-      // Orphan rows before any section header
-      currentSection = { header: "", rows: [line] };
-    }
-  }
-  if (currentSection) sections.push(currentSection);
-
   const compareLabel = comparePeriod ? formatPeriodShort(comparePeriod) : "Prior";
   const currentLabel = currentPeriod ? formatPeriodShort(currentPeriod) : "Current Period";
 
+  function renderRow(
+    line: any,
+    key: string | number,
+    opts: {
+      isHeader?: boolean;
+      isOpen?: boolean;
+      onClick?: () => void;
+      valueOverride?: number | null;
+      cmpOverride?: number | null;
+      bold?: boolean;
+      topBorder?: boolean;
+    } = {}
+  ) {
+    const li = (line.lineItem || "").trim();
+    const lvl = line.hierarchyLevel;
+    const isLevel24 = lvl === 24;
+    const isLevel16 = lvl === 16;
+    const isLevel3 = lvl === 3;
+    const isLevel1 = lvl === 1;
+
+    const indent = isLevel1 ? 0 : isLevel3 ? 24 : isLevel16 ? 16 : 0;
+    const cp = opts.valueOverride !== undefined && opts.valueOverride !== null
+      ? opts.valueOverride
+      : (line.currentPeriod || 0);
+    const isNeg = cp < 0;
+    const cmp = opts.cmpOverride !== undefined
+      ? opts.cmpOverride
+      : (compareIndex?.get(li)?.currentPeriod ?? null);
+    const variance = cmp !== null && cmp !== undefined ? cp - cmp : null;
+    const variancePct = variance !== null && cmp !== null && cmp !== undefined && cmp !== 0
+      ? (variance / Math.abs(cmp)) * 100
+      : null;
+    const showValue = cp !== 0;
+
+    const rowClass = [
+      "grid grid-cols-[1fr_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px]",
+      opts.topBorder ? "border-t-2 border-[#18181b] dark:border-[#fafafa]" : "border-t border-[#f4f4f5] dark:border-[#27272a]",
+      isLevel24 ? "bg-[#f4f4f5] dark:bg-[#27272a] font-bold text-[#18181b] dark:text-[#fafafa]" :
+        isLevel16 ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]" :
+        opts.bold ? "font-semibold text-[#18181b] dark:text-[#fafafa]" :
+        "text-[#18181b] dark:text-[#fafafa]",
+      opts.onClick ? "cursor-pointer hover:bg-[#fafafa]/50 dark:hover:bg-[#27272a]/40" : "",
+    ].filter(Boolean).join(" ");
+
+    const labelClass = [
+      "truncate flex items-center gap-1",
+      isLevel1 ? "uppercase tracking-wide font-semibold text-[#18181b] dark:text-[#fafafa] select-none" : "",
+      isLevel24 ? "uppercase tracking-wide" : "",
+    ].filter(Boolean).join(" ");
+
+    return (
+      <div key={key} className={rowClass} onClick={opts.onClick}>
+        <span style={{ paddingLeft: indent }} className={labelClass}>
+          {opts.isHeader && (
+            <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] inline-block w-3">
+              {opts.isOpen ? "▼" : "▶"}
+            </span>
+          )}
+          {li}
+        </span>
+        <span className={`text-right ${isNeg ? "text-[#dc2626]" : ""}`}>
+          {showValue ? formatCurrency(Math.abs(cp)) : "—"}
+          {isNeg && showValue ? <span className="text-[#dc2626]"> ▼</span> : null}
+        </span>
+        <span className={`text-right ${cmp !== null && cmp !== undefined && cmp < 0 ? "text-[#dc2626]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
+          {cmp === null || cmp === undefined || cmp === 0 ? "—" : formatCurrency(Math.abs(cmp))}
+        </span>
+        <span className={`text-right ${variance === null ? "text-[#a1a1aa]" : variance > 0 ? "text-[#16a34a]" : variance < 0 ? "text-[#dc2626]" : "text-[#a1a1aa]"}`}>
+          {variance === null ? "—" : `${variance >= 0 ? "+" : "−"}${formatCurrency(Math.abs(variance))}`}
+        </span>
+        <span className={`text-right ${variancePct === null ? "text-[#a1a1aa]" : variancePct > 0 ? "text-[#16a34a]" : variancePct < 0 ? "text-[#dc2626]" : "text-[#a1a1aa]"}`}>
+          {variancePct === null ? "—" : `${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%`}
+        </span>
+        <span className="text-right text-[#a1a1aa] dark:text-[#71717a]">
+          {showValue && totalIncome > 0 ? pct(Math.abs(cp), totalIncome) : ""}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <>
-      {/* Picker row — Compare-to dropdown + Show-all-lines toggle */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 text-[12px] text-[#71717a] dark:text-[#a1a1aa]">
           <span>Compare to</span>
@@ -426,16 +520,9 @@ function IncomeStatement({
             ))}
           </select>
         </div>
-        <button
-          onClick={onToggleShowAll}
-          className="text-[11px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] border border-[#e4e4e7] dark:border-[#3f3f46] px-2.5 py-1 rounded cursor-pointer"
-        >
-          {showAllLines ? "Hide detail lines" : "Show all lines"}
-        </button>
       </div>
 
       <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-        {/* Table header */}
         <div className="grid grid-cols-[1fr_120px_120px_110px_80px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
           <span>Line Item</span>
           <span className="text-right">{currentLabel}</span>
@@ -445,59 +532,51 @@ function IncomeStatement({
           <span className="text-right">% Income</span>
         </div>
 
-        {sections.map((section, si) => {
-          const isNetSection = /total|net\s+operating|noi/i.test(section.header);
-          return (
-            <div key={si} className={si > 0 ? "border-t border-[#e4e4e7] dark:border-[#3f3f46]" : ""}>
-              {section.header && (
-                <div className={`px-4 py-2 text-[11px] font-semibold uppercase tracking-wide ${
-                  isNetSection
-                    ? "bg-[#f4f4f5] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa]"
-                    : "text-[#71717a] dark:text-[#a1a1aa] bg-[#fafafa]/60 dark:bg-[#27272a]/40"
-                }`}>
-                  {section.header}
-                </div>
-              )}
-              {section.rows.map((line: any, ri: number) => {
-                const li = (line.lineItem || "").trim();
-                const isSubtotal = /^\s*total\b/i.test(li) || /^\s*net\b/i.test(li);
-                const indent = Math.max(0, (line.hierarchyLevel - 1)) * 16;
-                const cp = line.currentPeriod || 0;
-                const isNeg = cp < 0;
-                const cmp = compareIndex?.get(li)?.currentPeriod ?? null;
-                const variance = cmp !== null ? cp - cmp : null;
-                const variancePct = cmp !== null && cmp !== 0 ? (variance! / Math.abs(cmp)) * 100 : null;
+        {blocks.map((block, bi) => {
+          const headerLi = block.header ? (block.header.lineItem || "").trim() : "";
+          const isOpen = block.header ? !!expanded[headerLi] : true;
 
-                return (
-                  <div
-                    key={ri}
-                    className={`grid grid-cols-[1fr_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] ${
-                      isSubtotal
-                        ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]"
-                        : "text-[#18181b] dark:text-[#fafafa]"
-                    }`}
-                  >
-                    <span style={{ paddingLeft: indent }} className="truncate">
-                      {li}
-                    </span>
-                    <span className={`text-right font-${isSubtotal ? "semibold" : "normal"} ${isNeg ? "text-[#dc2626]" : ""}`}>
-                      {cp !== 0 ? formatCurrency(Math.abs(cp)) : "—"}
-                      {isNeg && cp !== 0 ? <span className="text-[#dc2626]"> ▼</span> : null}
-                    </span>
-                    <span className={`text-right ${cmp !== null && cmp < 0 ? "text-[#dc2626]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
-                      {cmp === null ? "—" : cmp === 0 ? "—" : formatCurrency(Math.abs(cmp))}
-                    </span>
-                    <span className={`text-right ${variance === null ? "text-[#a1a1aa]" : variance > 0 ? "text-[#16a34a]" : variance < 0 ? "text-[#dc2626]" : "text-[#a1a1aa]"}`}>
-                      {variance === null ? "—" : `${variance >= 0 ? "+" : "−"}${formatCurrency(Math.abs(variance))}`}
-                    </span>
-                    <span className={`text-right ${variancePct === null ? "text-[#a1a1aa]" : variancePct > 0 ? "text-[#16a34a]" : variancePct < 0 ? "text-[#dc2626]" : "text-[#a1a1aa]"}`}>
-                      {variancePct === null ? "—" : `${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%`}
-                    </span>
-                    <span className="text-right text-[#a1a1aa] dark:text-[#71717a]">
-                      {cp !== 0 && totalIncome > 0 ? pct(Math.abs(cp), totalIncome) : ""}
-                    </span>
-                  </div>
-                );
+          // Bigger visual gap when crossing the income/expense boundary.
+          const prev = bi > 0 ? blocks[bi - 1] : null;
+          const gapClass =
+            bi === 0
+              ? ""
+              : prev && prev.isExpense !== block.isExpense
+                ? "mt-2 border-t-2 border-[#e4e4e7] dark:border-[#3f3f46]"
+                : "";
+
+          // When the section is collapsed, surface the section's total value
+          // inline on the header row. Pull both current and compare values
+          // from the matched subtotal row so variance is meaningful.
+          let inlineValue: number | null = null;
+          let inlineCmp: number | null | undefined = undefined;
+          if (block.header && !isOpen && block.sectionTotal) {
+            inlineValue = block.sectionTotal.currentPeriod || 0;
+            const totalLi = (block.sectionTotal.lineItem || "").trim();
+            inlineCmp = compareIndex?.get(totalLi)?.currentPeriod ?? null;
+          }
+
+          return (
+            <div key={bi} className={gapClass}>
+              {block.header && renderRow(block.header, `h-${bi}`, {
+                isHeader: true,
+                isOpen,
+                onClick: () => setExpanded(s => ({ ...s, [headerLi]: !s[headerLi] })),
+                valueOverride: inlineValue,
+                cmpOverride: inlineCmp,
+              })}
+
+              {/* Children render only when the section is expanded. */}
+              {isOpen && block.children.map((c, ci) => renderRow(c, `c-${bi}-${ci}`))}
+
+              {/* Subtotals render when expanded. When collapsed they're
+                  hidden — the inline header value already shows the total. */}
+              {isOpen && block.totals.map((t, ti) => {
+                const isGrand = t.hierarchyLevel === 24;
+                return renderRow(t, `t-${bi}-${ti}`, {
+                  bold: isGrand,
+                  topBorder: isGrand,
+                });
               })}
             </div>
           );
