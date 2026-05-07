@@ -133,11 +133,11 @@ export default function SitePlanPage() {
           Click backdrop or hit Escape to dismiss. */}
       {execOpen && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 p-4 sm:p-6 rh-backdrop"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 dark:bg-black/80 p-2 sm:p-4 rh-backdrop"
           onClick={() => setExecOpen(false)}
         >
           <div
-            className="relative bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto rh-modal"
+            className="relative bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg shadow-2xl w-full max-w-6xl max-h-[96vh] overflow-y-auto rh-modal"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-white dark:bg-[#18181b]">

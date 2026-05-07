@@ -70,7 +70,7 @@ const ROOMS: Room[] = [
   { unit: "A-100", x: 888, y: 434, w: 202, h: 160, type: "unit" },
 
   // EXIT marker on the right side (image x ~295, y ~283)
-  { label: "EXIT", x: 760, y: 600, w: 60, h: 16, type: "exit" },
+  { label: "EXIT", x: 870, y: 540, w: 50, h: 16, type: "exit" },
 
   // ── W/M small restrooms left side (image x 14→50, y 211→263) ────────────
   // Two stacked tiny rooms inside the building, between A-120 and A-114.
