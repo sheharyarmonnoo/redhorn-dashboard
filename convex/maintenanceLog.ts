@@ -49,6 +49,7 @@ export const create = mutation({
       isRecurring: args.isRecurring,
       recurFrequency: args.recurFrequency,
       nextDueDate,
+      updatedAt: Date.now(),
     });
   },
 });
@@ -75,6 +76,7 @@ export const update = mutation({
     for (const [k, v] of Object.entries(patch)) {
       if (v !== undefined) clean[k] = v;
     }
+    clean.updatedAt = Date.now();
     await ctx.db.patch(id, clean);
   },
 });
@@ -107,11 +109,13 @@ export const markCompleted = mutation({
         date: completedDate,
         nextDueDate: next,
         status: "scheduled",
+        updatedAt: Date.now(),
       });
     } else {
       await ctx.db.patch(args.id, {
         status: "completed",
         date: completedDate,
+        updatedAt: Date.now(),
       });
     }
   },
@@ -133,7 +137,7 @@ export const addMeetingNote = mutation({
       createdAt: Date.now(),
     };
     const next = [...(row.meetingNotes || []), note];
-    await ctx.db.patch(args.id, { meetingNotes: next });
+    await ctx.db.patch(args.id, { meetingNotes: next, updatedAt: Date.now() });
     return note;
   },
 });
@@ -147,7 +151,7 @@ export const removeMeetingNote = mutation({
     const row = await ctx.db.get(args.id);
     if (!row) return;
     const next = (row.meetingNotes || []).filter((n) => n.id !== args.noteId);
-    await ctx.db.patch(args.id, { meetingNotes: next });
+    await ctx.db.patch(args.id, { meetingNotes: next, updatedAt: Date.now() });
   },
 });
 

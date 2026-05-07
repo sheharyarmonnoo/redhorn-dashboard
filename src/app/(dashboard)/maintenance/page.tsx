@@ -1,20 +1,20 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Plus, X, Check, Trash2, RotateCcw, Pencil, MessageSquare } from "lucide-react";
+import { Plus, Check, Trash2, RotateCcw, Pencil } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
+import MaintenanceDrawer from "@/components/MaintenanceDrawer";
 import { useActiveProperty, useUnits, useMaintenance, formatCurrency } from "@/hooks/useConvexData";
 
 type Tab = "active" | "completed" | "routine";
 
-const CATEGORIES = ["repair", "inspection", "routine", "emergency", "preventative"] as const;
 const FREQUENCIES = ["monthly", "quarterly", "biannually", "annually"] as const;
-const STATUSES = ["scheduled", "in_progress", "completed", "open"] as const;
 
 // Pre-built recurring maintenance templates the client called out:
 // gutter cleaning, drainage inspection, HVAC service. Clicking one of
-// these opens the modal pre-filled so the user only has to confirm.
+// these creates a new task pre-filled and opens the drawer in edit mode
+// so the user only has to confirm.
 const QUICK_ADD_TEMPLATES: Array<{
   label: string;
   type: string;
@@ -58,39 +58,23 @@ function statusBadge(status: string): { label: string; className: string } {
 
 function formatShortDate(iso?: string): string {
   if (!iso) return "—";
-  // Parse as UTC so the day matches the stored ISO regardless of TZ.
   const [y, m, d] = iso.split("-").map((s) => parseInt(s, 10));
   if (!y || !m || !d) return iso;
   const dt = new Date(Date.UTC(y, m - 1, d));
   return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
-interface FormState {
-  date: string;
-  category: string;
-  type: string;
-  description: string;
-  unit: string;
-  vendor: string;
-  cost: string;
-  status: string;
-  isRecurring: boolean;
-  recurFrequency: string;
-}
-
-function blankForm(): FormState {
-  return {
-    date: todayISO(),
-    category: "repair",
-    type: "",
-    description: "",
-    unit: "",
-    vendor: "",
-    cost: "",
-    status: "open",
-    isRecurring: false,
-    recurFrequency: "annually",
-  };
+function formatRelativeTime(ts?: number): string {
+  if (!ts) return "";
+  const diffMs = Date.now() - ts;
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export default function MaintenancePage() {
@@ -101,23 +85,16 @@ export default function MaintenancePage() {
   const currentUser = user?.fullName || user?.primaryEmailAddress?.emailAddress || "User";
 
   const [tab, setTab] = useState<Tab>("active");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(blankForm());
-  const [saving, setSaving] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  const editingItem = editingId ? items.find((i: any) => i._id === editingId) : null;
+  const openItem = openId ? items.find((i: any) => i._id === openId) : null;
 
-  // Stats — computed off the full unfiltered list so they don't change as
-  // the user toggles tabs.
   const stats = useMemo(() => {
     const total = items.length;
     const open = items.filter((i: any) => i.status !== "completed").length;
     const startMonth = startOfMonthISO();
     const today = todayISO();
     const thisMonth = items.filter((i: any) => i.date && i.date >= startMonth && i.date <= today).length;
-    // Overdue = recurring item whose nextDueDate is past, OR open non-recurring
-    // item dated more than 14 days ago without completion.
     const overdue = items.filter((i: any) => {
       if (i.status === "completed") return false;
       if (i.isRecurring && i.nextDueDate && i.nextDueDate < today) return true;
@@ -133,87 +110,42 @@ export default function MaintenancePage() {
     return items.filter((i: any) => i.status !== "completed");
   }, [items, tab]);
 
-  function openAddModal() {
-    setEditingId(null);
-    setForm(blankForm());
-    setModalOpen(true);
+  // "Add Item" — create a stub row immediately, then open the drawer so
+  // the user can fill it out. This keeps the drawer's edit/view distinction
+  // clean (no special "new vs existing" mode in the drawer itself) at the
+  // cost of one extra DB write that the user could abandon. That tradeoff
+  // is fine for low-volume manual entry.
+  async function onAddItem() {
+    if (!property?._id) return;
+    const id = await create({
+      propertyId: property._id as any,
+      date: todayISO(),
+      category: "repair",
+      type: "New Maintenance Item",
+      description: "",
+      status: "open",
+    });
+    setOpenId(id as any);
   }
 
-  function openTemplate(idx: number) {
+  async function onAddTemplate(idx: number) {
+    if (!property?._id) return;
     const t = QUICK_ADD_TEMPLATES[idx];
-    setEditingId(null);
-    setForm({
-      ...blankForm(),
+    const id = await create({
+      propertyId: property._id as any,
+      date: todayISO(),
+      category: t.category,
       type: t.type,
       description: t.description,
-      category: t.category,
+      status: "scheduled",
       isRecurring: true,
       recurFrequency: t.frequency,
-      status: "scheduled",
     });
-    setModalOpen(true);
-  }
-
-  function openEdit(row: any) {
-    setEditingId(row._id);
-    setForm({
-      date: row.date || todayISO(),
-      category: row.category || "repair",
-      type: row.type || "",
-      description: row.description || "",
-      unit: row.unit || "",
-      vendor: row.vendor || "",
-      cost: row.cost != null ? String(row.cost) : "",
-      status: row.status || "open",
-      isRecurring: !!row.isRecurring,
-      recurFrequency: row.recurFrequency || "annually",
-    });
-    setModalOpen(true);
-  }
-
-  async function onSave() {
-    if (!property?._id) return;
-    if (!form.type.trim()) return;
-    setSaving(true);
-    try {
-      const cost = form.cost.trim() ? Number(form.cost) : undefined;
-      const payload = {
-        date: form.date,
-        category: form.category || undefined,
-        type: form.type.trim(),
-        description: form.description.trim(),
-        unit: form.unit.trim() || undefined,
-        vendor: form.vendor.trim() || undefined,
-        cost: cost != null && Number.isFinite(cost) ? cost : undefined,
-        status: form.status,
-        isRecurring: form.isRecurring,
-        recurFrequency: form.isRecurring ? form.recurFrequency : undefined,
-      };
-      if (editingId) {
-        await update({ id: editingId as any, ...payload });
-      } else {
-        await create({ propertyId: property._id as any, ...payload });
-      }
-      setModalOpen(false);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function onComplete(id: string) {
-    await markCompleted({ id: id as any });
-  }
-
-  async function onDelete(id: string) {
-    if (!window.confirm("Delete this maintenance item? This cannot be undone.")) return;
-    await remove({ id: id as any });
+    setOpenId(id as any);
   }
 
   if (!property) return null;
 
-  // RV park's maintenance data will eventually come through Campspot — until
-  // that integration ships, render the coming-soon card instead of an empty
-  // open/overdue/routine grid that mimics a broken sync.
   if (property.propertyType === "rv_park") {
     return <ComingSoonBanner propertyName={property.name} />;
   }
@@ -225,7 +157,7 @@ export default function MaintenancePage() {
         subtitle="Track repairs, inspections, and routine tasks"
       >
         <button
-          onClick={openAddModal}
+          onClick={onAddItem}
           className="flex items-center gap-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] text-[12px] font-medium px-3 py-1.5 rounded hover:opacity-90 cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -233,7 +165,6 @@ export default function MaintenancePage() {
         </button>
       </PageHeader>
 
-      {/* Stats strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
         <StatBox label="Total Items" value={stats.total} />
         <StatBox label="Open" value={stats.open} color={stats.open > 0 ? "text-[#d97706]" : undefined} />
@@ -241,14 +172,13 @@ export default function MaintenancePage() {
         <StatBox label="This Month" value={stats.thisMonth} />
       </div>
 
-      {/* Quick-add templates */}
       <div className="mb-4">
         <p className="text-[10px] uppercase tracking-wide font-semibold text-[#a1a1aa] dark:text-[#71717a] mb-1.5">Quick-Add Routine Tasks</p>
         <div className="flex flex-wrap gap-2">
           {QUICK_ADD_TEMPLATES.map((t, i) => (
             <button
               key={t.label}
-              onClick={() => openTemplate(i)}
+              onClick={() => onAddTemplate(i)}
               className="flex items-center gap-2 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] text-[12px] font-medium px-3 py-1.5 rounded text-[#18181b] dark:text-[#fafafa] hover:border-[#a1a1aa] dark:hover:border-[#52525b] cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#71717a]" />
@@ -261,7 +191,6 @@ export default function MaintenancePage() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 mb-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
         {(["active", "completed", "routine"] as const).map((t) => (
           <button
@@ -285,36 +214,42 @@ export default function MaintenancePage() {
         ))}
       </div>
 
-      {/* Item list */}
       <ItemList
         rows={filtered}
         loading={loading}
-        onEdit={openEdit}
-        onComplete={onComplete}
-        onDelete={onDelete}
+        onOpen={(row) => setOpenId(row._id)}
+        onComplete={async (id) => { await markCompleted({ id: id as any }); }}
+        onDelete={async (id) => {
+          if (!window.confirm("Delete this maintenance item? This cannot be undone.")) return;
+          await remove({ id: id as any });
+        }}
       />
 
-      {modalOpen && (
-        <ItemModal
-          form={form}
-          setForm={setForm}
-          onClose={() => setModalOpen(false)}
-          onSave={onSave}
-          saving={saving}
-          editing={!!editingId}
-          unitOptions={units.map((u: any) => u.unit).filter(Boolean)}
-          meetingNotes={editingItem?.meetingNotes || []}
-          canAddNotes={!!editingId}
-          onAddNote={async (text: string) => {
-            if (!editingId) return;
-            await addMeetingNote({ id: editingId as any, text, author: currentUser });
-          }}
-          onRemoveNote={async (noteId: string) => {
-            if (!editingId) return;
-            await removeMeetingNote({ id: editingId as any, noteId });
-          }}
-        />
-      )}
+      <MaintenanceDrawer
+        open={!!openItem}
+        item={(openItem as any) || null}
+        unitOptions={units.map((u: any) => u.unit).filter(Boolean)}
+        onClose={() => setOpenId(null)}
+        onSave={async (patch) => {
+          if (!openId) return;
+          await update({ id: openId as any, ...(patch as any) });
+        }}
+        onDelete={async (id) => {
+          await remove({ id: id as any });
+          setOpenId(null);
+        }}
+        onComplete={async (id) => {
+          await markCompleted({ id: id as any });
+        }}
+        onAddNote={async (text) => {
+          if (!openId) return;
+          await addMeetingNote({ id: openId as any, text, author: currentUser });
+        }}
+        onRemoveNote={async (noteId) => {
+          if (!openId) return;
+          await removeMeetingNote({ id: openId as any, noteId });
+        }}
+      />
     </div>
   );
 }
@@ -333,13 +268,13 @@ function StatBox({ label, value, color }: { label: string; value: number; color?
 function ItemList({
   rows,
   loading,
-  onEdit,
+  onOpen,
   onComplete,
   onDelete,
 }: {
   rows: any[];
   loading: boolean;
-  onEdit: (row: any) => void;
+  onOpen: (row: any) => void;
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
@@ -359,9 +294,11 @@ function ItemList({
       </div>
     );
   }
+  // Desktop columns: Date | Category | Description | Unit | Vendor | Cost | Status | Latest Note | Actions
+  // Mobile columns: Date | Description | Unit | Cost | Status | Actions
   return (
     <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[110px_1fr_100px_100px_120px_120px] sm:grid-cols-[110px_120px_1fr_100px_140px_120px_120px_140px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+      <div className="grid grid-cols-[110px_1fr_100px_100px_120px_120px] sm:grid-cols-[110px_120px_1fr_100px_140px_120px_120px_220px_120px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
         <span>Date</span>
         <span className="hidden sm:block">Category</span>
         <span>Description</span>
@@ -369,25 +306,26 @@ function ItemList({
         <span className="hidden sm:block">Vendor</span>
         <span>Cost</span>
         <span>Status</span>
+        <span className="hidden sm:block">Latest Note</span>
         <span className="text-right">Actions</span>
       </div>
       {rows.map((r) => {
         const badge = statusBadge(r.status);
+        const sortedNotes = [...(r.meetingNotes || [])].sort((a: any, b: any) => b.createdAt - a.createdAt);
+        const latestNote = sortedNotes[0];
+        const lastUpdated = r.updatedAt || r._creationTime;
         return (
           <div
             key={r._id}
-            className="grid grid-cols-[110px_1fr_100px_100px_120px_120px] sm:grid-cols-[110px_120px_1fr_100px_140px_120px_120px_140px] px-4 py-2.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] text-[#18181b] dark:text-[#fafafa] items-center"
+            onClick={() => onOpen(r)}
+            className="grid grid-cols-[110px_1fr_100px_100px_120px_120px] sm:grid-cols-[110px_120px_1fr_100px_140px_120px_120px_220px_120px] px-4 py-2.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] text-[#18181b] dark:text-[#fafafa] items-center cursor-pointer hover:bg-[#fafafa] dark:hover:bg-[#27272a]/50"
           >
             <span className="text-[#71717a] dark:text-[#a1a1aa] tabular-nums">{formatShortDate(r.date)}</span>
             <span className="hidden sm:flex items-center gap-1.5 text-[11px] capitalize">
               <span className={`w-1.5 h-1.5 rounded-full ${categoryDot(r.category)}`} />
               {r.category || "—"}
             </span>
-            <button
-              onClick={() => onEdit(r)}
-              className="text-left truncate cursor-pointer hover:underline decoration-dotted"
-              title={r.description || r.type}
-            >
+            <div className="text-left truncate" title={r.description || r.type}>
               <span className="font-medium">{r.type || "(untitled)"}</span>
               {r.description && <span className="text-[#71717a] dark:text-[#a1a1aa]"> · {r.description}</span>}
               {r.isRecurring && r.recurFrequency && (
@@ -400,14 +338,8 @@ function ItemList({
                   Next due: {formatShortDate(r.nextDueDate)}
                 </span>
               )}
-              {r.meetingNotes && r.meetingNotes.length > 0 && (
-                <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
-                  <MessageSquare className="w-2.5 h-2.5" />
-                  {r.meetingNotes.length} {r.meetingNotes.length === 1 ? "note" : "notes"}
-                </span>
-              )}
-            </button>
-            <span className="text-[#71717a] dark:text-[#a1a1aa]">{r.unit || "—"}</span>
+            </div>
+            <span className="text-[#71717a] dark:text-[#a1a1aa] truncate" title={r.unit || ""}>{r.unit || "—"}</span>
             <span className="hidden sm:block text-[#71717a] dark:text-[#a1a1aa] truncate" title={r.vendor || ""}>{r.vendor || "—"}</span>
             <span className="text-[#71717a] dark:text-[#a1a1aa]">{r.cost ? formatCurrency(r.cost) : "—"}</span>
             <span>
@@ -415,10 +347,32 @@ function ItemList({
                 {badge.label}
               </span>
             </span>
-            <span className="flex items-center justify-end gap-1">
+            <div
+              className="hidden sm:block min-w-0 pr-2"
+              title={latestNote ? `${latestNote.author}: ${latestNote.text}` : ""}
+            >
+              {latestNote ? (
+                <>
+                  <p className="truncate text-[11px] text-[#18181b] dark:text-[#fafafa] leading-tight">
+                    {latestNote.text}
+                  </p>
+                  <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] tabular-nums mt-0.5">
+                    {formatRelativeTime(latestNote.createdAt)} · {sortedNotes.length} {sortedNotes.length === 1 ? "note" : "notes"}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] italic">
+                  No notes
+                </p>
+              )}
+            </div>
+            <span
+              className="flex items-center justify-end gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
-                onClick={() => onEdit(r)}
-                title="Edit"
+                onClick={() => onOpen(r)}
+                title="Open / edit"
                 className="p-1 rounded hover:bg-[#71717a]/10 text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
               >
                 <Pencil className="w-3.5 h-3.5" />
@@ -439,304 +393,18 @@ function ItemList({
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
+              {lastUpdated && (
+                <span
+                  className="hidden sm:inline-block text-[9px] text-[#a1a1aa] dark:text-[#71717a] tabular-nums ml-1 whitespace-nowrap"
+                  title={new Date(lastUpdated).toLocaleString()}
+                >
+                  {formatRelativeTime(lastUpdated)}
+                </span>
+              )}
             </span>
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function ItemModal({
-  form,
-  setForm,
-  onClose,
-  onSave,
-  saving,
-  editing,
-  unitOptions,
-  meetingNotes,
-  canAddNotes,
-  onAddNote,
-  onRemoveNote,
-}: {
-  form: FormState;
-  setForm: (f: FormState) => void;
-  onClose: () => void;
-  onSave: () => void;
-  saving: boolean;
-  editing: boolean;
-  unitOptions: string[];
-  meetingNotes: Array<{ id: string; text: string; author: string; createdAt: number }>;
-  canAddNotes: boolean;
-  onAddNote: (text: string) => Promise<void>;
-  onRemoveNote: (noteId: string) => Promise<void>;
-}) {
-  const [noteDraft, setNoteDraft] = useState("");
-  const [postingNote, setPostingNote] = useState(false);
-
-  async function handleAddNote() {
-    const text = noteDraft.trim();
-    if (!text) return;
-    setPostingNote(true);
-    try {
-      await onAddNote(text);
-      setNoteDraft("");
-    } finally {
-      setPostingNote(false);
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg w-full max-w-lg max-h-[90vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
-          <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">
-            {editing ? "Edit Maintenance Item" : "Add Maintenance Item"}
-          </p>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] cursor-pointer">
-            <X className="w-4 h-4 text-[#71717a]" />
-          </button>
-        </div>
-
-        <div className="p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Date">
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className={inputCls}
-              />
-            </Field>
-            <Field label="Category">
-              <select
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className={inputCls}
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c[0].toUpperCase() + c.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-
-          <Field label="Type">
-            <input
-              type="text"
-              placeholder="e.g. Roof leak, HVAC service, Plumbing repair"
-              value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
-              className={inputCls}
-            />
-          </Field>
-
-          <Field label="Description">
-            <textarea
-              rows={2}
-              placeholder="Details, scope, vendor notes…"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className={inputCls}
-            />
-          </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Unit (optional)">
-              <select
-                value={form.unit}
-                onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                className={inputCls}
-              >
-                <option value="">— Property-wide —</option>
-                {unitOptions.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Status">
-              <select
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value })}
-                className={inputCls}
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s.replace("_", " ")}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Vendor">
-              <input
-                type="text"
-                placeholder="e.g. Acme HVAC"
-                value={form.vendor}
-                onChange={(e) => setForm({ ...form, vendor: e.target.value })}
-                className={inputCls}
-              />
-            </Field>
-            <Field label="Cost ($)">
-              <input
-                type="number"
-                inputMode="decimal"
-                placeholder="0"
-                value={form.cost}
-                onChange={(e) => setForm({ ...form, cost: e.target.value })}
-                className={inputCls}
-              />
-            </Field>
-          </div>
-
-          <label className="flex items-center gap-2 text-[12px] text-[#18181b] dark:text-[#fafafa] cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.isRecurring}
-              onChange={(e) => setForm({ ...form, isRecurring: e.target.checked })}
-              className="cursor-pointer"
-            />
-            Recurring task — reschedule automatically when completed
-          </label>
-
-          {form.isRecurring && (
-            <Field label="Frequency">
-              <select
-                value={form.recurFrequency}
-                onChange={(e) => setForm({ ...form, recurFrequency: e.target.value })}
-                className={inputCls}
-              >
-                {FREQUENCIES.map((f) => (
-                  <option key={f} value={f}>
-                    {f[0].toUpperCase() + f.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
-
-          {/* Meeting notes thread — only available for existing tasks since
-              we need a saved row to attach notes to. */}
-          <div className="pt-3 border-t border-[#e4e4e7] dark:border-[#3f3f46]">
-            <p className="text-[10px] uppercase tracking-wide font-semibold text-[#a1a1aa] dark:text-[#71717a] mb-2 flex items-center gap-1.5">
-              <MessageSquare className="w-3 h-3" />
-              Meeting Notes {meetingNotes.length > 0 && (
-                <span className="text-[#71717a]">({meetingNotes.length})</span>
-              )}
-            </p>
-            {!canAddNotes ? (
-              <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] italic">
-                Save the task first, then reopen it to add meeting notes.
-              </p>
-            ) : (
-              <>
-                {meetingNotes.length > 0 && (
-                  <div className="space-y-2 mb-3 max-h-[180px] overflow-y-auto">
-                    {[...meetingNotes].sort((a, b) => b.createdAt - a.createdAt).map((n) => (
-                      <div
-                        key={n.id}
-                        className="bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2"
-                      >
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <span className="text-[10px] font-medium text-[#18181b] dark:text-[#fafafa]">
-                            {n.author}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] tabular-nums">
-                              {new Date(n.createdAt).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                            <button
-                              onClick={() => onRemoveNote(n.id)}
-                              title="Delete note"
-                              className="text-[#a1a1aa] hover:text-[#dc2626] cursor-pointer"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                        <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] whitespace-pre-wrap leading-relaxed">
-                          {n.text}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <textarea
-                  rows={2}
-                  value={noteDraft}
-                  onChange={(e) => setNoteDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      handleAddNote();
-                    }
-                  }}
-                  placeholder="Add a meeting note… (Cmd/Ctrl + Enter to post)"
-                  className={inputCls}
-                />
-                <div className="flex justify-end mt-2">
-                  <button
-                    onClick={handleAddNote}
-                    disabled={postingNote || !noteDraft.trim()}
-                    className="text-[11px] font-medium px-2.5 py-1 rounded bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:opacity-90 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {postingNote ? "Posting…" : "Post Note"}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46]">
-          <button
-            onClick={onClose}
-            className="text-[12px] font-medium px-3 py-1.5 rounded text-[#71717a] dark:text-[#a1a1aa] hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSave}
-            disabled={saving || !form.type.trim()}
-            className="bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] text-[12px] font-medium px-3 py-1.5 rounded hover:opacity-90 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {saving ? "Saving…" : editing ? "Save" : "Add Item"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const inputCls =
-  "w-full bg-white dark:bg-[#0a0a0a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded px-2.5 py-1.5 text-[12px] text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] focus:outline-none focus:border-[#71717a]";
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wide font-semibold text-[#a1a1aa] dark:text-[#71717a] mb-1">
-        {label}
-      </p>
-      {children}
     </div>
   );
 }

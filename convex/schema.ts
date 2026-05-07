@@ -85,6 +85,7 @@ export default defineSchema({
       author: v.string(),
       createdAt: v.number(),
     }))),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_unit", ["unitId"])
     .index("by_property", ["propertyId"]),
