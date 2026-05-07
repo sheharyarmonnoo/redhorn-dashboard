@@ -582,9 +582,13 @@ function IncomeStatement({
               {isOpen && block.children.map((c, ci) => renderRow(c, `c-${bi}-${ci}`))}
 
               {/* Subtotals render when expanded. When collapsed they're
-                  hidden — the inline header value already shows the total. */}
-              {isOpen && block.totals.map((t, ti) => {
+                  hidden when section collapsed — the inline header value
+                  already shows that subtotal. Level-24 grand totals (TOTAL
+                  INCOME, TOTAL OPERATING EXPENSE, NOI, NET INCOME) ALWAYS
+                  render so the user sees the bottom line without expanding. */}
+              {block.totals.map((t, ti) => {
                 const isGrand = t.hierarchyLevel === 24;
+                if (!isOpen && !isGrand) return null;
                 return renderRow(t, `t-${bi}-${ti}`, {
                   bold: isGrand,
                   topBorder: isGrand,
