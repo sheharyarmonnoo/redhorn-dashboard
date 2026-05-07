@@ -73,16 +73,15 @@ export default function EmailComposer({ open, context, onClose, onSent }: Props)
     setResult(null);
     const ccList = cc.split(",").map(s => s.trim()).filter(Boolean);
     try {
-      const opened = openComposeWindow(provider, {
+      // window.open with noopener returns null in some browsers even on
+      // success, so we trust the browser to show its own popup-blocked
+      // indicator instead of guessing from the return value.
+      openComposeWindow(provider, {
         to: toEmail.trim(),
         cc: ccList,
         subject: subject.trim(),
         body,
       });
-      if (!opened) {
-        setResult({ ok: false, message: "Couldn't open the compose tab — check that pop-ups are allowed for this site." });
-        return;
-      }
       // Best-effort audit log. Don't block the user if it fails.
       try {
         await logCompose({
@@ -200,7 +199,7 @@ export default function EmailComposer({ open, context, onClose, onSent }: Props)
             className="flex items-center gap-1.5 text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-4 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ExternalLink size={13} />
-            {opening ? "Opening…" : `Open in ${EMAIL_PROVIDER_LABELS[provider]}`}
+            {opening ? "Opening…" : "Open in Client"}
           </button>
         </div>
       </div>
