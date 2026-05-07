@@ -65,7 +65,7 @@ export default function FinancialsPage() {
   const updateProperty = useMutation(api.properties.update);
   const { user } = useUser();
 
-  const [view, setView] = useState<"statement" | "trend" | "budget">("statement");
+  const [view, setView] = useState<"trend" | "statement" | "budget">("trend");
   const [budgetYear, setBudgetYear] = useState<string>(String(new Date().getFullYear()));
   const [budgetCompareYear, setBudgetCompareYear] = useState<string>(String(new Date().getFullYear() - 1));
   const { budgets, upsertBudget } = useLineBudgets(property?._id, budgetYear);
@@ -234,7 +234,7 @@ export default function FinancialsPage() {
 
       {/* Tab switcher */}
       <div className="flex gap-1 mb-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
-        {(["statement", "trend", "budget"] as const).map(t => (
+        {(["trend", "statement", "budget"] as const).map(t => (
           <button
             key={t}
             onClick={() => setView(t)}
@@ -571,7 +571,7 @@ function TrendTable({ trend, formatMonth }: { trend: any[]; formatMonth: (m: str
 
   return (
     <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[100px_1fr_100px_100px_100px_100px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+      <div className="grid grid-cols-[100px_140px_1fr_120px_120px_120px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
         <span>Month</span>
         <span>Bar</span>
         <span className="text-right">Total</span>
@@ -585,7 +585,7 @@ function TrendTable({ trend, formatMonth }: { trend: any[]; formatMonth: (m: str
         return (
           <div
             key={row.month}
-            className="grid grid-cols-[100px_1fr_100px_100px_100px_100px_70px] px-4 py-2.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] text-[#18181b] dark:text-[#fafafa]"
+            className="grid grid-cols-[100px_140px_1fr_120px_120px_120px_70px] px-4 py-2.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] text-[#18181b] dark:text-[#fafafa]"
           >
             <span className="font-medium">{formatMonth(row.month)}</span>
             <div className="flex items-center pr-4">
