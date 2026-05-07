@@ -392,6 +392,85 @@ export const applyPastDueByCode = mutation({
 });
 
 /**
+ * Re-derive past-due amounts from the *latest* receivable_details snapshot
+ * already in Convex, then re-apply via the same logic as applyPastDueByCode.
+ * This is the safety net for syncs that ingested rent-roll-full WITHOUT a
+ * fresh receivable_detail (which would otherwise wipe past-due to 0 because
+ * bulkReplaceTenants writes pastDueAmount: 0 for new rows).
+ *
+ * Aggregates per tenantName: sum of `balance` from receivable_details — that's
+ * the running AR balance. Treats positive balances as past-due.
+ */
+export const recomputePastDueFromAR = mutation({
+  args: { propertyCode: v.string() },
+  handler: async (ctx, args) => {
+    const property = await ctx.db
+      .query("properties")
+      .withIndex("by_code", (q) => q.eq("code", args.propertyCode))
+      .first();
+    if (!property) return { propertyId: null, applied: 0, skipped: "unknown_property" };
+
+    // Pull every receivable_details row for the property in one shot. The
+    // table is small per property (typically <200 rows) so a full scan is
+    // fine; .order("desc").take(2000) bounds the worst case.
+    const rd = await ctx.db
+      .query("receivable_details")
+      .withIndex("by_property", (q) => q.eq("propertyId", property._id))
+      .order("desc")
+      .take(2000);
+
+    if (rd.length === 0) return { propertyId: property._id, applied: 0, skipped: "no_receivable_details" };
+
+    // Aggregate balance per tenant. Use the latest postMonth's running balance.
+    // Receivable detail rows already represent end-of-month state per tenant,
+    // so we sum balances grouped by (tenantName, postMonth) and pick the most
+    // recent month's total per tenant.
+    const byTenant = new Map<string, { latestMonth: string; balance: number; unit?: string }>();
+    for (const row of rd) {
+      const tenant = row.tenantName || "";
+      if (!tenant) continue;
+      const month = row.postMonth || "";
+      const cur = byTenant.get(tenant);
+      if (!cur || month > cur.latestMonth) {
+        byTenant.set(tenant, { latestMonth: month, balance: row.balance || 0, unit: row.unit });
+      } else if (month === cur.latestMonth) {
+        cur.balance += row.balance || 0;
+      }
+    }
+
+    const norm = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/\s*\([^)]*\)\s*/g, " ")
+        .replace(/[.,]/g, " ")
+        .replace(/\b(llc|inc|corp|co|ltd|llp)\b\.?/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const tenants = await ctx.db
+      .query("tenants")
+      .withIndex("by_property_latest", (q) =>
+        q.eq("propertyId", property._id).eq("isLatest", true)
+      )
+      .collect();
+
+    const byName = new Map<string, number>();
+    byTenant.forEach((v, k) => byName.set(norm(k), Math.max(0, v.balance)));
+
+    let applied = 0;
+    for (const t of tenants) {
+      const key = norm(t.tenant || "");
+      const newAmount = byName.get(key) ?? 0;
+      const newStatus = newAmount > 0 ? "past_due" : (t.status === "past_due" ? "current" : t.status);
+      await ctx.db.patch(t._id, { pastDueAmount: newAmount, status: newStatus });
+      if (newAmount > 0) applied++;
+    }
+
+    return { propertyId: property._id, applied, tenantsScanned: tenants.length };
+  },
+});
+
+/**
  * Enrich the latest tenants snapshot with monthly rent + lease start +
  * security deposit pulled from the full Commercial Rent Roll report. The
  * dashboard "Current Leases" panel doesn't carry these fields, so we get them

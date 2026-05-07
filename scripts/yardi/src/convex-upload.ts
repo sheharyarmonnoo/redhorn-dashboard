@@ -23,6 +23,7 @@ const FN = {
   bulkReplaceTenants: "tenants:bulkReplaceByCode",
   bulkReplaceUnits: "units:bulkReplaceByCode",
   applyPastDue: "tenants:applyPastDueByCode",
+  recomputePastDueFromAR: "tenants:recomputePastDueFromAR",
   enrichRent: "tenants:enrichRentByCode",
   bulkInsertGlTransactions: "glTransactions:bulkInsertByCode",
   bulkInsertReceivableDetails: "receivableDetails:bulkInsertByCode",
@@ -98,19 +99,22 @@ export async function uploadRunToConvex(
   // Phase 2 — parse each uploaded report and insert rows into the right Convex
   // table (income_statement → income_lines, rent_roll → tenants). Track which
   // properties got an income_statement update so we know who to run insights on.
+  //
+  // Everything from here through Phase 5 runs inside a try/finally so the
+  // sync job ALWAYS gets marked complete (or failed) — otherwise an uncaught
+  // throw between phases (e.g. network blip) leaves the row stuck in "pending"
+  // and pollutes the Data Pipeline grid forever.
   let totalRowsIngested = 0;
   const ingestErrors: string[] = [];
-  // For historical backfill, anchor the snapshot to the END of the report's
-  // period so monthly_revenue:recomputeFromMonth can find these rows by month
-  // prefix. For live syncs, today's timestamp is fine.
+  let fatalError: string | undefined;
+  // Declared outside the try so the post-try blocks (digest, activity log)
+  // can still reference them even if the ingest aborts.
   const snapshotDate = opts.historical && opts.month
     ? endOfMonthIso(opts.month)
     : new Date().toISOString();
   const ingestedProperties: string[] = [];
-  // Track each property's actual reporting period (e.g. "2026-04") so the
-  // monthly_revenue rollup writes to the correct month — independent of
-  // when the sync ran.
   const periodByProperty: Record<string, string> = {};
+  try {
   for (const u of uploaded) {
     let perFileRows = 0;
     try {
@@ -367,13 +371,20 @@ export async function uploadRunToConvex(
     }
   }
 
-  // Phase 2.4 — re-apply past-due AFTER all files are ingested. The
-  // receivable-detail branch calls applyPastDueByCode inline, but if
-  // RR-full ingest runs after RD (current order), it inserts fresh
-  // tenant rows with pastDueAmount=0, wiping the work. Post-pass
-  // re-runs applyPastDue using the Lease Ledger's aging data so the
-  // final tenant rows carry the right past-due numbers regardless of
-  // file order.
+  // Phase 2.4 — re-apply past-due AFTER all files are ingested.
+  //
+  // bulkReplaceTenants writes pastDueAmount: 0 on every fresh tenant row, so
+  // RR-full ingest wipes prior past-due even if RD already ran. There are
+  // two scenarios this post-pass handles:
+  //
+  //   (A) Current batch contains receivable_detail → re-parse the file and
+  //       apply that snapshot's amounts. Most accurate.
+  //
+  //   (B) Current batch does NOT contain receivable_detail (e.g. only
+  //       rent-roll-full was uploaded today) → fall back to recomputing past-
+  //       due from the latest receivable_details snapshot already stored in
+  //       Convex. Otherwise past-due silently zeroes out.
+  const propertiesWithFreshRD = new Set<string>();
   for (const u of uploaded) {
     if (u.reportType !== "receivable_detail") continue;
     try {
@@ -390,9 +401,28 @@ export async function uploadRunToConvex(
         propertyCode: u.propertyCode,
         rows: pastDueRows,
       });
+      propertiesWithFreshRD.add(u.propertyCode);
       console.log(`   re-applied past-due (post-pass) → ${u.propertyCode}: matched ${pd.matched}/${pd.tenants} · cleared ${pd.cleared}`);
     } catch (err: any) {
       console.error(`   post-pass past-due failed for ${u.propertyCode}: ${err?.message || err}`);
+    }
+  }
+  // Fallback (B): for properties that ingested rent-roll/tenancy but no fresh
+  // RD this run, rebuild past-due from the most recent stored receivable_details.
+  const recomputeFn = (FN as any).recomputePastDueFromAR;
+  if (recomputeFn) {
+    for (const code of ingestedProperties) {
+      if (propertiesWithFreshRD.has(code)) continue;
+      try {
+        const r: any = await client.mutation(recomputeFn, { propertyCode: code });
+        if (r?.skipped) {
+          console.log(`   past-due fallback ${code}: skipped (${r.skipped})`);
+        } else {
+          console.log(`   past-due fallback ${code}: applied ${r?.applied ?? 0}/${r?.tenantsScanned ?? 0} from stored AR`);
+        }
+      } catch (err: any) {
+        console.error(`   past-due fallback failed for ${code}: ${err?.message || err}`);
+      }
     }
   }
 
@@ -424,19 +454,29 @@ export async function uploadRunToConvex(
   // (via the /yardi-run skill) so the user can curate the output before
   // it lands as alerts. The sync just leaves data fresh in Convex; the
   // local Claude reads it and writes alerts.create() mutations as needed.
+  } catch (err: any) {
+    fatalError = err?.message || String(err);
+    console.error(`   sync ingest aborted: ${fatalError}`);
+  }
+
   const totalInsights = 0;
   const totalAlertsCreated = 0;
   const digestProperties: DigestProperty[] = [];
   const insightSummaries: Array<{ propertyCode: string; summary: string }> = [];
 
+  // completeSyncJob runs unconditionally so a thrown error between phases
+  // can never leave the job in "pending"/"running" forever.
   await client.mutation(FN.completeSyncJob as any, {
     id: jobId,
-    status: failed.length === 0 && ingestErrors.length === 0
+    status: fatalError
+      ? "failed"
+      : failed.length === 0 && ingestErrors.length === 0
       ? "completed"
       : (uploaded.length === 0 ? "failed" : "partial"),
     recordsCreated: totalRowsIngested,
     errorMessage:
       [
+        ...(fatalError ? [`fatal: ${fatalError}`] : []),
         ...failed.map(f => `${basename(f.filePath)}: ${f.error}`),
         ...ingestErrors,
       ].join("; ") || undefined,

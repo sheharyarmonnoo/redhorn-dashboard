@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { Mail } from "lucide-react";
-import { formatCurrency, normalizeTenantName, useReceivableDetails, useProperties, useUnitNotes } from "@/hooks/useConvexData";
+import { formatCurrency, normalizeTenantName, useReceivableDetails, useProperties, useUnitNotes, useTenantMutations } from "@/hooks/useConvexData";
 import EmailComposer, { type EmailContext } from "./EmailComposer";
 
 type Tenant = any;
@@ -39,6 +39,7 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
     tenant?.propertyId,
     tenant?.unit
   );
+  const { updateNotes: updateTenantNotes } = useTenantMutations();
 
   useEffect(() => {
     setNotesDraft("");
@@ -93,6 +94,14 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
 
   async function handleDeleteNote(id: string) {
     await removeNote({ id: id as any });
+  }
+
+  // The Yardi-imported "seed" note isn't a unit_notes row — it lives on the
+  // tenant document itself (`tenant.notes`). Clearing the field hides the
+  // seed-note card without affecting any user-authored unit_notes entries.
+  async function handleDeleteSeedNote() {
+    if (!tenant?._id) return;
+    await updateTenantNotes({ id: tenant._id, notes: "" });
   }
 
   function formatTimestamp(iso: string) {
@@ -212,13 +221,6 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
               <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{tenant.nextRentIncreaseAmount ? formatCurrency(tenant.nextRentIncreaseAmount) : "—"}</p>
             </Field>
 
-            <Field label="Tenant Email">
-              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5 truncate" title={tenant.tenantEmail || ""}>{tenant.tenantEmail || "—"}</p>
-            </Field>
-            <Field label="Tenant Phone">
-              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{tenant.tenantPhone || "—"}</p>
-            </Field>
-
             {/* Monthly Electric + Past Due intentionally hidden — billback
                 values aren't stable; the synced data still flows through
                 Convex but isn't surfaced here. */}
@@ -303,9 +305,21 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
 
             {/* Seed note (from original Yardi data) — shown at bottom if no log entries */}
             {seedNote && (
-              <div className="bg-[#fafafa] dark:bg-[#27272a] rounded p-2.5 mt-2 border border-[#f4f4f5] dark:border-[#3f3f46]">
+              <div className="group bg-[#fafafa] dark:bg-[#27272a] rounded p-2.5 mt-2 border border-[#f4f4f5] dark:border-[#3f3f46]">
                 <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed whitespace-pre-wrap">{seedNote}</p>
-                <p className="text-[9px] text-[#d4d4d8] dark:text-[#52525b] mt-1.5">From Yardi import</p>
+                <div className="flex items-center justify-between mt-1.5">
+                  <p className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">From Yardi import</p>
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Delete this Yardi-imported note? This won't affect notes you've added.")) {
+                        handleDeleteSeedNote();
+                      }
+                    }}
+                    className="text-[10px] font-medium text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             )}
           </div>

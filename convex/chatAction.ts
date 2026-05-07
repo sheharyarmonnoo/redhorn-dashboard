@@ -19,8 +19,11 @@ import { api, internal } from "./_generated/api";
  * need to add the @anthropic-ai/sdk dependency.
  */
 
-const PRIMARY_MODEL = "claude-opus-4-7";
-const FALLBACK_MODEL = "claude-sonnet-4-5";
+// Cheapest tier for the in-app assistant. Haiku 4.5 is ~$1/MTok input ·
+// $5/MTok output and handles the dashboard Q&A workload comfortably; we fall
+// back to Haiku 3.5 (older, slightly cheaper) if 4.5 is briefly unavailable.
+const PRIMARY_MODEL = "claude-haiku-4-5";
+const FALLBACK_MODEL = "claude-3-5-haiku-latest";
 const ANTHROPIC_VERSION = "2023-06-01";
 
 type AnthMessage = { role: "user" | "assistant"; content: string };

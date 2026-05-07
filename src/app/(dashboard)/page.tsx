@@ -4,9 +4,10 @@ import KPICard from "@/components/KPICard";
 import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
 import RevenueFilter from "@/components/RevenueFilter";
+import ComingSoonBanner from "@/components/ComingSoonBanner";
 import Link from "next/link";
 import { Wrench } from "lucide-react";
-import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, useMaintenance, formatCurrency, useDashboardLoading, isExpiringWithin, leasedUnitKeys } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, useMaintenance, formatCurrency, useDashboardLoading, isExpiringWithin, leasedUnitKeys, useReceivableDetails, normalizeTenantName } from "@/hooks/useConvexData";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
@@ -27,9 +28,16 @@ export default function DashboardPage() {
   // show "May" as the same value as April just because the sync ran in
   // May. Once next month's IS comes in, those months populate naturally.
   const monthlyRevenue = useMemo(() => {
+    // Cutoff = today's calendar month (don't show future months / phantom
+    // current-month rows that older syncs wrote before the period-from-header
+    // fix). The lower bound is "the past 18 months from today" rather than a
+    // hardcoded 2026-01 floor — that way Hollister-since-2025 users still see
+    // their full year-over-year history.
     const today = new Date();
     const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-    return monthlyRevenueRaw.filter((m: any) => m.month && m.month >= "2026-01" && m.month <= cutoff);
+    const floorDate = new Date(today.getFullYear(), today.getMonth() - 18, 1);
+    const floor = `${floorDate.getFullYear()}-${String(floorDate.getMonth() + 1).padStart(2, "0")}`;
+    return monthlyRevenueRaw.filter((m: any) => m.month && m.month >= floor && m.month <= cutoff);
   }, [monthlyRevenueRaw]);
   const loading = useDashboardLoading(property?._id);
   const { theme } = useTheme();
@@ -39,6 +47,13 @@ export default function DashboardPage() {
 
   if (!property || loading) {
     return <DashboardSkeleton />;
+  }
+
+  // RV park has no Yardi feed — data will integrate from Campspot later.
+  // Render a coming-soon card instead of zero-state KPIs that read like a
+  // broken sync.
+  if (property.propertyType === "rv_park") {
+    return <ComingSoonBanner propertyName={property.name} />;
   }
 
   const occupied = tenants.filter(t => t.status !== "vacant");
@@ -103,7 +118,9 @@ export default function DashboardPage() {
     // M1: warmer accent for dark mode so bars don't look like snow on white; clear hierarchy between series
     colors: isDark ? ["#e4e4e7", "#a1a1aa", "#52525b"] : ["#18181b", "#71717a", "#d4d4d8"],
     xaxis: { categories: monthlyRevenue.map(m => m.month), labels: { style: { colors: axisColor, fontSize: "11px" } } },
-    yaxis: { labels: { style: { colors: axisColor, fontSize: "11px" }, formatter: (v: number) => `$${(v / 1000).toFixed(0)}k` } },
+    // Lock y-axis floor at 0 so a $5k variance doesn't get auto-scaled into a
+    // dramatic visual swing. Forces the chart to read as absolute values.
+    yaxis: { min: 0, labels: { style: { colors: axisColor, fontSize: "11px" }, formatter: (v: number) => `$${(v / 1000).toFixed(0)}k` } },
     grid: { borderColor: gridColor, strokeDashArray: 0 },
     legend: { position: "top", horizontalAlign: "right", fontSize: "11px", markers: { size: 6, shape: "square" as const }, labels: { colors: axisColor } },
     tooltip: { y: { formatter: (v: number) => formatCurrency(v) }, theme: isDark ? "dark" : "light" },
@@ -179,6 +196,7 @@ export default function DashboardPage() {
           <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mb-3">Last {monthlyRevenue.length} months by category</p>
           {monthlyRevenue.length > 0 && <Chart options={revenueChartOptions} series={revenueSeries} type="bar" height={260} />}
         </div>
+        <TenantTrendChart propertyId={property._id} tenants={tenants} isDark={isDark} chartFont={chartFont} axisColor={axisColor} gridColor={gridColor} />
       </div>
 
       <LatestInsights propertyId={property._id} />
@@ -791,6 +809,140 @@ function Stat({ label, value, color }: { label: string; value: number; color?: s
     <div className="bg-[#fafafa] dark:bg-[#27272a] rounded p-2">
       <p className={`text-[18px] font-semibold ${color || "text-[#18181b] dark:text-[#fafafa]"}`}>{value}</p>
       <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">{label}</p>
+    </div>
+  );
+}
+
+function TenantTrendChart({ propertyId, tenants, isDark, chartFont, axisColor, gridColor }: {
+  propertyId: string;
+  tenants: any[];
+  isDark: boolean;
+  chartFont: string;
+  axisColor: string;
+  gridColor: string;
+}) {
+  const rows = useReceivableDetails(propertyId);
+
+  // Build the dropdown list from rent-roll tenants (the lease list), but only
+  // keep tenants that actually appear in receivable_details — otherwise picking
+  // them yields an empty chart. Falls back to receivable-side tenant names if
+  // the rent roll is empty (no Yardi rent-roll feed yet).
+  const tenantOptions = useMemo(() => {
+    const receivableNames = new Set<string>();
+    for (const r of rows) {
+      const k = normalizeTenantName(r.tenantName || "");
+      if (k) receivableNames.add(k);
+    }
+    const fromLeases = tenants
+      .filter((t: any) => t.status !== "vacant" && t.tenant)
+      .map((t: any) => ({ display: t.tenant as string, key: normalizeTenantName(t.tenant) }))
+      .filter((o) => o.key && receivableNames.has(o.key));
+    if (fromLeases.length > 0) {
+      // De-dupe on normalized key (multi-unit leases repeat the same tenant).
+      const seen = new Set<string>();
+      return fromLeases
+        .filter(o => {
+          if (seen.has(o.key)) return false;
+          seen.add(o.key);
+          return true;
+        })
+        .sort((a, b) => a.display.localeCompare(b.display));
+    }
+    // Fallback: derive labels straight from receivable rows.
+    const fromRows = new Map<string, string>();
+    for (const r of rows) {
+      const k = normalizeTenantName(r.tenantName || "");
+      if (!k || fromRows.has(k)) continue;
+      fromRows.set(k, r.tenantName || "");
+    }
+    return Array.from(fromRows.entries())
+      .map(([key, display]) => ({ key, display }))
+      .sort((a, b) => a.display.localeCompare(b.display));
+  }, [rows, tenants]);
+
+  const [selectedTenant, setSelectedTenant] = useState<string | null>(null);
+
+  // Default to the first tenant once options load. Reset if the active tenant
+  // disappears (property switch, sync wiped them, etc.).
+  useEffect(() => {
+    if (tenantOptions.length === 0) {
+      if (selectedTenant !== null) setSelectedTenant(null);
+      return;
+    }
+    if (!selectedTenant || !tenantOptions.some(o => o.key === selectedTenant)) {
+      setSelectedTenant(tenantOptions[0].key);
+    }
+  }, [tenantOptions, selectedTenant]);
+
+  // Group rows for the active tenant by postMonth, summing charges and receipts.
+  const { months, charges, payments } = useMemo(() => {
+    if (!selectedTenant) return { months: [] as string[], charges: [] as number[], payments: [] as number[] };
+    const byMonth = new Map<string, { charges: number; receipts: number }>();
+    for (const r of rows) {
+      if (!r.postMonth) continue;
+      if (normalizeTenantName(r.tenantName || "") !== selectedTenant) continue;
+      const entry = byMonth.get(r.postMonth) || { charges: 0, receipts: 0 };
+      entry.charges += r.charges || 0;
+      entry.receipts += r.receipts || 0;
+      byMonth.set(r.postMonth, entry);
+    }
+    const sortedMonths = Array.from(byMonth.keys()).sort();
+    return {
+      months: sortedMonths,
+      charges: sortedMonths.map(m => Math.round(byMonth.get(m)!.charges)),
+      payments: sortedMonths.map(m => Math.round(byMonth.get(m)!.receipts)),
+    };
+  }, [rows, selectedTenant]);
+
+  const chartOptions: ApexCharts.ApexOptions = {
+    chart: { type: "line", toolbar: { show: false }, fontFamily: chartFont, background: "transparent" },
+    theme: { mode: isDark ? "dark" : "light" },
+    // Charges = warm red, Payments = green. Same hues we use for past-due /
+    // healthy KPIs so the semantic meaning carries over.
+    colors: ["#dc2626", "#16a34a"],
+    stroke: { curve: "smooth", width: 2 },
+    xaxis: { categories: months, labels: { style: { colors: axisColor, fontSize: "11px" } } },
+    yaxis: { min: 0, labels: { style: { colors: axisColor, fontSize: "11px" }, formatter: (v: number) => `$${(v / 1000).toFixed(0)}k` } },
+    grid: { borderColor: gridColor, strokeDashArray: 0 },
+    legend: { position: "top", horizontalAlign: "right", fontSize: "11px", markers: { size: 6, shape: "square" as const }, labels: { colors: axisColor } },
+    markers: { size: 3, strokeWidth: 2, strokeColors: isDark ? "#18181b" : "#fff" },
+    tooltip: { y: { formatter: (v: number) => formatCurrency(v) }, theme: isDark ? "dark" : "light" },
+    dataLabels: { enabled: false },
+  };
+
+  const chartSeries = [
+    { name: "Charges", data: charges },
+    { name: "Payments", data: payments },
+  ];
+
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
+      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+        <div>
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-1">Tenant Charges & Payments</p>
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">Monthly trend per tenant from receivable details</p>
+        </div>
+        <select
+          value={selectedTenant || ""}
+          onChange={e => setSelectedTenant(e.target.value || null)}
+          disabled={tenantOptions.length === 0}
+          className="text-[12px] px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] disabled:opacity-40 max-w-[280px]"
+        >
+          {tenantOptions.length === 0 && <option value="">No tenants</option>}
+          {tenantOptions.map(o => (
+            <option key={o.key} value={o.key}>{o.display}</option>
+          ))}
+        </select>
+      </div>
+      {months.length > 0 ? (
+        <Chart options={chartOptions} series={chartSeries} type="line" height={260} />
+      ) : (
+        <div className="h-[260px] flex items-center justify-center">
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] italic">
+            {tenantOptions.length === 0 ? "No receivable data yet for this property." : "No transactions for this tenant."}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

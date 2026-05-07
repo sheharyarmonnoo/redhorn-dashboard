@@ -12,10 +12,11 @@ function useKpiData() {
 }
 
 // Derive vacant units from the diff: units in the Total Units listing that
-// don't have a matching tenant in the Current Leases panel. The tenants table
-// only carries active leases — vacancy is what's left of the unit list.
+// don't have a matching tenant in the Current Leases panel. Multi-unit leases
+// pack several units into one tenant row (e.g. "A-103, A-112, A-85") — pass
+// through leasedUnitKeys() so each is counted as occupied, not just the lease.
 function deriveVacantUnits(tenants: any[], units: any[]): any[] {
-  const tenantUnitKeys = new Set(tenants.map(t => (t.unit || "").trim().toLowerCase()));
+  const tenantUnitKeys = leasedUnitKeys(tenants);
   return units.filter((u: any) => !tenantUnitKeys.has((u.unit || "").trim().toLowerCase()));
 }
 
@@ -36,11 +37,14 @@ function Field({ label, value, color }: { label: string; value: string; color?: 
 
 function RevenueDetail() {
   const { tenants, monthlyRevenue: monthlyRevenueRaw } = useKpiData();
-  // Keep only months from 2026-01 onward, and exclude the current calendar
-  // month (which may carry a stale phantom value from an old sync run).
+  // Show last ~18 months of data so YoY comparisons work for users with
+  // history before 2026 — was previously hardcoded to "2026-01" floor which
+  // hid older months.
   const today = new Date();
   const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-  const monthlyRevenue = monthlyRevenueRaw.filter((m: any) => m.month && m.month >= "2026-01" && m.month <= cutoff);
+  const floorDate = new Date(today.getFullYear(), today.getMonth() - 18, 1);
+  const floor = `${floorDate.getFullYear()}-${String(floorDate.getMonth() + 1).padStart(2, "0")}`;
+  const monthlyRevenue = monthlyRevenueRaw.filter((m: any) => m.month && m.month >= floor && m.month <= cutoff);
   const occupied = tenants.filter((t: any) => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant?.includes("Owner"));
   const top5 = [...occupied].sort((a: any, b: any) => b.monthlyRent - a.monthlyRent).slice(0, 5);
   const latest = monthlyRevenue[monthlyRevenue.length - 1];

@@ -149,14 +149,27 @@ export default function AlertsPage() {
   // share the same schema as AI insights — title, body, severity, status,
   // propertyId, unit, date. localStorage no longer holds alert content; only
   // the per-browser "hidden from UI" + "archived" state lives there.
+  // Multi-unit leases store comma-separated units (e.g. "A-103, A-112, A-85"),
+  // so an exact `t.unit === alertUnit` lookup misses those leases entirely.
+  // Tokenize once and match per token.
+  const findLeaseForAlertUnit = (alertUnit: string) => {
+    const target = (alertUnit || "").trim().toLowerCase();
+    if (!target) return null;
+    return tenants.find((t: any) =>
+      (t.unit || "").split(",").map((s: string) => s.trim().toLowerCase()).includes(target)
+    );
+  };
+
   const customAlerts = useMemo<AlertRow[]>(() => {
     return (convexAlerts as any[])
       .filter(a => a.alertType === "custom" && a.propertyId === activeProperty?._id)
-      .map(a => ({
+      .map(a => {
+        const lease = findLeaseForAlertUnit(a.unit || "");
+        return ({
         id: `custom-${a._id}`,
         unit: a.unit || "—",
-        tenant: tenants.find((t: any) => t.unit === a.unit)?.tenant || "",
-        building: tenants.find((t: any) => t.unit === a.unit)?.building || "",
+        tenant: lease?.tenant || "",
+        building: lease?.building || "",
         category: (a.dataContext as any)?.category || "General",
         severity: (a.severity?.[0]?.toUpperCase() + a.severity?.slice(1)) as AlertRow["severity"] || "Warning",
         title: a.title,
@@ -165,7 +178,8 @@ export default function AlertsPage() {
         date: (a.date || "").slice(0, 10),
         convexAlertId: a._id,
         isAIInsight: false,
-      }));
+      });
+    });
   }, [convexAlerts, activeProperty?._id, tenants]);
 
   async function addAlert() {

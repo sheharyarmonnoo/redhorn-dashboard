@@ -81,6 +81,15 @@ export function useUnits(propertyId: string | undefined) {
   return units ?? [];
 }
 
+// Loading-aware variant for pages that need a skeleton state (e.g. site plan).
+export function useUnitsWithLoading(propertyId: string | undefined) {
+  const units = useQuery(
+    api.units.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  return { units: units ?? [], loading: !!propertyId && units === undefined };
+}
+
 // ===== MONTHLY REVENUE =====
 
 export function useMonthlyRevenue(propertyId: string | undefined) {

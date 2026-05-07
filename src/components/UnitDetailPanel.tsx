@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { X } from "lucide-react";
-import { useUnitNotes, useReceivableDetails, normalizeTenantName, formatCurrency } from "@/hooks/useConvexData";
+import { useUnitNotes, useReceivableDetails, normalizeTenantName, formatCurrency, useTenantMutations } from "@/hooks/useConvexData";
 
 interface Props {
   tenant: any | null;
@@ -49,6 +49,7 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
     tenant?.propertyId,
     tenant?.unit
   );
+  const { updateNotes: updateTenantNotes } = useTenantMutations();
 
   useEffect(() => {
     if (tenantProp) {
@@ -96,6 +97,12 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
 
   async function handleDeleteNote(id: string) {
     await removeNote({ id: id as any });
+  }
+
+  async function handleDeleteSeedNote() {
+    if (!tenant?._id) return;
+    await updateTenantNotes({ id: tenant._id, notes: "" });
+    onUpdated?.();
   }
 
   function formatTimestamp(iso: string) {
@@ -293,9 +300,21 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
 
             {/* Seed note (from original data, before any user notes) */}
             {seedNote && (
-              <div className="bg-[#fafafa] dark:bg-[#27272a] rounded p-2.5 mb-2 border border-[#f4f4f5] dark:border-[#3f3f46]">
+              <div className="group bg-[#fafafa] dark:bg-[#27272a] rounded p-2.5 mb-2 border border-[#f4f4f5] dark:border-[#3f3f46]">
                 <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed whitespace-pre-wrap">{seedNote}</p>
-                <p className="text-[9px] text-[#d4d4d8] dark:text-[#52525b] mt-1.5">From Yardi import</p>
+                <div className="flex items-center justify-between mt-1.5">
+                  <p className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">From Yardi import</p>
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Delete this Yardi-imported note? This won't affect notes you've added.")) {
+                        handleDeleteSeedNote();
+                      }
+                    }}
+                    className="text-[10px] font-medium text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             )}
 
@@ -432,6 +451,7 @@ function StatusBadge({ status }: { status: string }) {
     past_due:      { label: "Past Due",      cls: "bg-red-100 dark:bg-red-950/40 text-[#dc2626] border-red-200 dark:border-red-900" },
     expiring_soon: { label: "Expiring Soon", cls: "bg-blue-100 dark:bg-blue-950/40 text-[#2563eb] border-blue-200 dark:border-blue-900" },
     locked_out:    { label: "Locked Out",    cls: "bg-orange-100 dark:bg-orange-950/40 text-[#d97706] border-orange-200 dark:border-orange-900" },
+    vacant:        { label: "Vacant",        cls: "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] border-[#e4e4e7] dark:border-[#3f3f46]" },
   };
   const cfg = configs[s] || { label: s, cls: "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] border-[#e4e4e7] dark:border-[#3f3f46]" };
   return (

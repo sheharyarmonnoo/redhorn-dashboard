@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { Plus, X, Check, Trash2, RotateCcw } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
+import ComingSoonBanner from "@/components/ComingSoonBanner";
 import { useActiveProperty, useUnits, useMaintenance, formatCurrency } from "@/hooks/useConvexData";
 
 type Tab = "active" | "completed" | "routine";
@@ -204,6 +205,13 @@ export default function MaintenancePage() {
   }
 
   if (!property) return null;
+
+  // RV park's maintenance data will eventually come through Campspot — until
+  // that integration ships, render the coming-soon card instead of an empty
+  // open/overdue/routine grid that mimics a broken sync.
+  if (property.propertyType === "rv_park") {
+    return <ComingSoonBanner propertyName={property.name} />;
+  }
 
   return (
     <div>

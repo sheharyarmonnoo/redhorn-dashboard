@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { GridReadyEvent, GridApi } from "ag-grid-community";
 
 interface Options {
@@ -23,23 +23,36 @@ export function useAgGridPersistence({ storageKey, fallbackFit = true }: Options
     }, 250);
   }, [storageKey]);
 
-  const onGridReady = useCallback((params: GridReadyEvent) => {
-    apiRef.current = params.api;
+  const restoreFor = useCallback((api: GridApi, key: string) => {
     let restored = false;
     try {
-      const raw = localStorage.getItem(storageKey);
+      const raw = localStorage.getItem(key);
       if (raw) {
         const state = JSON.parse(raw);
         if (Array.isArray(state) && state.length > 0) {
-          params.api.applyColumnState({ state, applyOrder: true });
+          api.applyColumnState({ state, applyOrder: true });
           restored = true;
         }
       }
     } catch {}
     if (!restored && fallbackFit) {
-      params.api.sizeColumnsToFit();
+      api.sizeColumnsToFit();
     }
-  }, [storageKey, fallbackFit]);
+  }, [fallbackFit]);
+
+  const onGridReady = useCallback((params: GridReadyEvent) => {
+    apiRef.current = params.api;
+    restoreFor(params.api, storageKey);
+  }, [storageKey, restoreFor]);
+
+  // When the storageKey changes (e.g. user switches active property), reset
+  // the existing grid to that key's saved state — otherwise the previous
+  // property's column widths/order leak into the new view.
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api) return;
+    restoreFor(api, storageKey);
+  }, [storageKey, restoreFor]);
 
   return {
     onGridReady,

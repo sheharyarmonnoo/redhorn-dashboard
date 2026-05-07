@@ -7,6 +7,7 @@ import { useTenantsWithLoading, useUnits, useActiveProperty, formatCurrency, lea
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
+import ComingSoonBanner from "@/components/ComingSoonBanner";
 import { Download } from "lucide-react";
 
 type TenantStatus = "current" | "past_due" | "locked_out" | "vacant" | "expiring_soon";
@@ -176,6 +177,15 @@ export default function RentRollPage() {
   // A-85"). Tokenize on comma and compare the normalized token sets so
   // any-order matches work too.
   const deepLinkAppliedRef = useRef<string | null>(null);
+  // Reset the applied-ref when property changes so the same `?unit=` value
+  // doesn't get treated as "already applied" against a different property's
+  // tenants. Also clear stale filter + selection so the user doesn't see an
+  // empty grid when the unit doesn't exist in the new property.
+  useEffect(() => {
+    deepLinkAppliedRef.current = null;
+    setSelectedKey(null);
+    setQuickSearch("");
+  }, [activeProperty?._id]);
   useEffect(() => {
     if (!deepLinkUnit || !activeProperty?.code || tenants.length === 0) return;
     if (deepLinkAppliedRef.current === deepLinkUnit) return;
@@ -187,11 +197,13 @@ export default function RentRollPage() {
         .filter(Boolean);
     const targetTokens = tokenize(deepLinkUnit);
     if (targetTokens.length === 0) return;
+    // Strict-only match: every target token must be present in the lease's
+    // unit list. The previous fallback `tt[0] === targetTokens[0]` could
+    // produce false positives where the deep-link unit didn't actually exist
+    // in the lease (e.g. `?unit=A-103` matching "A-103-X, B-201").
     const match = tenants.find((t: any) => {
       const tt = tokenize(t.unit);
-      // Either every target token is in the tenant's units, or the tenant's
-      // first token equals the target's first token (cheap fallback).
-      return targetTokens.every((tk) => tt.includes(tk)) || tt[0] === targetTokens[0];
+      return targetTokens.every((tk) => tt.includes(tk));
     });
     if (match) {
       deepLinkAppliedRef.current = deepLinkUnit;
@@ -388,7 +400,9 @@ export default function RentRollPage() {
   }), []);
 
   const persistence = useAgGridPersistence({
-    storageKey: "redhorn_grid_rent_roll",
+    // Per-property key so column widths/order from one property don't bleed
+    // into another's grid when the user switches in the sidebar.
+    storageKey: `redhorn_grid_rent_roll_${activeProperty?.code || "_"}`,
     fallbackFit: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   });
 
@@ -463,6 +477,12 @@ export default function RentRollPage() {
         </div>
       </div>
     );
+  }
+
+  // RV park has no Yardi feed — Campspot integration is pending. Render the
+  // coming-soon card in place of the empty grid + zero-state stats.
+  if (activeProperty?.propertyType === "rv_park") {
+    return <ComingSoonBanner propertyName={activeProperty.name} />;
   }
 
   // No leases AND no units = property hasn't been onboarded into Yardi.

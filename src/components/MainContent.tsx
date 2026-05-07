@@ -42,7 +42,7 @@ export default function MainContent({ children }: { children: React.ReactNode })
       className="flex-1 pt-12 lg:pt-0 transition-all duration-200"
       style={{ marginLeft }}
     >
-      <div className="max-w-[1400px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+      <div className="w-full lg:max-w-[1800px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         <PropertyGuard>{children}</PropertyGuard>
       </div>
     </main>

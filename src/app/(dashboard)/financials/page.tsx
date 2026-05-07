@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import PageHeader from "@/components/PageHeader";
+import ComingSoonBanner from "@/components/ComingSoonBanner";
 import { api } from "../../../../convex/_generated/api";
 import { useActiveProperty, useIncomeLinesWithLoading, useMonthlyRevenue, useDebt, useLineBudgets, formatCurrency } from "@/hooks/useConvexData";
 
@@ -122,16 +123,30 @@ export default function FinancialsPage() {
     return Array.from(set).sort();
   }, [allHistoricLines]);
 
-  // Default the IS comparison to the latest period strictly before `period`.
+  // The IS view supports comparing ANY available period vs ANY other.
+  // Default: current period = latest (the IS's `period`); compare = prior.
+  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
   const [comparePeriod, setComparePeriod] = useState<string | null>(null);
   useEffect(() => {
     if (!period || !availablePeriods.length) return;
+    setSelectedPeriod(prev => prev && availablePeriods.includes(prev) ? prev : period);
     setComparePeriod(prev => {
       if (prev && availablePeriods.includes(prev) && prev !== period) return prev;
       const candidates = availablePeriods.filter(p => p < period);
       return candidates.length ? candidates[candidates.length - 1] : null;
     });
   }, [period, availablePeriods]);
+
+  const effectiveCurrentPeriod = selectedPeriod || period;
+
+  // Auto-clear comparePeriod if it would equal the new current period —
+  // comparing a period to itself yields all-zero variances, not useful.
+  useEffect(() => {
+    if (comparePeriod && comparePeriod === effectiveCurrentPeriod) {
+      const candidates = availablePeriods.filter(p => p !== effectiveCurrentPeriod);
+      setComparePeriod(candidates.length ? candidates[candidates.length - 1] : null);
+    }
+  }, [effectiveCurrentPeriod, comparePeriod, availablePeriods]);
 
   // Index of compare-period values keyed by line item (for quick lookups
   // while rendering the income statement).
@@ -141,48 +156,55 @@ export default function FinancialsPage() {
     return indexByLineItem(snap);
   }, [allHistoricLines, comparePeriod]);
 
-  // Yardi inserts rows in income-statement order; preserve that by sorting on
-  // _creationTime ascending. Previous code sorted alphabetically, which broke
-  // the natural P&L hierarchy (INCOME -> children -> TOTAL -> EXPENSE -> ...).
+  // The "current" lines drive the IS render. When user picks a non-latest
+  // period, swap rawLines with the historical snapshot for that period;
+  // otherwise use the live latest snapshot.
   const lines = useMemo(() => {
-    return [...rawLines].sort((a: any, b: any) => {
+    let source: any[] = rawLines;
+    if (effectiveCurrentPeriod && period && effectiveCurrentPeriod !== period && allHistoricLines) {
+      source = pickLatestSnapshot(allHistoricLines as any[], effectiveCurrentPeriod);
+      if (source.length === 0) source = rawLines;
+    }
+    // Preserve income-statement order via _creationTime ascending.
+    return [...source].sort((a: any, b: any) => {
       const ta = a._creationTime ?? 0;
       const tb = b._creationTime ?? 0;
       return ta - tb;
     });
-  }, [rawLines]);
+  }, [rawLines, allHistoricLines, effectiveCurrentPeriod, period]);
 
-  // Pull total income + total expense for % column
+  // KPIs + summary derive from `lines` (the swapped period source) so they
+  // refresh when the user picks a different current period from the dropdown.
+  // Yardi exports occasionally render these labels with double spaces, an
+  // "(Operating )?" qualifier, or a "(LOSS)" suffix on negative NOI. Match
+  // permissively so we don't fall back to summed children (which can drift).
   const totalIncome = useMemo(() => {
-    const row = rawLines.find((l: any) => /^\s*total\s+income\s*$/i.test((l.lineItem || "").trim()));
+    const row = lines.find((l: any) => /^total\s+(operating\s+)?income\b/i.test((l.lineItem || "").trim()));
     return row?.currentPeriod || 0;
-  }, [rawLines]);
+  }, [lines]);
 
-  // Total operating expenses + NOI lookup. Match common Yardi labels.
   const totalExpense = useMemo(() => {
-    const row = rawLines.find((l: any) => /^\s*total\s+(operating\s+)?expense/i.test((l.lineItem || "").trim()));
+    const row = lines.find((l: any) => /^total\s+(operating\s+)?expense/i.test((l.lineItem || "").trim()));
     return row?.currentPeriod || 0;
-  }, [rawLines]);
+  }, [lines]);
 
   const noi = useMemo(() => {
-    const row = rawLines.find((l: any) => /net\s+operating\s+income|^\s*noi\s*$/i.test((l.lineItem || "").trim()));
+    const row = lines.find((l: any) => /net\s+operating\s+income(\s*\(loss\))?|^\s*noi\b/i.test((l.lineItem || "").trim()));
     if (row) return row.currentPeriod;
     return totalIncome - totalExpense;
-  }, [rawLines, totalIncome, totalExpense]);
+  }, [lines, totalIncome, totalExpense]);
 
-  // Expense recoveries = lines under any "Misc Income" (or Recoverable Income)
-  // parent in the income statement.
   const recoveries = useMemo(() => {
     const parents = new Set(
-      rawLines
+      lines
         .filter((l: any) => /misc\s+income|recoverable\s+income|recoveries/i.test((l.lineItem || "").trim()))
         .map((l: any) => (l.lineItem || "").trim())
     );
     if (!parents.size) return { total: 0, items: [] as any[] };
-    const items = rawLines.filter((l: any) => l.parentLine && parents.has(l.parentLine));
+    const items = lines.filter((l: any) => l.parentLine && parents.has(l.parentLine));
     const total = items.reduce((s: number, l: any) => s + (l.currentPeriod || 0), 0);
     return { total, items };
-  }, [rawLines]);
+  }, [lines]);
 
   // DSCR = annualized NOI ÷ annual debt service
   const dscr = useMemo(() => {
@@ -204,6 +226,13 @@ export default function FinancialsPage() {
   }, [monthlyRevenue]);
 
   if (!property) return null;
+
+  // RV park doesn't have a Yardi income statement — the property's financials
+  // will integrate from Campspot in a future release. Render the coming-soon
+  // card so the user doesn't stare at zero-state KPIs.
+  if (property.propertyType === "rv_park") {
+    return <ComingSoonBanner propertyName={property.name} />;
+  }
 
   // Skeleton while income_lines streams in. Without this, the page flashes
   // "$0 / $0 / NOI $0 / 'No monthly trend data yet'" because the empty []
@@ -252,7 +281,7 @@ export default function FinancialsPage() {
     <div>
       <PageHeader
         title="Financials"
-        subtitle={period ? `Income Statement · ${formatPeriod(period)}` : "Income Statement"}
+        subtitle={effectiveCurrentPeriod ? `Income Statement · ${formatPeriod(effectiveCurrentPeriod)}` : "Income Statement"}
       />
 
       {noYardiData && (
@@ -291,11 +320,14 @@ export default function FinancialsPage() {
 
       {view === "statement" && (
         <>
-          <ISSummaryPanel lines={lines} compareIndex={compareIndex} comparePeriod={comparePeriod} currentPeriod={period} />
+          <ISSummaryPanel lines={lines} compareIndex={compareIndex} comparePeriod={comparePeriod} currentPeriod={effectiveCurrentPeriod} />
           <IncomeStatement
             lines={lines}
             totalIncome={totalIncome}
-            currentPeriod={period}
+            currentPeriod={effectiveCurrentPeriod}
+            latestPeriod={period}
+            selectedPeriod={selectedPeriod}
+            onChangeSelectedPeriod={setSelectedPeriod}
             comparePeriod={comparePeriod}
             availablePeriods={availablePeriods}
             onChangeComparePeriod={setComparePeriod}
@@ -330,6 +362,9 @@ function IncomeStatement({
   lines,
   totalIncome,
   currentPeriod,
+  latestPeriod,
+  selectedPeriod,
+  onChangeSelectedPeriod,
   comparePeriod,
   availablePeriods,
   onChangeComparePeriod,
@@ -337,7 +372,10 @@ function IncomeStatement({
 }: {
   lines: any[];
   totalIncome: number;
-  currentPeriod: string | null;
+  currentPeriod: string | null;     // the period actively displayed
+  latestPeriod: string | null;      // the most recent period in the data (default)
+  selectedPeriod: string | null;    // user's pick (null = default to latest)
+  onChangeSelectedPeriod: (p: string | null) => void;
   comparePeriod: string | null;
   availablePeriods: string[];
   onChangeComparePeriod: (p: string | null) => void;
@@ -423,9 +461,13 @@ function IncomeStatement({
     );
   }
 
-  const periodOptions = availablePeriods.filter(p => p !== currentPeriod);
+  // The current dropdown lists ALL available periods (so user can pick any as
+  // the left column). The compare dropdown excludes whatever the current is.
+  const currentOptions = availablePeriods;
+  const compareOptions = availablePeriods.filter(p => p !== currentPeriod);
   const compareLabel = comparePeriod ? formatPeriodShort(comparePeriod) : "Prior";
   const currentLabel = currentPeriod ? formatPeriodShort(currentPeriod) : "Current Period";
+  const isOverride = !!selectedPeriod && selectedPeriod !== latestPeriod;
 
   function renderRow(
     line: any,
@@ -513,18 +555,42 @@ function IncomeStatement({
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div className="flex flex-wrap items-center gap-4 mb-3">
+        <div className="flex items-center gap-2 text-[12px] text-[#71717a] dark:text-[#a1a1aa]">
+          <span>Period</span>
+          <select
+            value={selectedPeriod || latestPeriod || ""}
+            onChange={e => onChangeSelectedPeriod(e.target.value || null)}
+            disabled={!currentOptions.length}
+            className="text-[12px] px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] disabled:opacity-40"
+          >
+            {currentOptions.map(p => (
+              <option key={p} value={p}>
+                {formatPeriodShort(p)}{p === latestPeriod ? " (latest)" : ""}
+              </option>
+            ))}
+          </select>
+          {isOverride && (
+            <button
+              onClick={() => onChangeSelectedPeriod(null)}
+              className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] underline cursor-pointer"
+              title="Reset to latest period"
+            >
+              reset
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-2 text-[12px] text-[#71717a] dark:text-[#a1a1aa]">
           <span>Compare to</span>
           <select
             value={comparePeriod || ""}
             onChange={e => onChangeComparePeriod(e.target.value || null)}
-            disabled={!periodOptions.length}
+            disabled={!compareOptions.length}
             className="text-[12px] px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] disabled:opacity-40"
           >
-            {!periodOptions.length && <option value="">No prior periods</option>}
-            {periodOptions.length > 0 && <option value="">— None —</option>}
-            {periodOptions.map(p => (
+            {!compareOptions.length && <option value="">No other periods</option>}
+            {compareOptions.length > 0 && <option value="">— None —</option>}
+            {compareOptions.map(p => (
               <option key={p} value={p}>{formatPeriodShort(p)}</option>
             ))}
           </select>
@@ -1460,7 +1526,7 @@ function BudgetVsActualsHighLevel({
       const li = (l.lineItem || "").trim();
       if (!li) continue;
       const lvl = l.hierarchyLevel;
-      const isTotal = /^total\b|^net\b/i.test(li);
+      const isTotal = /^total\s|^net\s+(operating\s+)?(income|expense|revenue|cash|earnings)\b/i.test(li);
 
       if (lvl === 1 && !isTotal) {
         currentSection = li;
@@ -1521,7 +1587,7 @@ function BudgetVsActualsHighLevel({
     // both interest income (added to revenue) and bad debt expense (subtracted).
     for (const l of lines) {
       const li = (l.lineItem || "").trim();
-      const isSubtotal = /^total\b|^net\b/i.test(li);
+      const isSubtotal = /^total\s|^net\s+(operating\s+)?(income|expense|revenue|cash|earnings)\b/i.test(li);
       if (!isSubtotal) continue;
       const direct = leafBudget(li);
       if (direct && (direct.month !== 0 || direct.ytd !== 0 || direct.annual !== 0)) {
@@ -1589,7 +1655,7 @@ function BudgetVsActualsHighLevel({
         const isLevel1 = lvl === 1;
         const isLevel16 = lvl === 16;
         const isLevel24 = lvl === 24;
-        const isSubtotal = /^total\b|^net\b/i.test(li);
+        const isSubtotal = /^total\s|^net\s+(operating\s+)?(income|expense|revenue|cash|earnings)\b/i.test(li);
         const indent = isLevel1 ? 0 : isLevel16 ? 16 : 0;
 
         // For the selected period, look up actuals from the period-aware
@@ -1672,8 +1738,8 @@ function ISSummaryPanel({
   const KEY_TOTALS = [
     { match: /^total\s+income\s*$/i, label: "Total Income", color: "text-[#16a34a]" },
     { match: /^total\s+(operating\s+)?expense\s*$/i, label: "Total Operating Expense", color: "text-[#dc2626]" },
-    { match: /^net\s+operating\s+income/i, label: "NOI (Net Operating Income)", color: "text-[#16a34a]", emphasized: true },
-    { match: /^net\s+income\s*\(loss\)/i, label: "Net Income (Loss)", color: "text-[#16a34a]", emphasized: true },
+    { match: /^net\s+operating\s+income(\s*\(loss\))?\s*$/i, label: "NOI (Net Operating Income)", color: "text-[#16a34a]", emphasized: true },
+    { match: /^net\s+income(\s*\(loss\))?\s*$/i, label: "Net Income (Loss)", color: "text-[#16a34a]", emphasized: true },
   ];
 
   const found = KEY_TOTALS.map(t => {

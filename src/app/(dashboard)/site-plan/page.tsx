@@ -1,17 +1,21 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { useActiveProperty, useTenants, useUnits, leasedUnitKeys } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenantsWithLoading, useUnitsWithLoading, leasedUnitKeys } from "@/hooks/useConvexData";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
+import ComingSoonBanner from "@/components/ComingSoonBanner";
 import SitePlanFullSite from "@/components/SitePlanFullSite";
 import SitePlanFloorPlan from "@/components/SitePlanFloorPlan";
 import SitePlan3D from "@/components/SitePlan3D";
 
 export default function SitePlanPage() {
   const property = useActiveProperty();
-  const tenantsList = useTenants(property?._id) as any[];
-  const units = useUnits(property?._id) as any[];
+  const { tenants: tenantsListRaw, loading: tenantsLoading } = useTenantsWithLoading(property?._id);
+  const { units: unitsRaw, loading: unitsLoading } = useUnitsWithLoading(property?._id);
+  const tenantsList = tenantsListRaw as any[];
+  const units = unitsRaw as any[];
+  const dataLoading = tenantsLoading || unitsLoading;
   // Track only the unit string. Re-resolve the full tenant object from the
   // live list each render so override mutations (e.g. status toggle) flow
   // back into the open drawer immediately, without a close + reopen.
@@ -24,6 +28,16 @@ export default function SitePlanPage() {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setExecOpen(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [execOpen]);
+
+  // Lock body scroll while the floor-plan modal is open so the page behind
+  // the backdrop doesn't scroll on wheel/touch. Restore prior overflow on
+  // close so we don't permanently freeze the page if React reconciles oddly.
+  useEffect(() => {
+    if (!execOpen || typeof document === "undefined") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
   }, [execOpen]);
 
   // Resolve selectedUnit (single unit code) to the underlying lease, even
@@ -81,6 +95,34 @@ export default function SitePlanPage() {
       electricPosted: false,
     })),
   ];
+
+  // Skeleton while tenants/units stream in. Without it the stats flash
+  // "0 / 0 / 0 / 0" briefly on initial load (and on every property switch),
+  // which reads as a real empty-state.
+  if (dataLoading) {
+    return (
+      <div>
+        <PageHeader title="Site Plan" subtitle="Loading…" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 text-center animate-pulse">
+              <div className="h-7 w-12 mx-auto bg-[#f4f4f5] dark:bg-[#27272a] rounded mb-1.5" />
+              <div className="h-2 w-16 mx-auto bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6 animate-pulse">
+          <div className="h-72 w-full bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  // RV park doesn't get a Yardi-driven site plan — units come from Campspot
+  // and the data isn't wired up yet. Render the coming-soon card instead.
+  if (property?.propertyType === "rv_park") {
+    return <ComingSoonBanner propertyName={property.name} />;
+  }
 
   return (
     <div>

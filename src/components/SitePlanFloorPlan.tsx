@@ -28,70 +28,74 @@ type Room = {
   fontSize?: number; // Override default label size (used for tiny rooms like W/M)
 };
 
+// Layout uses a clean snap-to-grid: every rectangle's edges align with one of
+// a small set of x/y rails so adjacent rooms share boundaries instead of
+// overlapping by a couple of px (which is what happened when coords were
+// projected from a printed map). Vertical rails:
+//   y=90 (top wall) · y=258 (top-strip / restroom row) ·
+//   y=323 (restroom row / inner cluster) · y=434 (A-101 / A-102 split) ·
+//   y=489 (A-120 / W bathroom) · y=524 (W / M) · y=558 (inner / bottom rows)
+//   y=594 (A-100 / right gap) · y=640 (bottom-row-1 / A-130) · y=768 (floor)
+// Horizontal rails:
+//   x=90 · x=166 · x=244 · x=324 · x=360 · x=476 · x=488 · x=591 · x=608 ·
+//   x=652 · x=707 · x=760 · x=767 · x=859 · x=888 · x=1090
 const ROOMS: Room[] = [
-  // ── Top strip (image y 19 → 107) ─────────────────────────────────────────
-  // Break Room/Kitchen 14→126, A-107 126→174, A-111 174→222,
-  // A-106 222→270, A-106A 270→345, A-103 345→429 (A-103 extends down to 141)
+  // ── Top strip (y 90 → 258) ───────────────────────────────────────────────
   { label: "Break Room / Kitchen", x: 90,  y: 90, w: 270, h: 168, type: "common" },
   { unit:  "A-107",                 x: 360, y: 90, w: 116, h: 168, type: "unit" },
   { unit:  "A-111",                 x: 476, y: 90, w: 115, h: 168, type: "unit" },
   { unit:  "A-106",                 x: 591, y: 90, w: 116, h: 168, type: "unit" },
   { unit:  "A-106A",                x: 707, y: 90, w: 181, h: 168, type: "unit" },
-  // A-103: x 345→429 (888→1090), y 19→141 (90→323) — taller than rest of top row
+  // A-103 is taller than the rest of the top row — extends through the
+  // restroom-row band (y=258→323) so its bottom aligns with A-101's top.
   { unit:  "A-103",                 x: 888, y: 90, w: 202, h: 233, type: "unit" },
 
-  // EXIT door above Break Room (image x ~80, y ~10)
+  // EXIT door above Break Room
   { label: "EXIT", x: 200, y: 70, w: 50, h: 16, type: "exit" },
 
-  // Restroom cluster + A-108 sit at image y 107→138 (mapped 258→323)
+  // ── Restroom row (y 258 → 323) ───────────────────────────────────────────
+  // Three lockers + A-108 fill the left half; right half is intentionally
+  // empty (the printed map shows hallway, not units, beneath A-111/A-106/etc.)
   { label: "Womans", x: 90,  y: 258, w: 76,  h: 65, type: "common", fontSize: 12 },
   { label: "Mens",   x: 166, y: 258, w: 78,  h: 65, type: "common", fontSize: 12 },
   { unit:  "A-108",  x: 244, y: 258, w: 244, h: 65, type: "unit" },
 
-  // ── Inner cluster (image y 138 → 263 for A-120) ─────────────────────────
-  // A-120: x 14→111 (90→324), y 138→263 (235→558)  — left column, tall
-  // A-113: x 111→179 (324→488), y 138→263 (235→558)
-  // A-110: x 179→229 (488→608), y 138→212 (235→459)
-  // A-85:  x 179→229 (488→608), y 212→263 (459→558)
-  { unit: "A-120", x: 90,  y: 235, w: 234, h: 323, type: "unit" },
-  { unit: "A-113", x: 324, y: 235, w: 164, h: 323, type: "unit" },
-  { unit: "A-110", x: 488, y: 235, w: 120, h: 224, type: "unit" },
+  // ── Inner cluster (y 323 → 558) ──────────────────────────────────────────
+  // Was previously y=235 — overlapped both the top strip and the restroom
+  // row. Pushed down to y=323 so each row is its own band with no overlap.
+  // A-120's height is shortened so the W/M lockers fit cleanly in its bottom-
+  // left corner instead of being painted on top of it.
+  { unit: "A-120", x: 90,  y: 323, w: 234, h: 166, type: "unit" },
+  { unit: "A-113", x: 324, y: 323, w: 164, h: 235, type: "unit" },
+  { unit: "A-110", x: 488, y: 323, w: 120, h: 136, type: "unit" },
   { unit: "A-85",  x: 488, y: 459, w: 120, h:  99, type: "unit" },
 
-  // ── Common Area (center): image x 229→345, y 141→283 (608→888, 323→594) ─
-  { label: "Common Area", x: 608, y: 323, w: 280, h: 271, type: "common" },
+  // W/M stacked lockers below A-120 — share its left edge.
+  { label: "W", x: 90,  y: 489, w: 58, h: 35, type: "common", fontSize: 14 },
+  { label: "M", x: 90,  y: 524, w: 58, h: 34, type: "common", fontSize: 14 },
+  // Vestibule notch right of W/M, beneath A-120 (rendered as a static label
+  // so it's clearly part of the building footprint, not a missing rectangle).
+  { label: "", x: 148, y: 489, w: 176, h: 69, type: "common" },
 
-  // ── Right-side suites (image x 345→429) ──────────────────────────────────
-  // A-101: y 141→199 (323→434) right of A-103
-  // A-102: x 295→345 (767→888), y 199→283 (434→594)  — narrow corridor box
-  // A-100: y 199→283 (434→594) right column
+  // ── Common Area (y 323 → 594) ────────────────────────────────────────────
+  // Width trimmed to x=608→767 so it doesn't bleed under A-102 (was overlapping).
+  { label: "Common Area", x: 608, y: 323, w: 159, h: 271, type: "common" },
+
+  // ── Right-side suites ────────────────────────────────────────────────────
   { unit: "A-101", x: 888, y: 323, w: 202, h: 111, type: "unit" },
   { unit: "A-102", x: 767, y: 434, w: 121, h: 160, type: "unit" },
   { unit: "A-100", x: 888, y: 434, w: 202, h: 160, type: "unit" },
 
-  // EXIT marker on the right side (image x ~295, y ~283)
   { label: "EXIT", x: 870, y: 540, w: 50, h: 16, type: "exit" },
 
-  // ── W/M small restrooms left side (image x 14→50, y 211→263) ────────────
-  // Two stacked tiny rooms inside the building, between A-120 and A-114.
-  { label: "W", x: 90,  y: 489, w: 58, h: 35, type: "common", fontSize: 14 },
-  { label: "M", x: 90,  y: 524, w: 58, h: 34, type: "common", fontSize: 14 },
-
-  // ── Bottom rows ──────────────────────────────────────────────────────────
-  // A-114 is tall: x 14→84 (90→259), y 264→374 (558→768) — full bottom-left strip
-  { unit:  "A-114", x: 90, y: 558, w: 169, h: 210, type: "unit" },
-
-  // Middle-bottom row (image y 264→307, mapped 558→640):
-  // A-112: x  84→167 (259→459)
-  // Conf:  x 167→247 (459→652)
-  // A-85A: x 247→292 (652→760)
-  // A-90:  x 292→333 (760→859)
+  // ── Bottom row 1 (y 558 → 640) ───────────────────────────────────────────
+  { unit:  "A-114",            x: 90,  y: 558, w: 169, h: 210, type: "unit" },
   { unit:  "A-112",            x: 259, y: 558, w: 200, h:  82, type: "unit" },
   { label: "Conference Room", x: 459, y: 558, w: 193, h:  82, type: "common" },
   { unit:  "A-85A",            x: 652, y: 558, w: 108, h:  82, type: "unit" },
   { unit:  "A-90",             x: 760, y: 558, w:  99, h:  82, type: "unit" },
 
-  // A-130: wide bottom strip (image x 84→333, y 307→374) → 259→859, 640→768
+  // ── Bottom row 2 (y 640 → 768) ───────────────────────────────────────────
   { unit: "A-130", x: 259, y: 640, w: 600, h: 128, type: "unit" },
 ];
 
@@ -104,24 +108,26 @@ function findLeaseForUnit(unit: string, tenants: Tenant[]): Tenant | null {
   ) || null;
 }
 
+// Status colors aligned with RentRollDrawer pills: expiring_soon=BLUE (was
+// orange — collided with locked_out and looked identical to a non-action state).
 const STATUS_FILL: Record<string, string> = {
   current:       "rgba(22,163,74,0.10)",
   past_due:      "rgba(220,38,38,0.16)",
-  expiring_soon: "rgba(217,119,6,0.14)",
+  expiring_soon: "rgba(37,99,235,0.14)",
   locked_out:    "rgba(217,119,6,0.14)",
   vacant:        "transparent",
 };
 const HOVER_FILL: Record<string, string> = {
   current:       "rgba(22,163,74,0.16)",
   past_due:      "rgba(220,38,38,0.22)",
-  expiring_soon: "rgba(217,119,6,0.20)",
+  expiring_soon: "rgba(37,99,235,0.20)",
   locked_out:    "rgba(217,119,6,0.20)",
   vacant:        "rgba(100,116,139,0.16)",
 };
 const STATUS_STROKE: Record<string, string> = {
   current:       "rgba(22,163,74,0.55)",
   past_due:      "rgba(220,38,38,0.70)",
-  expiring_soon: "rgba(217,119,6,0.65)",
+  expiring_soon: "rgba(37,99,235,0.65)",
   locked_out:    "rgba(217,119,6,0.65)",
   vacant:        "rgba(161,161,170,0.40)",
 };
