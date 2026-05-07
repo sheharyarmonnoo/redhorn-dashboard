@@ -7,7 +7,7 @@ import RevenueFilter from "@/components/RevenueFilter";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
 import Link from "next/link";
 import { Wrench } from "lucide-react";
-import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, useMaintenance, formatCurrency, useDashboardLoading, isExpiringWithin, leasedUnitKeys, useReceivableDetails, normalizeTenantName } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, useMaintenance, formatCurrency, useDashboardLoading, isExpiringWithin, isExpired, leasedUnitKeys, useReceivableDetails, normalizeTenantName } from "@/hooks/useConvexData";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
@@ -68,12 +68,21 @@ export default function DashboardPage() {
   const tenantUnitKeys = leasedUnitKeys(tenants);
   const vacantUnits = units.filter((u: any) => !tenantUnitKeys.has((u.unit || "").trim().toLowerCase()));
   const totalUnits = units.length > 0 ? units.length : tenants.length;
-  // Occupancy is unit-level, not lease-level: count distinct leased units
-  // (with multi-unit leases expanded). Using occupied.length (tenant rows)
-  // would under-count by the number of multi-unit leases.
   const occupiedCount = tenantUnitKeys.size;
-  const occupancyPct = totalUnits > 0 ? Math.round((occupiedCount / totalUnits) * 100) : 0;
+  // Occupancy is square-footage based: leased SF / total SF. Falls back to
+  // tenant.sqft when the units table is empty.
   const totalVacantSqft = vacantUnits.reduce((s: number, u: any) => s + (u.sqft || 0), 0);
+  const totalSqft = units.length > 0
+    ? units.reduce((s: number, u: any) => s + (u.sqft || 0), 0)
+    : tenants.reduce((s: number, t: any) => s + (t.sqft || 0), 0);
+  const leasedSqft = units.length > 0
+    ? units
+        .filter((u: any) => tenantUnitKeys.has((u.unit || "").trim().toLowerCase()))
+        .reduce((s: number, u: any) => s + (u.sqft || 0), 0)
+    : tenants
+        .filter((t: any) => t.status !== "vacant")
+        .reduce((s: number, t: any) => s + (t.sqft || 0), 0);
+  const occupancyPct = totalSqft > 0 ? Math.round((leasedSqft / totalSqft) * 100) : 0;
   // Prefer the monthly_revenue rollup (derived from the income statement) when
   // present — Yardi's dashboard rent-roll panel doesn't carry rent figures, so
   // summing tenant.monthlyRent yields $0 on real data. Fall back to the tenant
@@ -92,6 +101,10 @@ export default function DashboardPage() {
   // the rent-roll panel doesn't always set "expiring_soon" even when the
   // lease term we now pull from the Lease Ledger crosses the 90-day window).
   const expiringCount = tenants.filter(t => t.status !== "vacant" && isExpiringWithin(t.leaseTo, 90)).length;
+  // Holdover / month-to-month leases — lease end date has already passed
+  // but the tenant is still active. Shown only when count > 0 so the KPI
+  // strip stays compact for properties with none.
+  const expiredCount = tenants.filter(t => t.status !== "vacant" && isExpired(t.leaseTo)).length;
 
   // Generate alerts from tenant data
   const today = new Date().toISOString().slice(0, 10);
@@ -188,10 +201,13 @@ export default function DashboardPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 mb-6">
         <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} sparkline={monthlyRevenue.map(m => m.total)} onClick={() => setKpiDrawer("revenue")} />
-        <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${occupiedCount} of ${totalUnits} units`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
+        <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${leasedSqft.toLocaleString()} of ${totalSqft.toLocaleString()} SF`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
         <KPICard title="Past Due" value={String(pastDueCount)} subtitle={pastDueAmount > 0 ? `${formatCurrency(pastDueAmount)} owed` : `${pastDueCount === 1 ? "unit" : "units"} past due`} color={pastDueCount > 0 ? "text-[#dc2626]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("pastdue")} />
         <KPICard title="Vacant" value={String(vacantUnits.length)} subtitle={`${totalVacantSqft.toLocaleString()} SF`} onClick={() => setKpiDrawer("vacant")} />
         <KPICard title="Expiring Leases" value={String(expiringCount)} subtitle="Within 90 days" onClick={() => setKpiDrawer("expiring")} />
+        {expiredCount > 0 && (
+          <KPICard title="Expired Leases" value={String(expiredCount)} subtitle="Holdover / past end date" color="text-[#dc2626]" onClick={() => setKpiDrawer("expired")} />
+        )}
       </div>
 
       {/* Charts */}

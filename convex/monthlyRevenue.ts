@@ -120,10 +120,10 @@ export const recomputeFromLatest = mutation({
       ? totalIncomeLine.currentPeriod
       : (rent + cam + electric + lateFees);
 
-    // Occupancy is unit-level: expand multi-unit leases (tenant.unit can be
-    // "A-103, A-112, A-85" — three units in one lease row) before counting.
-    // Otherwise multi-unit leases under-count and Hollister reads 65% when
-    // the real number is 82%.
+    // Occupancy is square-footage based: leased SF / total SF. Multi-unit
+    // leases (tenant.unit can be "A-103, A-112, A-85") are expanded first so
+    // every leased unit's sqft contributes. Falls back to tenant.sqft when
+    // the units table is empty (e.g. a property without a Total Units feed).
     const tenants = await ctx.db
       .query("tenants")
       .withIndex("by_property_latest", (q) =>
@@ -143,7 +143,20 @@ export const recomputeFromLatest = mutation({
         if (k) leasedKeys.add(k);
       }
     }
-    const occupancy = units.length > 0 ? Math.round((leasedKeys.size / units.length) * 100) : 0;
+    let occupancy = 0;
+    if (units.length > 0) {
+      const totalSqft = units.reduce((s, u) => s + (u.sqft || 0), 0);
+      const leasedSqft = units
+        .filter((u) => leasedKeys.has((u.unit || "").trim().toLowerCase()))
+        .reduce((s, u) => s + (u.sqft || 0), 0);
+      occupancy = totalSqft > 0 ? Math.round((leasedSqft / totalSqft) * 100) : 0;
+    } else if (tenants.length > 0) {
+      const totalSqft = tenants.reduce((s, t) => s + (t.sqft || 0), 0);
+      const leasedSqft = tenants
+        .filter((t) => t.status !== "vacant")
+        .reduce((s, t) => s + (t.sqft || 0), 0);
+      occupancy = totalSqft > 0 ? Math.round((leasedSqft / totalSqft) * 100) : 0;
+    }
 
     // Upsert
     const existing = await ctx.db
@@ -290,7 +303,20 @@ export const recomputeFromMonth = mutation({
         if (k) leasedKeys.add(k);
       }
     }
-    const occupancy = units.length > 0 ? Math.round((leasedKeys.size / units.length) * 100) : 0;
+    let occupancy = 0;
+    if (units.length > 0) {
+      const totalSqft = units.reduce((s, u) => s + (u.sqft || 0), 0);
+      const leasedSqft = units
+        .filter((u) => leasedKeys.has((u.unit || "").trim().toLowerCase()))
+        .reduce((s, u) => s + (u.sqft || 0), 0);
+      occupancy = totalSqft > 0 ? Math.round((leasedSqft / totalSqft) * 100) : 0;
+    } else if (tenants.length > 0) {
+      const totalSqft = tenants.reduce((s, t) => s + (t.sqft || 0), 0);
+      const leasedSqft = tenants
+        .filter((t) => t.status !== "vacant")
+        .reduce((s, t) => s + (t.sqft || 0), 0);
+      occupancy = totalSqft > 0 ? Math.round((leasedSqft / totalSqft) * 100) : 0;
+    }
 
     const existing = await ctx.db
       .query("monthly_revenue")

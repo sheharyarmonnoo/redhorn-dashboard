@@ -153,6 +153,18 @@ export function isExpiringWithin(leaseTo: string | undefined, days = 90): boolea
   return lease >= today && lease <= cutoff;
 }
 
+// Lease end already passed but the tenant is still occupying the unit
+// (holdover). Used to surface the "Expired Leases" KPI separately from
+// the 90-day Expiring window.
+export function isExpired(leaseTo: string | undefined): boolean {
+  if (!leaseTo) return false;
+  const lease = new Date(leaseTo);
+  if (Number.isNaN(lease.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return lease < today;
+}
+
 // ===== DEALS =====
 
 export function useDeals() {

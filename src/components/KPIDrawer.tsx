@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, formatCurrency, isExpiringWithin, leasedUnitKeys } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, formatCurrency, isExpiringWithin, isExpired, leasedUnitKeys } from "@/hooks/useConvexData";
 
 function useKpiData() {
   const property = useActiveProperty();
@@ -87,11 +87,15 @@ function OccupancyDetail() {
   const totalSqft = units.length > 0
     ? units.reduce((s: number, u: any) => s + (u.sqft || 0), 0)
     : tenants.reduce((s: number, t: any) => s + (t.sqft || 0), 0);
-  const occSqft = occupied.reduce((s: number, t: any) => s + (t.sqft || 0), 0);
-  const buildings = Array.from(new Set(units.map((u: any) => u.building).filter(Boolean))).sort() as string[];
   // Multi-unit leases pack several units into one tenant row — expand on
-  // comma so the count is unit-level, not lease-level.
+  // comma so SF / unit counts are unit-level, not lease-level.
   const tenantUnitKeys = leasedUnitKeys(tenants);
+  const occSqft = units.length > 0
+    ? units
+        .filter((u: any) => tenantUnitKeys.has((u.unit || "").trim().toLowerCase()))
+        .reduce((s: number, u: any) => s + (u.sqft || 0), 0)
+    : occupied.reduce((s: number, t: any) => s + (t.sqft || 0), 0);
+  const buildings = Array.from(new Set(units.map((u: any) => u.building).filter(Boolean))).sort() as string[];
   const occupiedCount = tenantUnitKeys.size;
   return (
     <div className="space-y-5">
@@ -99,7 +103,7 @@ function OccupancyDetail() {
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Occupancy Summary</p>
         <Field label="Occupied Units" value={`${occupiedCount} of ${totalUnitsCount}`} />
         <Field label="Occupied SF" value={`${occSqft.toLocaleString()} of ${totalSqft.toLocaleString()}`} />
-        <Field label="Occupancy Rate" value={totalUnitsCount > 0 ? `${Math.round((occupiedCount / totalUnitsCount) * 100)}%` : "—"} color="text-[#16a34a]" />
+        <Field label="Occupancy Rate" value={totalSqft > 0 ? `${Math.round((occSqft / totalSqft) * 100)}%` : "—"} color="text-[#16a34a]" />
       </div>
       {buildings.length > 0 && (
         <div>
@@ -280,6 +284,47 @@ function ExpiringDetail({ onClose }: { onClose: () => void }) {
   );
 }
 
+function ExpiredDetail({ onClose }: { onClose: () => void }) {
+  const { tenants } = useKpiData();
+  const router = useRouter();
+  const expired = tenants.filter((t: any) => t.status !== "vacant" && isExpired(t.leaseTo));
+  const totalRent = expired.reduce((s: number, t: any) => s + t.monthlyRent, 0);
+  function openInRentRoll(unit: string) {
+    onClose();
+    router.push(`/rent-roll?unit=${encodeURIComponent(unit)}`);
+  }
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Expired Leases</p>
+        <Field label="Past End Date" value={`${expired.length} leases`} />
+        <Field label="Holdover Revenue" value={`${formatCurrency(totalRent)}/mo`} color="text-[#dc2626]" />
+      </div>
+      <div>
+        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Lease Details</p>
+        {expired.length === 0 ? (
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No expired leases.</p>
+        ) : expired.map((t: any) => (
+          <button
+            key={t.unit}
+            onClick={() => openInRentRoll(t.unit)}
+            className="w-full text-left py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 hover:bg-[#fafafa] dark:hover:bg-[#27272a]/40 cursor-pointer transition-colors"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate min-w-0 flex-1">
+                {t.unit} — {t.tenant}
+              </span>
+              <span className="text-[12px] text-[#dc2626] whitespace-nowrap flex-shrink-0">{formatLeaseDate(t.leaseTo)}</span>
+            </div>
+            <p className="text-[10px] text-[#71717a] mt-0.5">{formatCurrency(t.monthlyRent)}/mo · {t.sqft.toLocaleString()} SF · Bldg {t.building}</p>
+            {t.notes && <p className="text-[10px] text-[#a1a1aa] mt-0.5">{t.notes}</p>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const titles: Record<string, string> = {
   revenue: "Monthly Revenue",
   occupancy: "Occupancy Rate",
@@ -287,6 +332,7 @@ const titles: Record<string, string> = {
   vacant: "Vacant Units",
   electric: "Electric Posting",
   expiring: "Expiring Leases",
+  expired: "Expired Leases",
 };
 
 export default function KPIDrawer({ open, kpiKey, onClose }: KPIDrawerProps) {
@@ -325,6 +371,7 @@ export default function KPIDrawer({ open, kpiKey, onClose }: KPIDrawerProps) {
           {kpiKey === "vacant" && <VacantDetail />}
           {kpiKey === "electric" && <ElectricDetail />}
           {kpiKey === "expiring" && <ExpiringDetail onClose={onClose} />}
+          {kpiKey === "expired" && <ExpiredDetail onClose={onClose} />}
         </div>
       </div>
     </div>

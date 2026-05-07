@@ -94,20 +94,34 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
       `- ${m.month}: total ${fmt$(m.total)} (rent ${fmt$(m.rent)}, cam ${fmt$(m.cam)}, electric ${fmt$(m.electric)}, occ ${m.occupancy ?? 0}%)`
   );
 
-  // ---- Lease expirations within 90 days ----
+  // ---- Lease expirations within 90 days + already-expired holdovers ----
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const cutoff = new Date(today);
   cutoff.setDate(cutoff.getDate() + 90);
   const expiringSoon = (tenants || [])
     .filter((t: any) => {
-      if (!t.leaseTo) return false;
+      if (t.status === "vacant" || !t.leaseTo) return false;
       const d = new Date(t.leaseTo);
       return !Number.isNaN(d.getTime()) && d >= today && d <= cutoff;
     })
     .sort((a: any, b: any) => (a.leaseTo || "").localeCompare(b.leaseTo || ""));
   const expLines = trimList(expiringSoon, 15).map(
     (t: any) => `- ${t.unit} | ${t.tenant} | ends ${t.leaseTo} | ${fmt$(t.monthlyRent)}/mo`
+  );
+  // Holdovers — lease end date already passed but tenant is still active.
+  // Surfaced as the "Expired Leases" KPI on the dashboard, so the chatbot
+  // needs the same data to answer "which leases are expired?" / "who's on a
+  // month-to-month?".
+  const expired = (tenants || [])
+    .filter((t: any) => {
+      if (t.status === "vacant" || !t.leaseTo) return false;
+      const d = new Date(t.leaseTo);
+      return !Number.isNaN(d.getTime()) && d < today;
+    })
+    .sort((a: any, b: any) => (a.leaseTo || "").localeCompare(b.leaseTo || ""));
+  const expiredLines = trimList(expired, 15).map(
+    (t: any) => `- ${t.unit} | ${t.tenant} | ended ${t.leaseTo} | ${fmt$(t.monthlyRent)}/mo`
   );
 
   // ---- Active alerts ----
@@ -152,6 +166,10 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
   sections.push(expLines.length ? expLines.join("\n") : "- (none)");
   sections.push("");
 
+  sections.push(`Expired leases / holdovers (lease end already passed, ${expired.length}):`);
+  sections.push(expiredLines.length ? expiredLines.join("\n") : "- (none)");
+  sections.push("");
+
   sections.push(`Active alerts (${openAlerts.length}):`);
   sections.push(alertLines.length ? alertLines.join("\n") : "- (none)");
 
@@ -165,6 +183,7 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
         tenants: totalTenants,
         pastDue: pastDue.length,
         expiringSoon: expiringSoon.length,
+        expired: expired.length,
         openAlerts: openAlerts.length,
       },
     },
