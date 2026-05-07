@@ -22,7 +22,12 @@ export default function DashboardError({
           We hit a snag rendering this page.
         </h1>
         <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mb-5">
-          {error.message || "Unknown error"}
+          Try refreshing the page. If it keeps happening, reach out to support.
+          {error.digest && (
+            <span className="block mt-2 text-[10px] text-[#a1a1aa] dark:text-[#52525b] font-mono">
+              ref: {error.digest}
+            </span>
+          )}
         </p>
         <div className="flex items-center justify-center gap-2">
           <button

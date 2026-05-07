@@ -6,7 +6,11 @@ import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
 import { ReactNode, useState, useEffect } from "react";
 
-const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+// Backend DB URL. Read from NEXT_PUBLIC_DB_URL (preferred — neutral name
+// that doesn't bake the vendor into the env var) with fallback to the
+// legacy NEXT_PUBLIC_CONVEX_URL so existing deployments keep working.
+const dbUrl = process.env.NEXT_PUBLIC_DB_URL || process.env.NEXT_PUBLIC_CONVEX_URL!;
+const convex = new ConvexReactClient(dbUrl);
 
 export default function ConvexClientProvider({ children }: { children: ReactNode }) {
   const [isDark, setIsDark] = useState(false);

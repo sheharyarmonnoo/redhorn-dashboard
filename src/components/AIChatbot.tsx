@@ -112,9 +112,19 @@ export default function AIChatbot() {
         userName: user?.fullName || undefined,
         userEmail: user?.primaryEmailAddress?.emailAddress || undefined,
       });
-      if (!result?.ok && result?.error) setErrorMsg(result.error);
+      if (!result?.ok) {
+        // Don't surface raw vendor error strings (Anthropic 429,
+        // schema validation, etc.) to the user — keep the daily-cap
+        // message verbatim since it's actionable copy we control,
+        // otherwise fall back to a generic "couldn't process".
+        const raw = result?.error || "";
+        const isUserCap = /daily limit|rate.*limit|per 24/i.test(raw);
+        setErrorMsg(isUserCap ? raw : "Couldn't process that — please try again.");
+        if (raw) console.error("[AIChatbot] mutation error:", raw);
+      }
     } catch (err: any) {
-      setErrorMsg(err?.message || String(err));
+      console.error("[AIChatbot] threw:", err);
+      setErrorMsg("Couldn't process that — please try again.");
     } finally {
       setSending(false);
     }
