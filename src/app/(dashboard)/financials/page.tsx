@@ -373,6 +373,7 @@ function IncomeStatement({
       isOpen?: boolean;
       onClick?: () => void;
       valueOverride?: number | null;
+      ytdOverride?: number | null;
       cmpOverride?: number | null;
       bold?: boolean;
       topBorder?: boolean;
@@ -389,6 +390,9 @@ function IncomeStatement({
     const cp = opts.valueOverride !== undefined && opts.valueOverride !== null
       ? opts.valueOverride
       : (line.currentPeriod || 0);
+    const ytd = opts.ytdOverride !== undefined && opts.ytdOverride !== null
+      ? opts.ytdOverride
+      : (line.yearToDate || 0);
     const isNeg = cp < 0;
     const cmp = opts.cmpOverride !== undefined
       ? opts.cmpOverride
@@ -400,7 +404,7 @@ function IncomeStatement({
     const showValue = cp !== 0;
 
     const rowClass = [
-      "grid grid-cols-[1fr_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px]",
+      "grid grid-cols-[1fr_120px_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px]",
       opts.topBorder ? "border-t-2 border-[#18181b] dark:border-[#fafafa]" : "border-t border-[#f4f4f5] dark:border-[#27272a]",
       isLevel24 ? "bg-[#f4f4f5] dark:bg-[#27272a] font-bold text-[#18181b] dark:text-[#fafafa]" :
         isLevel16 ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]" :
@@ -428,6 +432,9 @@ function IncomeStatement({
         <span className={`text-right ${isNeg ? "text-[#dc2626]" : ""}`}>
           {showValue ? formatCurrency(Math.abs(cp)) : "—"}
           {isNeg && showValue ? <span className="text-[#dc2626]"> ▼</span> : null}
+        </span>
+        <span className={`text-right ${ytd < 0 ? "text-[#dc2626]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
+          {ytd === 0 ? "—" : formatCurrency(Math.abs(ytd))}
         </span>
         <span className={`text-right ${cmp !== null && cmp !== undefined && cmp < 0 ? "text-[#dc2626]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
           {cmp === null || cmp === undefined || cmp === 0 ? "—" : formatCurrency(Math.abs(cmp))}
@@ -466,9 +473,10 @@ function IncomeStatement({
       </div>
 
       <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-        <div className="grid grid-cols-[1fr_120px_120px_110px_80px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <div className="grid grid-cols-[1fr_120px_120px_120px_110px_80px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
           <span>Line Item</span>
           <span className="text-right">{currentLabel}</span>
+          <span className="text-right">YTD</span>
           <span className="text-right">{compareLabel}</span>
           <span className="text-right">Variance $</span>
           <span className="text-right">Var %</span>
@@ -492,9 +500,11 @@ function IncomeStatement({
           // inline on the header row. Pull both current and compare values
           // from the matched subtotal row so variance is meaningful.
           let inlineValue: number | null = null;
+          let inlineYtd: number | null = null;
           let inlineCmp: number | null | undefined = undefined;
           if (block.header && !isOpen && block.sectionTotal) {
             inlineValue = block.sectionTotal.currentPeriod || 0;
+            inlineYtd = block.sectionTotal.yearToDate || 0;
             const totalLi = (block.sectionTotal.lineItem || "").trim();
             inlineCmp = compareIndex?.get(totalLi)?.currentPeriod ?? null;
           }
@@ -506,6 +516,7 @@ function IncomeStatement({
                 isOpen,
                 onClick: () => setExpanded(s => ({ ...s, [headerLi]: !s[headerLi] })),
                 valueOverride: inlineValue,
+                ytdOverride: inlineYtd,
                 cmpOverride: inlineCmp,
               })}
 
