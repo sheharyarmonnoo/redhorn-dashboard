@@ -251,12 +251,22 @@ export const bulkReplaceByCode = mutation({
         q.eq("propertyId", property._id).eq("isLatest", true)
       )
       .collect();
+    // Index prior rows by normalized unit so we can carry over fields the
+    // rent-roll export doesn't include — past-due amount, last payment date,
+    // electric posting flag, and any synced rent-increase data — from the
+    // applyPastDueByCode / receivable-detail / tenancy-schedule passes that
+    // already ran. Without this, rent-roll-full's bulk-replace wipes those
+    // fields back to zero.
+    const norm = (s: string) => (s || "").trim().toLowerCase();
+    const priorByUnit: Record<string, any> = {};
     for (const row of prior) {
+      priorByUnit[norm(row.unit)] = row;
       await ctx.db.patch(row._id, { isLatest: false });
     }
 
     let inserted = 0;
     for (const r of args.rows) {
+      const carry = priorByUnit[norm(r.unit)] || {};
       const doc: any = {
         syncId: args.syncId,
         propertyId: property._id,
@@ -270,13 +280,16 @@ export const bulkReplaceByCode = mutation({
         monthlyRent: r.monthlyRent ?? 0,
         monthlyElectric: r.monthlyElectric ?? 0,
         securityDeposit: r.securityDeposit ?? 0,
-        status: r.status || "current",
-        pastDueAmount: r.pastDueAmount ?? 0,
-        electricPosted: false,
-        lastPaymentDate: "",
+        status: r.status ?? carry.status ?? "current",
+        pastDueAmount: r.pastDueAmount ?? carry.pastDueAmount ?? 0,
+        electricPosted: carry.electricPosted ?? false,
+        lastPaymentDate: carry.lastPaymentDate || "",
         snapshotDate: args.snapshotDate,
         isLatest: true,
       };
+      // Carry over synced tenancy-schedule fields when present
+      if (typeof carry.nextRentIncrease === "string" && carry.nextRentIncrease) doc.nextRentIncrease = carry.nextRentIncrease;
+      if (typeof carry.nextRentIncreaseAmount === "number" && carry.nextRentIncreaseAmount > 0) doc.nextRentIncreaseAmount = carry.nextRentIncreaseAmount;
       // Optional Show Detail columns — only set when present so we don't
       // store undefined values for properties whose rent roll lacks them.
       if (typeof r.leaseTermMonths === "number" && r.leaseTermMonths > 0) doc.leaseTermMonths = r.leaseTermMonths;
