@@ -242,14 +242,7 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
               {/* Status — auto-derived from Yardi data */}
               <StatusBadge status={tenant.status} />
 
-              {/* Past Due */}
-              {tenant.pastDueAmount > 0 && (
-                <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded p-3">
-                  <p className="text-[10px] text-[#dc2626] uppercase tracking-wide font-medium">Past Due</p>
-                  <p className="text-[22px] font-semibold text-[#dc2626] tracking-tight mt-0.5">{formatCurrency(tenant.pastDueAmount)}</p>
-                  <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1">Last paid: {tenant.lastPaymentDate}</p>
-                </div>
-              )}
+
 
               {/* Posting Status — auto-derived from receivable detail charges during sync */}
               {tenant.leaseType === "Office Net Lease" && (
