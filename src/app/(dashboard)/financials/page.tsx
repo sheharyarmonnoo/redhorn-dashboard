@@ -1538,7 +1538,10 @@ function BudgetVsActualsHighLevel({
     return { monthBudget: 0, ytdBudget: 0, hasBudget: false };
   }
 
-  const periodLabel = period ? formatPeriodShort(period) : "Current";
+  // Header label re-keys off the SELECTED period so changing the dropdown
+  // updates the column headers (was using `period` — the IS's current
+  // period — which never changed).
+  const periodLabel = selectedPeriod ? formatPeriodShort(selectedPeriod) : "Current";
   const hasAnyBudgetData = budgets.some((b: any) => (b.annualBudget || 0) !== 0 || (Array.isArray(b.monthlyBudgets) && b.monthlyBudgets.some((v: number) => v !== 0)));
 
   return (
