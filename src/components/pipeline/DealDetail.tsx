@@ -20,8 +20,11 @@ import {
   Download,
   Paperclip,
 } from "lucide-react";
-import { formatCurrency } from "@/hooks/useConvexData";
+import { formatCurrency, useDealFieldDefinitions } from "@/hooks/useConvexData";
 import { DealStage, getStageLabel, getStageColor } from "@/data/_seed_deals";
+import CustomFieldRow from "./CustomFieldRow";
+import CustomFieldsModal from "./CustomFieldsModal";
+import { Settings2 } from "lucide-react";
 
 function cn(...classes: (string | false | undefined | null)[]) {
   return classes.filter(Boolean).join(" ");
@@ -104,6 +107,12 @@ export function DealDetail({
   const notes = deal.notes || [];
   const tasks = deal.tasks || [];
   const documents = deal.documents || [];
+
+  // Custom field defs (sorted) + setter mutation. customFields[def.key] is
+  // the per-deal value blob.
+  const { defs: customFieldDefs } = useDealFieldDefinitions();
+  const setCustomField = useMutation(api.deals.setCustomField);
+  const [customFieldsModalOpen, setCustomFieldsModalOpen] = useState(false);
 
   function saveField(field: string, value: any) {
     if (updateField) {
@@ -316,6 +325,39 @@ export function DealDetail({
                 </div>
               </section>
 
+              {/* Custom Fields — schema-flexible columns the user defines
+                  in the Manage Fields modal. Renders one CustomFieldRow per
+                  definition, sorted by `order`. */}
+              <section>
+                <div className="flex items-center justify-between mb-2.5">
+                  <p className="text-[10px] font-semibold text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wider">Custom Fields</p>
+                  <button
+                    onClick={() => setCustomFieldsModalOpen(true)}
+                    className="flex items-center gap-1 text-[10px] font-medium text-[#2563eb] dark:text-[#60a5fa] hover:bg-blue-50 dark:hover:bg-blue-950/30 px-1.5 py-0.5 rounded cursor-pointer"
+                    title="Manage custom field columns"
+                  >
+                    <Settings2 size={10} /> Manage Fields
+                  </button>
+                </div>
+                {customFieldDefs.length === 0 ? (
+                  <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] italic">No custom fields yet. Click "Manage Fields" to add one.</p>
+                ) : (
+                  <div className="bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3 space-y-1">
+                    {customFieldDefs.map((def: any) => (
+                      <CustomFieldRow
+                        key={def._id}
+                        label={def.label}
+                        fieldKey={def.key}
+                        type={def.type}
+                        options={def.options}
+                        value={(deal.customFields || {})[def.key]}
+                        onSave={async (next) => { await setCustomField({ id: deal._id, key: def.key, value: next }); }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+
               {/* Contacts */}
               {deal.contacts && deal.contacts.length > 0 && (
                 <section>
@@ -476,6 +518,7 @@ export function DealDetail({
           )}
         </div>
       </div>
+      <CustomFieldsModal open={customFieldsModalOpen} onClose={() => setCustomFieldsModalOpen(false)} />
     </>
   );
 }

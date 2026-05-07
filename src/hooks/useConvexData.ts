@@ -180,6 +180,7 @@ export function useDeals() {
   const addDocument = useMutation(api.deals.addDocument);
   const removeDocument = useMutation(api.deals.removeDocument);
   const removeDeal = useMutation(api.deals.remove);
+  const setCustomField = useMutation(api.deals.setCustomField);
   return {
     deals: deals ?? [],
     createDeal,
@@ -193,6 +194,25 @@ export function useDeals() {
     addDocument,
     removeDocument,
     removeDeal,
+    setCustomField,
+  };
+}
+
+// User-defined custom field columns for the deals pipeline. Each definition
+// is one column on the kanban / one row in the DealDetail custom-fields
+// section. Values per-deal live on `deals.customFields[def.key]`.
+export function useDealFieldDefinitions() {
+  const defs = useQuery(api.dealFieldDefinitions.list);
+  const upsertByKey = useMutation(api.dealFieldDefinitions.upsertByKey);
+  const updateDef = useMutation(api.dealFieldDefinitions.update);
+  const reorder = useMutation(api.dealFieldDefinitions.reorder);
+  const removeDef = useMutation(api.dealFieldDefinitions.remove);
+  return {
+    defs: defs ?? [],
+    upsertByKey,
+    updateDef,
+    reorder,
+    removeDef,
   };
 }
 

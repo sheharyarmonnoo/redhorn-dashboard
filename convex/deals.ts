@@ -331,3 +331,171 @@ export const remove = mutation({
     });
   },
 });
+
+/**
+ * Set or clear a single custom-field value on a deal. Pass `value: undefined`
+ * to remove the key entirely (so we don't leave dead keys around when the user
+ * clears an input). The customFields blob is merged, not replaced, so
+ * concurrent edits to different keys don't clobber each other.
+ */
+export const setCustomField = mutation({
+  args: {
+    id: v.id("deals"),
+    key: v.string(),
+    value: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const deal = await ctx.db.get(args.id);
+    if (!deal) throw new Error("Deal not found");
+    const current = ((deal as any).customFields ?? {}) as Record<string, any>;
+    const next = { ...current };
+    if (args.value === undefined || args.value === null || args.value === "") {
+      delete next[args.key];
+    } else {
+      next[args.key] = args.value;
+    }
+    await ctx.db.patch(args.id, {
+      customFields: next,
+      updatedAt: new Date().toISOString(),
+    } as any);
+  },
+});
+
+const IMPORT_ROW = v.object({
+  mondayItemId: v.string(),
+  name: v.string(),
+  address: v.optional(v.string()),
+  city: v.optional(v.string()),
+  state: v.optional(v.string()),
+  propertyType: v.optional(v.string()),
+  sqft: v.optional(v.number()),
+  units: v.optional(v.number()),
+  askingPrice: v.optional(v.number()),
+  stage: v.string(),
+  source: v.optional(v.string()),
+  assignedTo: v.optional(v.string()),
+  createdAt: v.optional(v.string()),
+  contacts: v.optional(
+    v.array(
+      v.object({
+        name: v.string(),
+        role: v.string(),
+        email: v.string(),
+        phone: v.optional(v.string()),
+      })
+    )
+  ),
+  seedNote: v.optional(v.string()),
+  customFields: v.optional(v.any()),
+  updatesFromMonday: v.optional(
+    v.array(
+      v.object({
+        author: v.string(),
+        text: v.string(),
+        createdAt: v.string(),
+      })
+    )
+  ),
+});
+
+/**
+ * Idempotent bulk import for deals coming out of the Monday Deal Flow Tracker
+ * xlsx export. Dedupe key is `mondayItemId`. Existing deals are patched in
+ * place (customFields merged, not replaced) and any new "updates from Monday"
+ * are appended to the notes log if they don't already exist (matched by
+ * createdAt + first 80 chars of text).
+ */
+export const bulkImport = mutation({
+  args: { rows: v.array(IMPORT_ROW) },
+  handler: async (ctx, args) => {
+    const now = new Date().toISOString();
+    let inserted = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    for (const row of args.rows) {
+      if (!row.mondayItemId || !row.name) {
+        skipped++;
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("deals")
+        .withIndex("by_monday_id", (q) => q.eq("mondayItemId", row.mondayItemId))
+        .first();
+
+      const seedNoteEntry = row.seedNote
+        ? [{
+            id: `imported-seed-${row.mondayItemId}`,
+            text: row.seedNote,
+            author: "Imported from Monday",
+            createdAt: row.createdAt || now,
+          }]
+        : [];
+
+      const updateNotes = (row.updatesFromMonday || []).map((u, i) => ({
+        id: `monday-${row.mondayItemId}-${i}`,
+        text: u.text,
+        author: u.author,
+        createdAt: u.createdAt,
+      }));
+
+      if (!existing) {
+        await ctx.db.insert("deals", {
+          name: row.name,
+          address: row.address || row.name,
+          city: row.city || "",
+          state: row.state || "",
+          propertyType: row.propertyType || "industrial",
+          sqft: row.sqft || 0,
+          units: row.units || 0,
+          askingPrice: row.askingPrice || 0,
+          stage: row.stage,
+          source: row.source || "Monday import",
+          assignedTo: row.assignedTo || "",
+          contacts: row.contacts || [],
+          notes: [...seedNoteEntry, ...updateNotes],
+          emails: [],
+          tasks: [],
+          documents: [],
+          mondayItemId: row.mondayItemId,
+          customFields: row.customFields || {},
+          createdAt: row.createdAt || now,
+          updatedAt: now,
+        } as any);
+        inserted++;
+      } else {
+        const existingNotes = (existing as any).notes || [];
+        const existingTexts = new Set(
+          existingNotes.map((n: any) => `${n.createdAt}|${(n.text || "").slice(0, 80)}`)
+        );
+        const newNotes = [...seedNoteEntry, ...updateNotes].filter((n) => {
+          return !existingTexts.has(`${n.createdAt}|${(n.text || "").slice(0, 80)}`);
+        });
+        const mergedCustom = {
+          ...((existing as any).customFields || {}),
+          ...(row.customFields || {}),
+        };
+        const patch: any = {
+          stage: row.stage,
+          updatedAt: now,
+          customFields: mergedCustom,
+        };
+        if (row.address) patch.address = row.address;
+        if (row.sqft) patch.sqft = row.sqft;
+        if (row.askingPrice) patch.askingPrice = row.askingPrice;
+        if (row.source) patch.source = row.source;
+        if (row.assignedTo) patch.assignedTo = row.assignedTo;
+        if (row.contacts && row.contacts.length > 0) patch.contacts = row.contacts;
+        if (newNotes.length > 0) {
+          patch.notes = [...existingNotes, ...newNotes];
+        }
+        await ctx.db.patch(existing._id, patch);
+        updated++;
+      }
+    }
+
+    return { inserted, updated, skipped };
+  },
+});
+

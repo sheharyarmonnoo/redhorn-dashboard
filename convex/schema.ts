@@ -368,9 +368,42 @@ export default defineSchema({
       size: v.optional(v.number()),
     }))),
     closingDate: v.optional(v.string()),
+    // Monday.com item ID — set when the deal was imported from the Monday
+    // Deal Flow Tracker. Lets the importer dedupe on re-runs.
+    mondayItemId: v.optional(v.string()),
+    // User-defined custom fields. Values keyed by definition.key (camelCase).
+    // The shape per-key is defined by deal_field_definitions.type — we store
+    // raw JSON here so the schema stays flexible (text/number/date/select).
+    customFields: v.optional(v.any()),
     createdAt: v.string(),
     updatedAt: v.string(),
-  }).index("by_stage", ["stage"]),
+  })
+    .index("by_stage", ["stage"])
+    .index("by_monday_id", ["mondayItemId"]),
+
+  // ===== DEAL FIELD DEFINITIONS =====
+  // Schemaless per-deal columns that the user can add from the UI. Used to
+  // surface every Monday.com / xlsx field that doesn't have a first-class
+  // home on the deals table (TDLR contacts, HCAD #, Lead Tier, etc.).
+  deal_field_definitions: defineTable({
+    key: v.string(),                            // stable machine key (camelCase)
+    label: v.string(),                          // user-visible label
+    type: v.union(
+      v.literal("text"),
+      v.literal("longtext"),
+      v.literal("number"),
+      v.literal("currency"),
+      v.literal("date"),
+      v.literal("select"),
+    ),
+    options: v.optional(v.array(v.string())),   // for type="select"
+    order: v.number(),                          // display order
+    showOnCard: v.optional(v.boolean()),        // surface on kanban card
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_key", ["key"])
+    .index("by_order", ["order"]),
 
   // ===== EMAIL LOG =====
   // Audit trail of every email sent through the dashboard. Each row carries

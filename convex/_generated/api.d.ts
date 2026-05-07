@@ -14,6 +14,7 @@ import type * as agingRecords from "../agingRecords.js";
 import type * as alerts from "../alerts.js";
 import type * as chat from "../chat.js";
 import type * as chatAction from "../chatAction.js";
+import type * as dealFieldDefinitions from "../dealFieldDefinitions.js";
 import type * as deals from "../deals.js";
 import type * as delinquentCases from "../delinquentCases.js";
 import type * as emails from "../emails.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   alerts: typeof alerts;
   chat: typeof chat;
   chatAction: typeof chatAction;
+  dealFieldDefinitions: typeof dealFieldDefinitions;
   deals: typeof deals;
   delinquentCases: typeof delinquentCases;
   emails: typeof emails;
