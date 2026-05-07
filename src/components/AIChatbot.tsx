@@ -23,13 +23,23 @@ export default function AIChatbot() {
   const property = useActiveProperty() as any;
 
   const [open, setOpen] = useState(false);
-  // "half" = compact bottom-right window, ~55vh tall, doesn't cover the
-  // dashboard so the user can keep referencing it while the chat sits docked.
-  // "full" = right-edge full-height drawer.
-  // We default to "half" so the dashboard stays visible and the user can ask
-  // about whatever they're looking at without a context switch. The maximize
-  // button in the header swaps to full when they want a bigger reading area.
+  // "half" = compact bottom-right window. "full" = right-edge full-height.
+  // Default to "half" so the dashboard stays visible. We persist the user's
+  // choice in localStorage so reopening (or hard refresh) lands them in the
+  // size they last used.
   const [size, setSize] = useState<"full" | "half">("half");
+  const [sizeHydrated, setSizeHydrated] = useState(false);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("rh-ai-chat-size");
+      if (v === "full" || v === "half") setSize(v);
+    } catch {}
+    setSizeHydrated(true);
+  }, []);
+  useEffect(() => {
+    if (!sizeHydrated) return;
+    try { localStorage.setItem("rh-ai-chat-size", size); } catch {}
+  }, [size, sizeHydrated]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [showThreadList, setShowThreadList] = useState(false);
   const [draft, setDraft] = useState("");
@@ -159,7 +169,7 @@ export default function AIChatbot() {
           size === "half"
             ? "bottom-0 right-0 h-[55vh] w-full sm:w-[420px] sm:bottom-3 sm:right-3 sm:rounded-lg"
             : "top-0 right-0 h-full w-full sm:w-[640px] lg:w-[720px] border-l"
-        } ${open ? "translate-x-0 translate-y-0" : (size === "half" ? "translate-y-full" : "translate-x-full")}`}
+        } ${open ? "translate-x-0 translate-y-0 opacity-100" : (size === "half" ? "translate-y-full opacity-0 pointer-events-none invisible" : "translate-x-full opacity-0 pointer-events-none invisible")}`}
         aria-hidden={!open}
       >
         {/* Header */}
