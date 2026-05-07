@@ -65,7 +65,7 @@ export default function FinancialsPage() {
   const updateProperty = useMutation(api.properties.update);
   const { user } = useUser();
 
-  const [view, setView] = useState<"trend" | "statement" | "budget">("trend");
+  const [view, setView] = useState<"statement" | "budget">("statement");
   const [budgetYear, setBudgetYear] = useState<string>(String(new Date().getFullYear()));
   const [budgetCompareYear, setBudgetCompareYear] = useState<string>(String(new Date().getFullYear() - 1));
   const { budgets, upsertBudget } = useLineBudgets(property?._id, budgetYear);
@@ -260,7 +260,7 @@ export default function FinancialsPage() {
 
       {/* Tab switcher */}
       <div className="flex gap-1 mb-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
-        {(["trend", "statement", "budget"] as const).map(t => (
+        {(["statement", "budget"] as const).map(t => (
           <button
             key={t}
             onClick={() => setView(t)}
@@ -270,7 +270,7 @@ export default function FinancialsPage() {
                 : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
             }`}
           >
-            {t === "statement" ? "Income Statement" : t === "trend" ? "Monthly Trend" : "Budget vs Actuals"}
+            {t === "statement" ? "Income Statement" : "Budget vs Actuals"}
           </button>
         ))}
       </div>
@@ -289,7 +289,6 @@ export default function FinancialsPage() {
           />
         </>
       )}
-      {view === "trend" && <TrendTable trend={trend} formatMonth={formatMonth} />}
       {view === "budget" && (
         <BudgetVsActualsHighLevel
           propertyId={property?._id}
