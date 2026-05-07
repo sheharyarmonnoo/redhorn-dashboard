@@ -197,7 +197,8 @@ export default function RentRollPage() {
       deepLinkAppliedRef.current = deepLinkUnit;
       setSelectedKey(`${activeProperty.code}-${match.unit}`);
       const firstUnit = tokenize(match.unit)[0] || match.unit;
-      gridRef.current?.api?.setGridOption("quickFilterText", firstUnit);
+      // quickSearch state drives the AgGridReact quickFilterText prop, so
+      // the filter applies regardless of whether the grid has mounted yet.
       setQuickSearch(firstUnit);
     }
   }, [deepLinkUnit, activeProperty?.code, tenants]);
@@ -429,7 +430,6 @@ export default function RentRollPage() {
     const api = gridRef.current?.api;
     if (!api) return;
     api.setFilterModel(null);
-    api.setGridOption("quickFilterText", "");
     setQuickSearch("");
   }
 
@@ -492,10 +492,7 @@ export default function RentRollPage() {
             placeholder="Quick search all data..."
             value={quickSearch}
             className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-sm text-gray-900 dark:text-[#fafafa] placeholder-gray-400 dark:placeholder-[#71717a] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7] w-full sm:w-64"
-            onChange={(e) => {
-              setQuickSearch(e.target.value);
-              gridRef.current?.api?.setGridOption("quickFilterText", e.target.value);
-            }}
+            onChange={(e) => setQuickSearch(e.target.value)}
           />
           <button
             onClick={clearAllFilters}
@@ -515,6 +512,7 @@ export default function RentRollPage() {
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           autoGroupColumnDef={autoGroupColumnDef}
+          quickFilterText={quickSearch}
           groupDisplayType="groupRows"
           groupDefaultExpanded={1}
           onGridReady={persistence.onGridReady}
