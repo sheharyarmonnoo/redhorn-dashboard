@@ -51,16 +51,18 @@ const BUILDINGS: BuildingDef[] = [
   // Building C — multi-column storage / commercial, left-middle.
   // Pushed down +60 from Building D's bottom edge so the building label
   // has breathing room and doesn't crash into D's unit row above.
-  // A horizontal WALKWAY (~45px gap) splits the 100/200-series (north
-  // half) from the 300-series + C-100 (south half), matching the printed
-  // marketing map's central fire lane.
+  //
+  // VERTICAL walkway runs full-height between the left column (C-205→C-305)
+  // and the middle column (C-212A→C-308). Left col stays at x=70-160; the
+  // middle column shifts from x=165→x=195 so a 35px corridor sits between
+  // them. The right column follows in lockstep so adjacencies hold.
   {
     name: "Building C",
     subtitle: "Storage + commercial",
-    outline: { x: 60, y: 280, w: 480, h: 765 },
+    outline: { x: 60, y: 280, w: 480, h: 720 },
     outlineColor: "#eab308",
     units: [
-      // Far-left column (C-205 down — north half: 200/100-series)
+      // Left column (C-205 → C-305) — unchanged.
       { unit: "C-205", x: 70,  y: 290, w: 90, h: 50 },
       { unit: "C-204", x: 70,  y: 345, w: 90, h: 50 },
       { unit: "C-203", x: 70,  y: 400, w: 90, h: 50 },
@@ -69,40 +71,36 @@ const BUILDINGS: BuildingDef[] = [
       { unit: "C-200", x: 70,  y: 565, w: 90, h: 50 },
       { unit: "C-194", x: 70,  y: 620, w: 90, h: 50 },
       { unit: "C-192", x: 70,  y: 675, w: 90, h: 50 },
-      // walkway gap here (~45px)
-      { unit: "C-301", x: 70,  y: 785, w: 90, h: 50 },
-      { unit: "C-302", x: 70,  y: 840, w: 90, h: 50 },
-      { unit: "C-303", x: 70,  y: 895, w: 90, h: 50 },
-      { unit: "C-304", x: 70,  y: 950, w: 90, h: 50 },
-      { unit: "C-305", x: 70,  y: 1005, w: 90, h: 35 },
-      // Middle column (C-212A down — north half spans deeper because the
-      // 100-series sits inline with the middle column, then a tighter
-      // walkway gap before the 300-series).
-      { unit: "C-212A", x: 165, y: 290, w: 80, h: 50 },
-      { unit: "C-211",  x: 165, y: 345, w: 80, h: 50 },
-      { unit: "C-210",  x: 165, y: 400, w: 80, h: 50 },
-      { unit: "C-209",  x: 165, y: 455, w: 80, h: 50 },
-      { unit: "C-208",  x: 165, y: 510, w: 80, h: 50 },
-      { unit: "C-207",  x: 165, y: 565, w: 80, h: 50 },
-      { unit: "C-206",  x: 165, y: 620, w: 80, h: 50 },
-      { unit: "C-103",  x: 165, y: 675, w: 80, h: 50 },
-      { unit: "C-102",  x: 165, y: 730, w: 80, h: 50 },
-      { unit: "C-101",  x: 165, y: 785, w: 80, h: 50 },
-      // walkway gap here (~40px)
-      { unit: "C-306",  x: 165, y: 880, w: 80, h: 50 },
-      { unit: "C-307",  x: 165, y: 935, w: 80, h: 50 },
-      { unit: "C-308",  x: 165, y: 990, w: 80, h: 50 },
-      // Right column (C-218 down — north half ends at C-212, then walkway,
-      // then C-100 spans the south half as the big anchor unit).
-      { unit: "C-218", x: 250, y: 290, w: 90, h: 50 },
-      { unit: "C-217", x: 250, y: 345, w: 90, h: 50 },
-      { unit: "C-216", x: 250, y: 400, w: 90, h: 50 },
-      { unit: "C-215", x: 250, y: 455, w: 90, h: 50 },
-      { unit: "C-214", x: 250, y: 510, w: 90, h: 50 },
-      { unit: "C-213", x: 250, y: 565, w: 90, h: 50 },
-      { unit: "C-212", x: 250, y: 620, w: 90, h: 50 },
-      // walkway gap here
-      { unit: "C-100", x: 250, y: 905, w: 90, h: 135 },
+      { unit: "C-301", x: 70,  y: 740, w: 90, h: 50 },
+      { unit: "C-302", x: 70,  y: 795, w: 90, h: 50 },
+      { unit: "C-303", x: 70,  y: 850, w: 90, h: 50 },
+      { unit: "C-304", x: 70,  y: 905, w: 90, h: 50 },
+      { unit: "C-305", x: 70,  y: 960, w: 90, h: 35 },
+      // Middle column (C-212A → C-308) — shifted right by 30px to open up
+      // the vertical walkway between left and middle.
+      { unit: "C-212A", x: 195, y: 290, w: 80, h: 50 },
+      { unit: "C-211",  x: 195, y: 345, w: 80, h: 50 },
+      { unit: "C-210",  x: 195, y: 400, w: 80, h: 50 },
+      { unit: "C-209",  x: 195, y: 455, w: 80, h: 50 },
+      { unit: "C-208",  x: 195, y: 510, w: 80, h: 50 },
+      { unit: "C-207",  x: 195, y: 565, w: 80, h: 50 },
+      { unit: "C-206",  x: 195, y: 620, w: 80, h: 50 },
+      { unit: "C-103",  x: 195, y: 675, w: 80, h: 50 },
+      { unit: "C-102",  x: 195, y: 730, w: 80, h: 50 },
+      { unit: "C-101",  x: 195, y: 785, w: 80, h: 50 },
+      { unit: "C-306",  x: 195, y: 840, w: 80, h: 50 },
+      { unit: "C-307",  x: 195, y: 895, w: 80, h: 50 },
+      { unit: "C-308",  x: 195, y: 950, w: 80, h: 45 },
+      // Right column (C-218 → C-100) — shifted right by 30px to follow the
+      // middle column's new x.
+      { unit: "C-218", x: 280, y: 290, w: 90, h: 50 },
+      { unit: "C-217", x: 280, y: 345, w: 90, h: 50 },
+      { unit: "C-216", x: 280, y: 400, w: 90, h: 50 },
+      { unit: "C-215", x: 280, y: 455, w: 90, h: 50 },
+      { unit: "C-214", x: 280, y: 510, w: 90, h: 50 },
+      { unit: "C-213", x: 280, y: 565, w: 90, h: 50 },
+      { unit: "C-212", x: 280, y: 620, w: 90, h: 50 },
+      { unit: "C-100", x: 280, y: 860, w: 90, h: 130 },
     ],
   },
   // Building B — Office/Warehouse, right-middle. Shifted left so the
@@ -177,7 +175,7 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
   // Pan + zoom state. viewBox starts at full extents (0 0 1420 1100); zoom and
   // pan modify it so the SVG scales/translates without losing crisp text.
   const VB_W = 1420;
-  const VB_H = 1140;
+  const VB_H = 1100;
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ active: boolean; startX: number; startY: number; startPanX: number; startPanY: number }>({

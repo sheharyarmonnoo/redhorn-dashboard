@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Mail } from "lucide-react";
 import { formatCurrency, normalizeTenantName, useReceivableDetails, useProperties, useUnitNotes, useTenantMutations } from "@/hooks/useConvexData";
 import EmailComposer, { type EmailContext } from "./EmailComposer";
+import ConfirmDialog from "./ConfirmDialog";
 
 type Tenant = any;
 
@@ -30,6 +31,9 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   const [notesDraft, setNotesDraft] = useState<string>("");
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<string>("");
+  // Pending-delete state. `kind: "log"` deletes a unit_notes row by id;
+  // `kind: "seed"` clears the tenant.notes field. `null` = nothing pending.
+  const [pendingDelete, setPendingDelete] = useState<{ kind: "log"; id: string } | { kind: "seed" } | null>(null);
   const [tab, setTab] = useState<"details" | "ledger" | "electric" | "recoveries" | "payments">("details");
   const [emailCtx, setEmailCtx] = useState<EmailContext | null>(null);
   const { properties } = useProperties();
@@ -96,12 +100,29 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
     await removeNote({ id: id as any });
   }
 
-  // The Yardi-imported "seed" note isn't a unit_notes row — it lives on the
-  // tenant document itself (`tenant.notes`). Clearing the field hides the
-  // seed-note card without affecting any user-authored unit_notes entries.
+  // The "seed" note lives on the tenant document itself (`tenant.notes`)
+  // rather than the unit_notes table — could be from Yardi import OR a
+  // legacy direct write. Clearing the field hides the card.
   async function handleDeleteSeedNote() {
-    if (!tenant?._id) return;
-    await updateTenantNotes({ id: tenant._id, notes: "" });
+    if (!tenant?._id) {
+      console.warn("[RentRollDrawer] cannot clear seed note: tenant._id missing");
+      return;
+    }
+    try {
+      await updateTenantNotes({ id: tenant._id, notes: "" });
+    } catch (err) {
+      console.error("[RentRollDrawer] failed to clear seed note:", err);
+    }
+  }
+
+  async function confirmPendingDelete() {
+    if (!pendingDelete) return;
+    if (pendingDelete.kind === "log") {
+      await handleDeleteNote(pendingDelete.id);
+    } else {
+      await handleDeleteSeedNote();
+    }
+    setPendingDelete(null);
   }
 
   function formatTimestamp(iso: string) {
@@ -288,9 +309,7 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
                           <div className="flex gap-2">
                             <button onClick={() => { setEditingNoteId(entry._id); setEditDraft(entry.text); }}
                               className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer">Edit</button>
-                            <button onClick={() => {
-                              if (window.confirm("Delete this note? This cannot be undone.")) handleDeleteNote(entry._id);
-                            }}
+                            <button onClick={() => setPendingDelete({ kind: "log", id: entry._id })}
                               className="text-[10px] font-medium text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer">Delete</button>
                           </div>
                         </div>
@@ -303,18 +322,14 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
               <p className="text-[12px] text-[#d4d4d8] dark:text-[#52525b] italic bg-[#fafafa] dark:bg-[#27272a] p-3 rounded">No notes yet</p>
             )}
 
-            {/* Seed note (from original Yardi data) — shown at bottom if no log entries */}
+            {/* Legacy seed note — lives on tenant.notes rather than the
+                unit_notes table. Rendered when there are no log entries yet. */}
             {seedNote && (
               <div className="group bg-[#fafafa] dark:bg-[#27272a] rounded p-2.5 mt-2 border border-[#f4f4f5] dark:border-[#3f3f46]">
                 <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed whitespace-pre-wrap">{seedNote}</p>
-                <div className="flex items-center justify-between mt-1.5">
-                  <p className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">From Yardi import</p>
+                <div className="flex items-center justify-end mt-1.5">
                   <button
-                    onClick={() => {
-                      if (window.confirm("Delete this Yardi-imported note? This won't affect notes you've added.")) {
-                        handleDeleteSeedNote();
-                      }
-                    }}
+                    onClick={() => setPendingDelete({ kind: "seed" })}
                     className="text-[10px] font-medium text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
                   >
                     Delete
@@ -327,6 +342,14 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
         )}
       </div>
       <EmailComposer open={!!emailCtx} context={emailCtx} onClose={() => setEmailCtx(null)} />
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Delete this note?"
+        message="This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmPendingDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

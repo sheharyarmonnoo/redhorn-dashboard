@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { X } from "lucide-react";
 import { useUnitNotes, useReceivableDetails, normalizeTenantName, formatCurrency, useTenantMutations } from "@/hooks/useConvexData";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface Props {
   tenant: any | null;
@@ -18,6 +19,7 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [tab, setTab] = useState<TabValue>("details");
+  const [pendingDelete, setPendingDelete] = useState<{ kind: "log"; id: string } | { kind: "seed" } | null>(null);
 
   const tenant = tenantProp ?? cached;
 
@@ -100,9 +102,26 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
   }
 
   async function handleDeleteSeedNote() {
-    if (!tenant?._id) return;
-    await updateTenantNotes({ id: tenant._id, notes: "" });
-    onUpdated?.();
+    if (!tenant?._id) {
+      console.warn("[UnitDetailPanel] cannot clear seed note: tenant._id missing");
+      return;
+    }
+    try {
+      await updateTenantNotes({ id: tenant._id, notes: "" });
+      onUpdated?.();
+    } catch (err) {
+      console.error("[UnitDetailPanel] failed to clear seed note:", err);
+    }
+  }
+
+  async function confirmPendingDelete() {
+    if (!pendingDelete) return;
+    if (pendingDelete.kind === "log") {
+      await handleDeleteNote(pendingDelete.id);
+    } else {
+      await handleDeleteSeedNote();
+    }
+    setPendingDelete(null);
   }
 
   function formatTimestamp(iso: string) {
@@ -298,18 +317,14 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
               </button>
             </div>
 
-            {/* Seed note (from original data, before any user notes) */}
+            {/* Legacy seed note — lives on tenant.notes rather than the
+                unit_notes table. Rendered when there are no log entries yet. */}
             {seedNote && (
               <div className="group bg-[#fafafa] dark:bg-[#27272a] rounded p-2.5 mb-2 border border-[#f4f4f5] dark:border-[#3f3f46]">
                 <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed whitespace-pre-wrap">{seedNote}</p>
-                <div className="flex items-center justify-between mt-1.5">
-                  <p className="text-[9px] text-[#d4d4d8] dark:text-[#52525b]">From Yardi import</p>
+                <div className="flex items-center justify-end mt-1.5">
                   <button
-                    onClick={() => {
-                      if (window.confirm("Delete this Yardi-imported note? This won't affect notes you've added.")) {
-                        handleDeleteSeedNote();
-                      }
-                    }}
+                    onClick={() => setPendingDelete({ kind: "seed" })}
                     className="text-[10px] font-medium text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer"
                   >
                     Delete
@@ -348,9 +363,7 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
                           <div className="flex gap-2">
                             <button onClick={() => { setEditingNoteId(entry._id); setEditDraft(entry.text); }}
                               className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer">Edit</button>
-                            <button onClick={() => {
-                              if (window.confirm("Delete this note? This cannot be undone.")) handleDeleteNote(entry._id);
-                            }}
+                            <button onClick={() => setPendingDelete({ kind: "log", id: entry._id })}
                               className="text-[10px] font-medium text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer">Delete</button>
                           </div>
                         </div>
@@ -367,6 +380,14 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
         </div>
         )}
       </div>
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Delete this note?"
+        message="This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmPendingDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
