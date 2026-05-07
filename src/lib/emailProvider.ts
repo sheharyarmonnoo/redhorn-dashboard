@@ -9,21 +9,20 @@
  * Send themselves — no API keys, no server, fully "local".
  */
 
-export type EmailProvider = "gmail" | "outlook" | "mailto";
+export type EmailProvider = "gmail" | "outlook";
 
 export const EMAIL_PROVIDER_LABELS: Record<EmailProvider, string> = {
   gmail: "Gmail (web)",
   outlook: "Outlook (web)",
-  mailto: "Default mail client",
 };
 
 const STORAGE_KEY = "redhorn_email_provider";
 
 export function getEmailProvider(): EmailProvider {
-  if (typeof window === "undefined") return "mailto";
+  if (typeof window === "undefined") return "gmail";
   const stored = window.localStorage.getItem(STORAGE_KEY) as EmailProvider | null;
-  if (stored === "gmail" || stored === "outlook" || stored === "mailto") return stored;
-  return "mailto";
+  if (stored === "gmail" || stored === "outlook") return stored;
+  return "gmail";
 }
 
 export function setEmailProvider(provider: EmailProvider) {
@@ -54,35 +53,25 @@ export function buildComposeUrl(provider: EmailProvider, args: ComposeArgs): str
     if (cc) url += `&cc=${cc}`;
     return url;
   }
-  if (provider === "outlook") {
-    let url = `https://outlook.office.com/mail/deeplink/compose?to=${to}&subject=${subject}&body=${body}`;
-    if (cc) url += `&cc=${cc}`;
-    return url;
-  }
-  // mailto: hands off to whatever the OS has registered (Outlook desktop,
-  // Apple Mail, Thunderbird). Keeps the link short — most clients accept
-  // mailto bodies up to ~2k chars before truncating.
-  let url = `mailto:${args.to}?subject=${subject}&body=${body}`;
+  // Outlook web: the legacy OWA compose endpoint at outlook.live.com is the
+  // most reliable across both personal (outlook.com / hotmail) and work
+  // (Microsoft 365) accounts in 2025/26 — Microsoft transparently redirects
+  // signed-in M365 users to the matching outlook.office.com surface while
+  // preserving the query params. The newer `/mail/deeplink/compose` URL
+  // silently drops to/subject/body when the user isn't signed into the
+  // exact surface that minted the deeplink, which is the bug we're fixing.
+  let url = `https://outlook.live.com/owa/?path=/mail/action/compose&to=${to}&subject=${subject}&body=${body}`;
   if (cc) url += `&cc=${cc}`;
   return url;
 }
 
 /**
- * Open the compose URL in a new tab (or hand off to the OS via mailto).
- * Returns true on best-effort success — there's no real "sent" signal
- * since the user has to click Send in the provider UI themselves.
+ * Open the compose URL in a new tab. Returns true on best-effort success —
+ * there's no real "sent" signal since the user has to click Send in the
+ * provider UI themselves.
  */
 export function openComposeWindow(provider: EmailProvider, args: ComposeArgs): boolean {
   const url = buildComposeUrl(provider, args);
-  if (provider === "mailto") {
-    // mailto: works best as a same-tab navigation so the OS handler
-    // catches it, but we can also try window.open. Try open first.
-    const w = window.open(url, "_blank");
-    if (!w) {
-      window.location.href = url;
-    }
-    return true;
-  }
   const w = window.open(url, "_blank", "noopener,noreferrer");
   return !!w;
 }

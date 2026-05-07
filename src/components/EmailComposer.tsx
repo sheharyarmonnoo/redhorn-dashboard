@@ -31,9 +31,9 @@ interface Props {
 }
 
 export default function EmailComposer({ open, context, onClose, onSent }: Props) {
-  // Outbound mail goes through the user's webmail (Gmail / Outlook web) or a
-  // mailto: handoff — no SMTP credentials live on the server. We just record
-  // "compose_opened" in email_log for the audit trail.
+  // Outbound mail goes through the user's webmail (Gmail / Outlook web) — no
+  // SMTP credentials live on the server. We just record "compose_opened" in
+  // email_log for the audit trail.
   const logCompose = useMutation(api.emailsLog.logCompose);
   const { user } = useUser();
   const [toEmail, setToEmail] = useState("");
@@ -79,7 +79,7 @@ export default function EmailComposer({ open, context, onClose, onSent }: Props)
         subject: subject.trim(),
         body,
       });
-      if (!opened && provider !== "mailto") {
+      if (!opened) {
         setResult({ ok: false, message: "Couldn't open the compose tab — check that pop-ups are allowed for this site." });
         return;
       }

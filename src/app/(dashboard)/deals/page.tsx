@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Plus, LayoutGrid, List, Search, X } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
@@ -12,6 +12,9 @@ import { DealStage, getStageLabel } from "@/data/_seed_deals";
 
 type DealsView = "kanban" | "table";
 const VIEW_STORAGE_KEY = "redhorn_deals_view";
+const STAGE_FILTER_STORAGE_KEY = "redhorn_deals_stage_filter";
+// How long the moved-deal highlight stays on after a stage change.
+const RECENT_MOVE_HIGHLIGHT_MS = 3000;
 
 // Stage strip is the same set the board renders, minus the terminal
 // "closed"/"dead" buckets — those would dominate the count visually for
@@ -76,6 +79,40 @@ export default function DealsPage() {
   // built-in quickFilterText for the table view.
   const [quickSearch, setQuickSearch] = useState("");
 
+  // Stage pill toggle filter. Persisted to localStorage so reload keeps the
+  // user inside whichever stage they were focused on. Composes (AND) with
+  // quickSearch in both kanban and table views.
+  const [stageFilter, setStageFilter] = useState<DealStage | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = localStorage.getItem(STAGE_FILTER_STORAGE_KEY);
+    if (stored && (STAGE_STRIP as string[]).includes(stored)) {
+      setStageFilter(stored as DealStage);
+    }
+  }, []);
+  function toggleStageFilter(s: DealStage) {
+    setStageFilter((cur) => {
+      const next = cur === s ? null : s;
+      if (typeof window !== "undefined") {
+        if (next) localStorage.setItem(STAGE_FILTER_STORAGE_KEY, next);
+        else localStorage.removeItem(STAGE_FILTER_STORAGE_KEY);
+      }
+      return next;
+    });
+  }
+
+  // Recently-moved highlight — set inside handleStageChange and cleared
+  // after RECENT_MOVE_HIGHLIGHT_MS. Used by both kanban (yellow ring) and
+  // table view (yellow row accent) so the user can find the card after a
+  // stage change.
+  const [recentlyMovedId, setRecentlyMovedId] = useState<string | null>(null);
+  const recentMoveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (recentMoveTimerRef.current) clearTimeout(recentMoveTimerRef.current);
+    };
+  }, []);
+
   const selectedDeal = useMemo(
     () => (selectedId ? deals.find((d: any) => d._id === selectedId) || null : null),
     [selectedId, deals]
@@ -91,7 +128,9 @@ export default function DealsPage() {
   }, [deals]);
 
   // Filter deals by quickSearch for the kanban view (AG Grid handles its own
-  // filtering via quickFilterText on the table view).
+  // filtering via quickFilterText on the table view). stageFilter is applied
+  // visually by hiding columns inside the KanbanBoard, so no need to filter
+  // it out here — the cards in non-active columns just won't be shown.
   const filteredDeals = useMemo(() => {
     const q = quickSearch.trim().toLowerCase();
     if (!q) return deals;
@@ -117,7 +156,17 @@ export default function DealsPage() {
     });
   }, [deals, quickSearch]);
 
+  function flagRecentlyMoved(dealId: string) {
+    setRecentlyMovedId(dealId);
+    if (recentMoveTimerRef.current) clearTimeout(recentMoveTimerRef.current);
+    recentMoveTimerRef.current = setTimeout(() => {
+      setRecentlyMovedId(null);
+      recentMoveTimerRef.current = null;
+    }, RECENT_MOVE_HIGHLIGHT_MS);
+  }
+
   function handleStageChange(dealId: string, newStage: DealStage) {
+    flagRecentlyMoved(dealId);
     updateStage({ id: dealId as any, stage: newStage, user: "Ori" });
   }
 
@@ -128,20 +177,43 @@ export default function DealsPage() {
         subtitle={`${deals.length} ${deals.length === 1 ? "deal" : "deals"} across the acquisition funnel`}
       />
 
-      {/* Stage-count strip — New Deal sits at the end of the strip */}
+      {/* Stage-count strip — pills are toggle filters. Click once to focus
+          the kanban/table on a single stage, click again to clear. */}
       <div className="flex flex-wrap items-center gap-2 mb-3 text-[12px]">
-        {STAGE_STRIP.map((s) => (
-          <span
-            key={s}
-            className="inline-flex items-center gap-2 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 whitespace-nowrap"
+        {STAGE_STRIP.map((s) => {
+          const active = stageFilter === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => toggleStageFilter(s)}
+              title={active ? `Clear ${getStageLabel(s)} filter` : `Filter to ${getStageLabel(s)}`}
+              className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 whitespace-nowrap transition-colors cursor-pointer border ${
+                active
+                  ? "bg-[#18181b] dark:bg-[#fafafa] border-[#18181b] dark:border-[#fafafa] text-white dark:text-[#18181b]"
+                  : "bg-white dark:bg-[#18181b] border-[#e8eaef] dark:border-[#3f3f46] text-[#1e1e2d] dark:text-[#fafafa] hover:border-[#a1a1aa] dark:hover:border-[#52525b]"
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${STAGE_DOT[s]}`} />
+              <span className={`text-[11px] uppercase tracking-wider font-medium ${
+                active ? "text-white/80 dark:text-[#18181b]/70" : "text-[#71717a] dark:text-[#a1a1aa]"
+              }`}>
+                {getStageLabel(s)}
+              </span>
+              <span className="font-semibold">{counts[s] || 0}</span>
+            </button>
+          );
+        })}
+        {stageFilter && (
+          <button
+            type="button"
+            onClick={() => toggleStageFilter(stageFilter)}
+            className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+            title="Clear stage filter"
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${STAGE_DOT[s]}`} />
-            <span className="text-[11px] uppercase tracking-wider text-[#71717a] dark:text-[#a1a1aa] font-medium">
-              {getStageLabel(s)}
-            </span>
-            <span className="text-[#1e1e2d] dark:text-[#fafafa] font-semibold">{counts[s] || 0}</span>
-          </span>
-        ))}
+            <X size={12} /> Clear
+          </button>
+        )}
         <button
           onClick={() => setCreating(true)}
           className="flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded-lg hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors cursor-pointer"
@@ -209,6 +281,8 @@ export default function DealsPage() {
             deals={filteredDeals}
             onDealClick={(deal) => setSelectedId(deal._id)}
             onStageChange={handleStageChange}
+            recentlyMovedId={recentlyMovedId}
+            stageFilter={stageFilter}
           />
         </div>
       ) : (
@@ -217,6 +291,8 @@ export default function DealsPage() {
             deals={deals}
             quickSearch={quickSearch}
             onDealClick={(deal) => setSelectedId(deal._id)}
+            stageFilter={stageFilter}
+            recentlyMovedId={recentlyMovedId}
           />
         </div>
       )}
@@ -228,7 +304,10 @@ export default function DealsPage() {
         <DealDetail
           deal={selectedDeal}
           onClose={() => setSelectedId(null)}
-          onStageChange={(dealId, stage) => updateStage({ id: dealId as any, stage, user: "Ori" })}
+          onStageChange={(dealId, stage) => {
+            flagRecentlyMoved(dealId);
+            updateStage({ id: dealId as any, stage, user: "Ori" });
+          }}
           onDelete={() => setSelectedId(null)}
           updateField={(args) => { updateField(args); }}
           addNote={(args) => { addNote(args); }}

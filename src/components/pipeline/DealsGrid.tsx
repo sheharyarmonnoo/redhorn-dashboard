@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import { formatCurrency, useDealFieldDefinitions } from "@/hooks/useConvexData";
@@ -45,6 +45,10 @@ interface Props {
   deals: any[];
   quickSearch: string;
   onDealClick: (deal: any) => void;
+  /** Restrict rows to this stage. Composes (AND) with quickSearch. */
+  stageFilter?: DealStage | null;
+  /** Deal id to visually highlight (e.g. recently stage-changed). */
+  recentlyMovedId?: string | null;
 }
 
 /**
@@ -54,7 +58,7 @@ interface Props {
  * column the user adds in the Manage Fields modal automatically gets a slot
  * here too.
  */
-export default function DealsGrid({ deals, quickSearch, onDealClick }: Props) {
+export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter, recentlyMovedId }: Props) {
   const gridRef = useRef<AgGridReact>(null);
   const { defs } = useDealFieldDefinitions();
   const persistence = useAgGridPersistence({ storageKey: "redhorn_grid_deals" });
@@ -152,8 +156,50 @@ export default function DealsGrid({ deals, quickSearch, onDealClick }: Props) {
     if (e.data) onDealClick(e.data);
   };
 
+  // External filter on `stage` so it composes with quickFilterText (built-in
+  // quick filter still runs alongside external filter — both must pass).
+  // We re-evaluate whenever `stageFilter` changes.
+  const isExternalFilterPresent = () => stageFilter != null;
+  const doesExternalFilterPass = (node: any) => {
+    if (!stageFilter) return true;
+    return node?.data?.stage === stageFilter;
+  };
+  useEffect(() => {
+    const api = gridRef.current?.api;
+    if (!api) return;
+    api.onFilterChanged();
+  }, [stageFilter]);
+
+  // Highlight the recently-moved row. We use rowClassRules so AG Grid keeps
+  // its own hover/selected classes intact (CSS layered, hover wins where it
+  // matters because it's a more specific pseudo-class on .ag-row-hover).
+  const rowClassRules = useMemo(() => ({
+    "rh-clickable-row": () => true,
+    "rh-recently-moved-row": (params: any) => !!recentlyMovedId && params?.data?._id === recentlyMovedId,
+  }), [recentlyMovedId]);
+
+  // Re-tag rows when recentlyMovedId changes so the highlight applies/clears
+  // without waiting for the next AG Grid render pass.
+  useEffect(() => {
+    const api = gridRef.current?.api;
+    if (!api) return;
+    api.redrawRows();
+  }, [recentlyMovedId]);
+
   return (
     <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46] flex-1 min-h-0">
+      {/* Local style: yellow left-border accent on the recently-moved row.
+          Background uses an opacity-soft amber so AG Grid's hover color
+          (which is also a background color rule) still reads through. */}
+      <style jsx global>{`
+        .ag-theme-alpine .ag-row.rh-recently-moved-row {
+          box-shadow: inset 3px 0 0 0 #d97706;
+          background-color: rgba(217, 119, 6, 0.08);
+        }
+        .ag-theme-alpine .ag-row.rh-recently-moved-row.ag-row-hover {
+          background-color: rgba(217, 119, 6, 0.16);
+        }
+      `}</style>
       <AgGridReact
         ref={gridRef}
         rowData={deals}
@@ -169,7 +215,9 @@ export default function DealsGrid({ deals, quickSearch, onDealClick }: Props) {
         onColumnMoved={persistence.onColumnMoved}
         onColumnVisible={persistence.onColumnVisible}
         onColumnPinned={persistence.onColumnPinned}
-        rowClassRules={{ "rh-clickable-row": () => true }}
+        rowClassRules={rowClassRules}
+        isExternalFilterPresent={isExternalFilterPresent}
+        doesExternalFilterPass={doesExternalFilterPass}
       />
     </div>
   );

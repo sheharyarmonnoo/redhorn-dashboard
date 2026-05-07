@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -16,7 +16,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { MapPin, GripVertical } from "lucide-react";
 import { formatCurrency } from "@/hooks/useConvexData";
-import { DealStage, getStageLabel, getStageColor } from "@/data/_seed_deals";
+import { DealStage, getStageLabel } from "@/data/_seed_deals";
 
 function cn(...classes: (string | false | undefined | null)[]) {
   return classes.filter(Boolean).join(" ");
@@ -54,10 +54,25 @@ interface KanbanBoardProps {
   deals: any[];
   onDealClick: (deal: any) => void;
   onStageChange: (dealId: string, newStage: DealStage) => void;
+  /** Deal id to highlight (e.g. recently moved). Adds an amber ring for ~3s. */
+  recentlyMovedId?: string | null;
+  /** When set, hides every column except the matching stage. */
+  stageFilter?: DealStage | null;
 }
 
-export function KanbanBoard({ deals, onDealClick, onStageChange }: KanbanBoardProps) {
+export function KanbanBoard({ deals, onDealClick, onStageChange, recentlyMovedId, stageFilter }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Optimistic local copy of the deals array. We mutate this immediately on
+  // drag end so the card visibly hops between columns without waiting for
+  // the Convex `useQuery(api.deals.list)` invalidation + refetch round-trip
+  // (which would force a full 1700-row re-render). When the canonical
+  // `deals` prop next updates we reseed from props so we stay in sync with
+  // server truth (including other users' edits).
+  const [optimisticDeals, setOptimisticDeals] = useState<any[]>(deals);
+  useEffect(() => {
+    setOptimisticDeals(deals);
+  }, [deals]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -66,7 +81,7 @@ export function KanbanBoard({ deals, onDealClick, onStageChange }: KanbanBoardPr
   const dealsByStage = useMemo(() => {
     const groups: Record<string, any[]> = {};
     for (const s of STAGES) groups[s] = [];
-    for (const d of deals) {
+    for (const d of optimisticDeals) {
       const stage = (STAGES as string[]).includes(d.stage) ? d.stage : "lead";
       groups[stage].push(d);
     }
@@ -77,9 +92,9 @@ export function KanbanBoard({ deals, onDealClick, onStageChange }: KanbanBoardPr
       });
     }
     return groups;
-  }, [deals]);
+  }, [optimisticDeals]);
 
-  const activeDeal = activeId ? deals.find(d => d._id === activeId) : null;
+  const activeDeal = activeId ? optimisticDeals.find(d => d._id === activeId) : null;
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(event.active.id as string);
@@ -92,22 +107,35 @@ export function KanbanBoard({ deals, onDealClick, onStageChange }: KanbanBoardPr
 
     const dealId = active.id as string;
     const overId = over.id as string;
-    const deal = deals.find(d => d._id === dealId);
+    const deal = optimisticDeals.find(d => d._id === dealId);
     if (!deal) return;
 
     let targetStage: DealStage;
     if ((STAGES as string[]).includes(overId)) {
       targetStage = overId as DealStage;
     } else {
-      const overDeal = deals.find(d => d._id === overId);
+      const overDeal = optimisticDeals.find(d => d._id === overId);
       if (!overDeal) return;
       targetStage = overDeal.stage as DealStage;
     }
 
     if (deal.stage !== targetStage) {
+      // Optimistically move the card now. Bump updatedAt so the per-column
+      // sort places it at the top of the destination column, mirroring what
+      // the server-side mutation will eventually return.
+      const nowIso = new Date().toISOString();
+      setOptimisticDeals((prev) =>
+        prev.map((d) => (d._id === dealId ? { ...d, stage: targetStage, updatedAt: nowIso } : d))
+      );
+      // Fire-and-forget mutation. Convex will eventually update `deals`
+      // prop and our useEffect above will reseed.
       onStageChange(dealId, targetStage);
     }
   }
+
+  const visibleStages: DealStage[] = stageFilter
+    ? (STAGES.includes(stageFilter) ? [stageFilter] : STAGES)
+    : STAGES;
 
   return (
     <DndContext
@@ -117,13 +145,14 @@ export function KanbanBoard({ deals, onDealClick, onStageChange }: KanbanBoardPr
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-3 h-full min-w-max">
-        {STAGES.map((stage) => (
+        {visibleStages.map((stage) => (
           <KanbanColumn
             key={stage}
             stage={stage}
             deals={dealsByStage[stage]}
             onDealClick={onDealClick}
             isActive={activeId !== null}
+            recentlyMovedId={recentlyMovedId ?? null}
           />
         ))}
       </div>
@@ -135,13 +164,17 @@ export function KanbanBoard({ deals, onDealClick, onStageChange }: KanbanBoardPr
   );
 }
 
-function KanbanColumn({
-  stage, deals, onDealClick, isActive,
+const KanbanColumn = memo(function KanbanColumn({
+  stage, deals, onDealClick, isActive, recentlyMovedId,
 }: {
-  stage: DealStage; deals: any[]; onDealClick: (deal: any) => void; isActive: boolean;
+  stage: DealStage;
+  deals: any[];
+  onDealClick: (deal: any) => void;
+  isActive: boolean;
+  recentlyMovedId: string | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
-  const dealIds = deals.map(d => d._id);
+  const dealIds = useMemo(() => deals.map(d => d._id), [deals]);
 
   return (
     <div
@@ -170,15 +203,24 @@ function KanbanColumn({
               key={deal._id}
               deal={deal}
               onClick={() => onDealClick(deal)}
+              highlighted={recentlyMovedId === deal._id}
             />
           ))}
         </div>
       </SortableContext>
     </div>
   );
-}
+});
 
-function SortableDealCard({ deal, onClick }: { deal: any; onClick: () => void }) {
+const SortableDealCard = memo(function SortableDealCard({
+  deal,
+  onClick,
+  highlighted,
+}: {
+  deal: any;
+  onClick: () => void;
+  highlighted: boolean;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: deal._id });
 
   const style = {
@@ -194,7 +236,8 @@ function SortableDealCard({ deal, onClick }: { deal: any; onClick: () => void })
       style={style}
       className={cn(
         "bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-2.5 transition-all hover:border-[#a1a1aa] dark:hover:border-[#52525b] hover:shadow-sm",
-        isDragging && "opacity-30 shadow-lg"
+        isDragging && "opacity-30 shadow-lg",
+        highlighted && "ring-2 ring-[#d97706] ring-offset-1 ring-offset-white dark:ring-offset-[#0a0a0a]"
       )}
     >
       <div className="flex gap-1.5">
@@ -264,7 +307,7 @@ function SortableDealCard({ deal, onClick }: { deal: any; onClick: () => void })
       </div>
     </div>
   );
-}
+});
 
 function DealCardOverlay({ deal }: { deal: any }) {
   return (
