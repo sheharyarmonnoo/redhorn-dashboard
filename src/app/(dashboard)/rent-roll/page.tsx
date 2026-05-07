@@ -76,6 +76,7 @@ function useIsMobile() {
 
 export default function RentRollPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [quickSearch, setQuickSearch] = useState("");
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const activeProperty = useActiveProperty();
@@ -187,6 +188,7 @@ export default function RentRollPage() {
       setSelectedKey(`${activeProperty.code}-${match.unit}`);
       const firstUnit = (match.unit || "").split(",")[0].trim();
       gridRef.current?.api?.setGridOption("quickFilterText", firstUnit);
+      setQuickSearch(firstUnit);
     }
   }, [deepLinkUnit, activeProperty?.code, tenants]);
 
@@ -411,6 +413,16 @@ export default function RentRollPage() {
     gridRef.current?.api?.exportDataAsCsv({ fileName });
   }
 
+  // Reset every active filter on the grid: column filter models, the
+  // quick-search input, and any selected sort. Sort kept; only filters cleared.
+  function clearAllFilters() {
+    const api = gridRef.current?.api;
+    if (!api) return;
+    api.setFilterModel(null);
+    api.setGridOption("quickFilterText", "");
+    setQuickSearch("");
+  }
+
   return (
     <div>
       <PageHeader title="Rent Roll" subtitle={`${activeProperty?.name || ""} — Tap any row for details`}>
@@ -432,15 +444,24 @@ export default function RentRollPage() {
             {formatCurrency(totalRent)}/mo
           </span>
         </div>
-        <div className="sm:ml-auto w-full sm:w-auto">
+        <div className="sm:ml-auto w-full sm:w-auto flex items-center gap-2">
           <input
             type="text"
             placeholder="Quick search all data..."
+            value={quickSearch}
             className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-sm text-gray-900 dark:text-[#fafafa] placeholder-gray-400 dark:placeholder-[#71717a] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7] w-full sm:w-64"
             onChange={(e) => {
+              setQuickSearch(e.target.value);
               gridRef.current?.api?.setGridOption("quickFilterText", e.target.value);
             }}
           />
+          <button
+            onClick={clearAllFilters}
+            className="text-[12px] font-medium px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] hover:border-[#71717a] cursor-pointer whitespace-nowrap"
+            title="Clear all column filters and quick search"
+          >
+            Clear filters
+          </button>
         </div>
       </div>
 
