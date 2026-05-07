@@ -431,20 +431,6 @@ export default function RentRollPage() {
     // looks for "belgold-A", so the drawer silently never opens.
   }, [activeProperty?.code]);
 
-  const totalRent = tenants.filter((t: any) => t.status !== "vacant").reduce((s: number, t: any) => s + t.monthlyRent, 0);
-  const totalSqft = tenants.reduce((s: number, t: any) => s + t.sqft, 0);
-  // Each row's `unit` may be a comma-separated string for multi-unit leases.
-  // Sum distinct units across all rows so the count matches Yardi's atomic
-  // unit total even though we render one row per lease.
-  const totalUnits = (() => {
-    const set = new Set<string>();
-    for (const t of tenants as any[]) {
-      const parts = (t.unit || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-      for (const p of parts) set.add(p.toLowerCase());
-    }
-    return set.size;
-  })();
-
   // Real export: dump the current grid (filtered + grouped) to CSV via AG Grid.
   function exportRentRollReal() {
     const fileName = `rent-roll-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -522,17 +508,6 @@ export default function RentRollPage() {
 
       {/* Summary bar */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">
-        <div className="flex items-center gap-2 overflow-x-auto">
-          <span className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 text-[#1e1e2d] dark:text-[#fafafa] font-semibold whitespace-nowrap">
-            {totalUnits} Units
-          </span>
-          <span className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 text-[#1e1e2d] dark:text-[#fafafa] whitespace-nowrap">
-            {totalSqft.toLocaleString()} SF
-          </span>
-          <span className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 text-emerald-700 dark:text-emerald-400 font-semibold whitespace-nowrap">
-            {formatCurrency(totalRent)}/mo
-          </span>
-        </div>
         <div className="sm:ml-auto w-full sm:w-auto flex items-center gap-2">
           <input
             type="text"
