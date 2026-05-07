@@ -1495,37 +1495,54 @@ function BudgetVsActualsHighLevel({
       }
     });
 
-    // NOI / NET INCOME post-processing. The grand-total walk gives wrong
-    // values for these because it sums all leaves since the prior grand
-    // total — for NOI that's just expense leaves (positive numbers), which
-    // would make NOI = expense_sum (off-sign). Instead, compute structurally:
-    //   NOI = TOTAL INCOME - TOTAL OPERATING EXPENSE
-    //   NET INCOME = NOI - (any non-operating items)
-    // Find the rolled-up INCOME and EXPENSE values from the rows we already
-    // populated, then derive.
-    const findResultByPattern = (re: RegExp) => {
-      const arr: { monthBudget: number; ytdBudget: number; hasBudget: boolean }[] = [];
-      result.forEach((v, k) => { if (re.test(k)) arr.push(v); });
-      return arr[0];
+    // Compute TOTAL INCOME, TOTAL OPERATING EXPENSE, NOI, NET INCOME via
+    // a separate walk that tracks income vs expense mode. The earlier walk
+    // didn't roll TOTAL OPERATING EXPENSE correctly because nested
+    // sub-section TOTALs (TOTAL COMMON AREA EXPENSES, etc.) reset the leaf
+    // accumulator before we reached the wrapping TOTAL OPERATING EXPENSE.
+    let mode: "income" | "expense" = "income";
+    const incomeLeaves: string[] = [];
+    const expenseLeaves: string[] = [];
+    for (const l of lines) {
+      const li = (l.lineItem || "").trim();
+      if (!li) continue;
+      const lvl = l.hierarchyLevel;
+      const isTotal = /^total\b|^net\b/i.test(li);
+      if (lvl === 1 && !isTotal && /operating\s+expense/i.test(li)) {
+        mode = "expense";
+      }
+      if (lvl === 3) {
+        if (mode === "income") incomeLeaves.push(li);
+        else expenseLeaves.push(li);
+      }
+    }
+    const sumLeaves = (names: string[]) => {
+      let m = 0, y = 0, any = false;
+      for (const n of names) {
+        const lb = leafBudget(n);
+        if (!lb) continue;
+        m += lb.month; y += lb.ytd;
+        if (lb.annual !== 0 || lb.month !== 0) any = true;
+      }
+      return { monthBudget: m, ytdBudget: y, hasBudget: any };
     };
-    const incomeR = findResultByPattern(/^total\s+income\s*$/i);
-    const opExpR = findResultByPattern(/^total\s+(operating\s+)?expense/i);
-    if (incomeR && opExpR) {
-      const noiMonth = incomeR.monthBudget - opExpR.monthBudget;
-      const noiYtd = incomeR.ytdBudget - opExpR.ytdBudget;
-      const noiHas = incomeR.hasBudget || opExpR.hasBudget;
-      // Override any value the walk wrote for these grand totals
-      for (const l of lines) {
-        const li = (l.lineItem || "").trim();
-        if (/net\s+operating\s+income/i.test(li)) {
-          result.set(li, { monthBudget: noiMonth, ytdBudget: noiYtd, hasBudget: noiHas });
-        }
-        if (/^net\s+income\s*\(loss\)/i.test(li)) {
-          // NET INCOME = NOI minus any non-operating expense subtotals
-          // beyond TOTAL OPERATING EXPENSE. For now use the same formula
-          // — refine if a non-op subtotal exists in the data.
-          result.set(li, { monthBudget: noiMonth, ytdBudget: noiYtd, hasBudget: noiHas });
-        }
+    const incomeR = sumLeaves(incomeLeaves);
+    const opExpR = sumLeaves(expenseLeaves);
+    // Override the walk's values for the canonical 4 grand totals
+    for (const l of lines) {
+      const li = (l.lineItem || "").trim();
+      if (/^total\s+income\s*$/i.test(li)) {
+        result.set(li, incomeR);
+      }
+      if (/^total\s+(operating\s+)?expense/i.test(li)) {
+        result.set(li, opExpR);
+      }
+      if (/net\s+operating\s+income/i.test(li) || /^net\s+income\s*\(loss\)/i.test(li)) {
+        result.set(li, {
+          monthBudget: incomeR.monthBudget - opExpR.monthBudget,
+          ytdBudget: incomeR.ytdBudget - opExpR.ytdBudget,
+          hasBudget: incomeR.hasBudget || opExpR.hasBudget,
+        });
       }
     }
 

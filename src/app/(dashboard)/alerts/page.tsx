@@ -820,13 +820,6 @@ function AlertDrawer({
                 Mark as False Flag
               </button>
             )}
-            <button
-              onClick={() => setEmailCtx(buildAlertEmail(alert, tenants, propertyPm, propertyId))}
-              className="flex items-center gap-1.5 text-[12px] font-medium border border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#60a5fa] hover:bg-blue-50 dark:hover:bg-blue-950/30 px-3 py-1.5 rounded cursor-pointer"
-            >
-              <Mail size={13} />
-              Email
-            </button>
           </div>
           <div className="flex items-center gap-2">
             <button
