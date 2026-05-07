@@ -178,18 +178,21 @@ export default function FinancialsPage() {
   // Yardi exports occasionally render these labels with double spaces, an
   // "(Operating )?" qualifier, or a "(LOSS)" suffix on negative NOI. Match
   // permissively so we don't fall back to summed children (which can drift).
+  // Anchored to end-of-line so segment-level subtotals like
+  // "TOTAL OPERATING INCOME (Hotel)" don't get picked up as the property's
+  // grand total. Plural "EXPENSES" tolerated.
   const totalIncome = useMemo(() => {
-    const row = lines.find((l: any) => /^total\s+(operating\s+)?income\b/i.test((l.lineItem || "").trim()));
+    const row = lines.find((l: any) => /^total\s+(operating\s+)?income\s*$/i.test((l.lineItem || "").trim()));
     return row?.currentPeriod || 0;
   }, [lines]);
 
   const totalExpense = useMemo(() => {
-    const row = lines.find((l: any) => /^total\s+(operating\s+)?expense/i.test((l.lineItem || "").trim()));
+    const row = lines.find((l: any) => /^total\s+(operating\s+)?expense(s)?\s*$/i.test((l.lineItem || "").trim()));
     return row?.currentPeriod || 0;
   }, [lines]);
 
   const noi = useMemo(() => {
-    const row = lines.find((l: any) => /net\s+operating\s+income(\s*\(loss\))?|^\s*noi\b/i.test((l.lineItem || "").trim()));
+    const row = lines.find((l: any) => /^net\s+operating\s+income(\s*\(loss\))?\s*$|^\s*noi\s*$/i.test((l.lineItem || "").trim()));
     if (row) return row.currentPeriod;
     return totalIncome - totalExpense;
   }, [lines, totalIncome, totalExpense]);
@@ -1526,7 +1529,7 @@ function BudgetVsActualsHighLevel({
       const li = (l.lineItem || "").trim();
       if (!li) continue;
       const lvl = l.hierarchyLevel;
-      const isTotal = /^total\s|^net\s+(operating\s+)?(income|expense|revenue|cash|earnings)\b/i.test(li);
+      const isTotal = /^total\s|^net\s+(operating\s+|ordinary\s+)?(income|expense|expenses|revenue|cash|earnings)\b/i.test(li);
 
       if (lvl === 1 && !isTotal) {
         currentSection = li;
@@ -1587,7 +1590,7 @@ function BudgetVsActualsHighLevel({
     // both interest income (added to revenue) and bad debt expense (subtracted).
     for (const l of lines) {
       const li = (l.lineItem || "").trim();
-      const isSubtotal = /^total\s|^net\s+(operating\s+)?(income|expense|revenue|cash|earnings)\b/i.test(li);
+      const isSubtotal = /^total\s|^net\s+(operating\s+|ordinary\s+)?(income|expense|expenses|revenue|cash|earnings)\b/i.test(li);
       if (!isSubtotal) continue;
       const direct = leafBudget(li);
       if (direct && (direct.month !== 0 || direct.ytd !== 0 || direct.annual !== 0)) {
@@ -1655,7 +1658,7 @@ function BudgetVsActualsHighLevel({
         const isLevel1 = lvl === 1;
         const isLevel16 = lvl === 16;
         const isLevel24 = lvl === 24;
-        const isSubtotal = /^total\s|^net\s+(operating\s+)?(income|expense|revenue|cash|earnings)\b/i.test(li);
+        const isSubtotal = /^total\s|^net\s+(operating\s+|ordinary\s+)?(income|expense|expenses|revenue|cash|earnings)\b/i.test(li);
         const indent = isLevel1 ? 0 : isLevel16 ? 16 : 0;
 
         // For the selected period, look up actuals from the period-aware

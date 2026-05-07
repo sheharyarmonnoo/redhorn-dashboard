@@ -31,8 +31,22 @@ export default function ConfirmDialog({
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onCancel();
-      if (e.key === "Enter") onConfirm();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+        return;
+      }
+      // Enter only confirms when the focused element is the Confirm button
+      // itself (auto-focused on open). Otherwise it would accidentally
+      // trigger destructive deletes whenever the user hits Enter inside any
+      // textarea / input elsewhere on the page.
+      if (e.key === "Enter") {
+        const target = e.target as HTMLElement | null;
+        if (target && target.tagName === "BUTTON") {
+          e.preventDefault();
+          onConfirm();
+        }
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

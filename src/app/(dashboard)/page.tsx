@@ -35,7 +35,12 @@ export default function DashboardPage() {
     // their full year-over-year history.
     const today = new Date();
     const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-    const floorDate = new Date(today.getFullYear(), today.getMonth() - 18, 1);
+    // 18 months back from `today`. JS Date handles negative month indexes
+    // by rolling the year, so May 2026 minus 18 months → Nov 2024 (correct).
+    // Earlier: passed `today.getMonth() - 18` directly which produced an
+    // off-by-one on year wrap. Use setMonth on a cloned Date for clarity.
+    const floorDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    floorDate.setMonth(floorDate.getMonth() - 18);
     const floor = `${floorDate.getFullYear()}-${String(floorDate.getMonth() + 1).padStart(2, "0")}`;
     return monthlyRevenueRaw.filter((m: any) => m.month && m.month >= floor && m.month <= cutoff);
   }, [monthlyRevenueRaw]);

@@ -306,18 +306,27 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
         {/* No background rect — let the card's bg shine through so there's
             no gray-vs-white seam between the SVG and its container. */}
 
-        {/* "Hollister Street" label at bottom */}
-        <text x={710} y={1115} textAnchor="middle" fontSize={13} fontWeight={600} fill="#a1a1aa" letterSpacing="0.15em">
+        {/* "Hollister Street" label at bottom — y aligned to VB_H=1100. */}
+        <text x={710} y={1075} textAnchor="middle" fontSize={13} fontWeight={600} fill="#a1a1aa" letterSpacing="0.15em">
           16261 HOLLISTER STREET
         </text>
 
-        {/* Walkway annotation inside Building C — labels the empty corridor
-            so it reads as a walkway, not unintentional spacing. The dashed
-            mark sits in the left column's gap (y=725→780) where it doesn't
-            collide with the middle column's longer 100-series tail. */}
+        {/* Vertical walkway between Building C's left column (ends x=160)
+            and the middle column (starts x=195). Dashed line + sideways
+            label so the corridor reads as intentional empty space rather
+            than misalignment. Spans the full unit-stack height. */}
         <g style={{ pointerEvents: "none" }}>
-          <line x1={70} x2={160} y1={755} y2={755} stroke="#a1a1aa" strokeWidth={1} strokeDasharray="4 3" />
-          <text x={115} y={748} textAnchor="middle" fontSize={9} fontStyle="italic" fill="#71717a" letterSpacing="0.08em">
+          <line x1={177} x2={177} y1={290} y2={995} stroke="#a1a1aa" strokeWidth={1} strokeDasharray="4 3" />
+          <text
+            x={177}
+            y={640}
+            textAnchor="middle"
+            fontSize={9}
+            fontStyle="italic"
+            fill="#71717a"
+            letterSpacing="0.12em"
+            transform="rotate(-90, 177, 640)"
+          >
             walkway
           </text>
         </g>
