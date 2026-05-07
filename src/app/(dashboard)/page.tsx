@@ -198,8 +198,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 mb-6">
+      {/* KPI Cards — bump xl to 6 cols when the optional Expired card is present */}
+      <div className={`grid grid-cols-2 md:grid-cols-3 ${expiredCount > 0 ? "xl:grid-cols-6" : "xl:grid-cols-5"} gap-2 sm:gap-3 mb-6`}>
         <KPICard title="Monthly Revenue" value={formatCurrency(totalMonthlyRent)} trend="1.5%" trendUp={true} sparkline={monthlyRevenue.map(m => m.total)} onClick={() => setKpiDrawer("revenue")} />
         <KPICard title="Occupancy" value={`${occupancyPct}%`} subtitle={`${leasedSqft.toLocaleString()} of ${totalSqft.toLocaleString()} SF`} sparkline={monthlyRevenue.map(m => m.occupancy)} trendUp={true} onClick={() => setKpiDrawer("occupancy")} />
         <KPICard title="Past Due" value={String(pastDueCount)} subtitle={pastDueAmount > 0 ? `${formatCurrency(pastDueAmount)} owed` : `${pastDueCount === 1 ? "unit" : "units"} past due`} color={pastDueCount > 0 ? "text-[#dc2626]" : "text-[#16a34a]"} onClick={() => setKpiDrawer("pastdue")} />
