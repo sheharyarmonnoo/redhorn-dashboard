@@ -1,4 +1,4 @@
-import { Page } from "playwright";
+import { Page, Frame } from "playwright";
 import { resolve } from "node:path";
 import { YardiProperty } from "../properties.js";
 import { downloadDirFor, slugForProperty } from "../paths.js";
@@ -17,7 +17,9 @@ import { downloadDirFor, slugForProperty } from "../paths.js";
  *   FromDate_TextBox            — MM/DD/YYYY (we use first day of month)
  *   PeriodType_DropDownList     — "1" Monthly (default)
  *   SummarizeBy_DropDownList    — "1" Property (default)
- *   chkIsDetail_CheckBox        — Show Detail (default checked)
+ *   chkIsDetail_CheckBox        — Show Detail (must be checked at POST time
+ *                                  for per-lease detail; otherwise server
+ *                                  returns 10-col property summary)
  *   YsiChkShowActiveLease_CheckBox / chkShowSpecialtyLeases_CheckBox / etc.
  *   Excel_Button                — triggers the xlsx download
  *
@@ -40,44 +42,7 @@ export async function runRentRollFullForProperty(
   // Wait for the Property field to render (signal the form is ready)
   await frame.locator("#PropertyId_LookupCode").waitFor({ timeout: 30_000 });
 
-  // 1. Force Show Detail = checked FIRST — before any other field. The form's
-  //    default is "checked" on a fresh load, but Yardi reuses the iframe across
-  //    properties in the same session and ASP.NET ViewState carries the
-  //    previous-property state (often "unchecked" after a postback). Worse,
-  //    setting the DOM `.checked = true` directly does NOT update the server's
-  //    perception — when Excel_Button submits, Yardi serializes from the
-  //    current DOM but its server-side state machine treats unchecked-at-
-  //    render as the source of truth for the report layout, producing a
-  //    10-column property-summary export (1 row per property) instead of the
-  //    16-column per-lease detail. That mismatch is why the previous fix
-  //    (`.checked = true` + `change` event) logged "Show Detail = on" yet
-  //    Yardi still exported summary-only — wiping Hollister's 37 tenants down
-  //    to a single rollup row on the 2026-05 sync.
-  //
-  //    The reliable fix is to use Playwright's locator.check() which performs
-  //    a real user-style click when the box is unchecked. That fires the
-  //    onclick handler, updates the form's submit-time state, and (because we
-  //    do this BEFORE setting Property/ReportType/FromDate) any postback that
-  //    follows can't clobber values we haven't set yet. check() is a no-op
-  //    when already checked, so it doesn't toggle a default-on state OFF.
-  const showDetailLoc = frame.locator("#chkIsDetail_CheckBox");
-  await showDetailLoc.waitFor({ timeout: 10_000 }).catch(() => {});
-  const initiallyChecked = await showDetailLoc.isChecked().catch(() => false);
-  await showDetailLoc.check({ force: true, timeout: 10_000 });
-  // Let any onclick-driven postback settle. The form may briefly tear down
-  // and re-render — wait for the Property field to be available again before
-  // proceeding.
-  await frame.locator("#PropertyId_LookupCode").waitFor({ timeout: 30_000 });
-  const detailChecked = await showDetailLoc.isChecked().catch(() => false);
-  if (!detailChecked) {
-    throw new Error(
-      `Show Detail checkbox failed to enable for ${property.code}; refusing to ` +
-      `submit (would produce summary-only export and wipe lease data on ingest).`
-    );
-  }
-  console.log(`   Show Detail = on (was ${initiallyChecked ? "already" : "set via check()"})`);
-
-  // 2. Property — set both LookupCode + Description so Yardi doesn't fall back
+  // 1. Property — set both LookupCode + Description so Yardi doesn't fall back
   //    to the multi-property default ("bel^.redhorn^hol")
   await frame.evaluate(({ code, name }: any) => {
     const codeEl = document.getElementById("PropertyId_LookupCode") as HTMLInputElement | null;
@@ -96,10 +61,10 @@ export async function runRentRollFullForProperty(
   const settledCode = await frame.locator("#PropertyId_LookupCode").inputValue().catch(() => "");
   console.log(`   PropertyId set to: "${settledCode}"`);
 
-  // 3. Report Type = Rent Roll
+  // 2. Report Type = Rent Roll
   await frame.locator("#ReportType_DropDownList").selectOption("2");
 
-  // 4. From Date = first day of as-of month (e.g. "05/01/2026")
+  // 3. From Date = first day of as-of month (e.g. "05/01/2026")
   const [y, m] = asOfMonthIso.split("-").map(Number);
   const mmddyyyy = `${String(m).padStart(2, "0")}/01/${y}`;
   const dateField = frame.locator("#FromDate_TextBox");
@@ -109,43 +74,32 @@ export async function runRentRollFullForProperty(
   await dateField.press("Tab");
   console.log(`   FromDate = ${mmddyyyy}`);
 
-  // 4b. Re-verify Show Detail survived any field-driven postback. If a server
-  //     handler for the Property/ReportType change re-rendered the form, the
-  //     checkbox state could have been blown away. Re-check if needed.
-  const detailStillChecked = await showDetailLoc.isChecked().catch(() => false);
-  if (!detailStillChecked) {
-    console.log(`   Show Detail was reset by a postback — re-checking`);
-    await showDetailLoc.check({ force: true, timeout: 10_000 });
-    const recheck = await showDetailLoc.isChecked().catch(() => false);
-    if (!recheck) {
-      throw new Error(
-        `Show Detail checkbox could not be re-enabled after field changes ` +
-        `for ${property.code}; refusing to submit.`
-      );
-    }
-  }
-
-  // 4c. FINAL Show Detail verification right before submit. The ASP.NET
-  //     ViewState round-trips on every Property/ReportType/FromDate change
-  //     have repeatedly stripped this flag. Without this last check, Yardi
-  //     ships a 10-column property-summary export that fails ingest with
-  //     "missing the lease-detail columns" — wiping all 36 Hollister
-  //     tenants on the bulk-replace path.
-  const finalDetailCheck = await showDetailLoc.isChecked().catch(() => false);
-  if (!finalDetailCheck) {
-    console.log(`   Show Detail was reset just before submit — re-checking once more`);
-    await showDetailLoc.check({ force: true, timeout: 10_000 });
-    // Give Yardi a moment to register the server-side postback if any
-    await voyagerPage.waitForTimeout(1500);
-    const finalRecheck = await showDetailLoc.isChecked().catch(() => false);
-    if (!finalRecheck) {
-      throw new Error(
-        `Show Detail unrecoverable for ${property.code} — refusing to ` +
-        `submit and produce a summary-only export that would wipe lease data.`
-      );
-    }
-  }
-  console.log(`   Final Show Detail check: ${finalDetailCheck ? "still on" : "re-enabled"}`);
+  // 4. Show Detail = checked, AT POST TIME. This is the load-bearing step.
+  //
+  //    Investigation (probe-rr-detail.ts: scenarios A vs B):
+  //      Scenario A — set field values, then check Show Detail with
+  //        .check({force:true}) twice (once before, once after setProperty),
+  //        click Excel immediately. Network capture: the POST body sent to
+  //        the server has chkIsDetail ABSENT, even though `cb.checked` reads
+  //        `true` and the form's element collection serializes it as "on".
+  //        Result: 10-col property-summary export.
+  //      Scenario B — set fields, wait 3000ms after the date Tab postback,
+  //        re-verify the checkbox (it reads `false` after the wait — the
+  //        postback wiped it), re-check, then click Excel. Network capture:
+  //        chkIsDetail=on is in the POST body. Result: 16-col detail export.
+  //
+  //    Root cause: the date-field Tab postback, the ReportType selectOption
+  //    postback, and any Property-change postback all queue a server round
+  //    trip that re-renders the form and resets chkIsDetail to its server
+  //    default (off, on this instance). When Playwright's `.check()` runs
+  //    BEFORE the postback completes, the postback's response wins and our
+  //    check is silently undone — but the new form's HTML hasn't been parsed
+  //    into `cb.checked` yet, so a synchronous read still returns `true`.
+  //    By the time Excel is submitted, the box is unchecked AT POST TIME.
+  //
+  //    The fix: wait for postback quiescence, THEN check + re-verify in a
+  //    short loop until the state is stable. Only THEN click Excel.
+  await ensureShowDetailOnAndStable(voyagerPage, frame, property.code);
 
   // 5. Click Excel and capture the download
   const outPath = resolve(
@@ -161,6 +115,55 @@ export async function runRentRollFullForProperty(
 
   console.log(`   saved → ${outPath}`);
   return outPath;
+}
+
+/**
+ * Wait for any pending field-driven postback to settle, then check the
+ * Show Detail box and re-verify it actually stays checked. The probe found
+ * the postback can take up to ~2.5s after the date Tab event to land and
+ * uncheck the box behind our back; we wait longer than that and then
+ * verify-and-recheck up to 5 times. If the state can't be stabilised we
+ * throw — better to fail loudly than ship summary-only data and wipe leases.
+ */
+async function ensureShowDetailOnAndStable(page: Page, frame: Frame, propertyCode: string): Promise<void> {
+  // Initial settle delay: the date Tab + ReportType selectOption postbacks
+  // are async; give them ~3s to land and reset the form.
+  await page.waitForTimeout(3000);
+
+  const cbLoc = frame.locator("#chkIsDetail_CheckBox");
+  await cbLoc.waitFor({ timeout: 10_000 }).catch(() => {});
+
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    // Check the box (no-op if already checked).
+    await cbLoc.check({ force: true, timeout: 10_000 });
+
+    // Wait long enough for any onclick-driven postback to land. The Yardi
+    // chkIsDetail handler doesn't trigger a server postback (verified — its
+    // onclick is just `gotChange2(this);` which is a client-side change tracker),
+    // but the form may still be processing a residual postback from the date
+    // Tab event. 1.5s is conservatively past the longest observed roundtrip.
+    await page.waitForTimeout(1500);
+
+    // Re-read the checkbox state. If a postback re-rendered the form and
+    // unchecked it, this read will catch that.
+    const stillChecked = await cbLoc.isChecked().catch(() => false);
+    if (stillChecked) {
+      // Stable — do one final read after another short wait to make sure no
+      // late postback flips it after we look.
+      await page.waitForTimeout(500);
+      const finalChecked = await cbLoc.isChecked().catch(() => false);
+      if (finalChecked) {
+        console.log(`   Show Detail = on (stable on attempt ${attempt})`);
+        return;
+      }
+    }
+    console.log(`   Show Detail attempt ${attempt}: was reset by a late postback — retrying`);
+  }
+
+  throw new Error(
+    `Show Detail could not be held stable for ${propertyCode} across 5 attempts; ` +
+    `refusing to submit and produce a summary-only export that would wipe lease data.`
+  );
 }
 
 async function openCommercialAnalytics(page: Page) {
