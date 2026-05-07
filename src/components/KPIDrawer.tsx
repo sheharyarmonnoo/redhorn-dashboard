@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, formatCurrency, isExpiringWithin, leasedUnitKeys } from "@/hooks/useConvexData";
 
 function useKpiData() {
@@ -118,12 +119,15 @@ function OccupancyDetail() {
   );
 }
 
-function PastDueDetail() {
+function PastDueDetail({ onClose }: { onClose: () => void }) {
   const { tenants } = useKpiData();
-  // Status-driven so the site plan drawer's manual Past Due toggle flows
-  // through here without needing the synced pastDueAmount to be non-zero.
+  const router = useRouter();
   const pastDue = tenants.filter((t: any) => t.status === "past_due");
   const total = pastDue.reduce((s: number, t: any) => s + (t.pastDueAmount || 0), 0);
+  function openInRentRoll(unit: string) {
+    onClose();
+    router.push(`/rent-roll?unit=${encodeURIComponent(unit)}`);
+  }
   return (
     <div className="space-y-5">
       <div>
@@ -138,9 +142,14 @@ function PastDueDetail() {
         ) : pastDue.map((t: any) => {
           const leaseExpiringSoon = isExpiringWithin(t.leaseTo, 90);
           return (
-            <div key={t.unit} className="py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
+            <button
+              key={t.unit}
+              onClick={() => openInRentRoll(t.unit)}
+              className="w-full text-left py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 hover:bg-[#fafafa] dark:hover:bg-[#27272a]/40 cursor-pointer transition-colors"
+              title={`Open ${t.unit} in rent roll`}
+            >
               <div className="flex items-start justify-between gap-3">
-                <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate min-w-0 flex-1" title={`${t.unit} — ${t.tenant}`}>
+                <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate min-w-0 flex-1">
                   {t.unit} — {t.tenant}
                 </span>
                 <span className="text-[12px] font-medium text-[#dc2626] whitespace-nowrap flex-shrink-0">{formatCurrency(t.pastDueAmount)}</span>
@@ -155,7 +164,7 @@ function PastDueDetail() {
                 </p>
               )}
               {t.notes && <p className="text-[10px] text-[#71717a] mt-0.5">{t.notes}</p>}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -226,10 +235,15 @@ function ElectricDetail() {
   );
 }
 
-function ExpiringDetail() {
+function ExpiringDetail({ onClose }: { onClose: () => void }) {
   const { tenants } = useKpiData();
+  const router = useRouter();
   const expiring = tenants.filter((t: any) => t.status !== "vacant" && isExpiringWithin(t.leaseTo, 90));
   const totalRent = expiring.reduce((s: number, t: any) => s + t.monthlyRent, 0);
+  function openInRentRoll(unit: string) {
+    onClose();
+    router.push(`/rent-roll?unit=${encodeURIComponent(unit)}`);
+  }
   return (
     <div className="space-y-5">
       <div>
@@ -242,16 +256,20 @@ function ExpiringDetail() {
         {expiring.length === 0 ? (
           <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No leases expiring in the next 90 days.</p>
         ) : expiring.map((t: any) => (
-          <div key={t.unit} className="py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0">
+          <button
+            key={t.unit}
+            onClick={() => openInRentRoll(t.unit)}
+            className="w-full text-left py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 hover:bg-[#fafafa] dark:hover:bg-[#27272a]/40 cursor-pointer transition-colors"
+          >
             <div className="flex items-start justify-between gap-3">
-              <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate min-w-0 flex-1" title={`${t.unit} — ${t.tenant}`}>
+              <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate min-w-0 flex-1">
                 {t.unit} — {t.tenant}
               </span>
               <span className="text-[12px] text-[#d97706] whitespace-nowrap flex-shrink-0">{formatLeaseDate(t.leaseTo)}</span>
             </div>
             <p className="text-[10px] text-[#71717a] mt-0.5">{formatCurrency(t.monthlyRent)}/mo · {t.sqft.toLocaleString()} SF · Bldg {t.building}</p>
             {t.notes && <p className="text-[10px] text-[#a1a1aa] mt-0.5">{t.notes}</p>}
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -299,10 +317,10 @@ export default function KPIDrawer({ open, kpiKey, onClose }: KPIDrawerProps) {
         <div className="px-5 py-5">
           {kpiKey === "revenue" && <RevenueDetail />}
           {kpiKey === "occupancy" && <OccupancyDetail />}
-          {kpiKey === "pastdue" && <PastDueDetail />}
+          {kpiKey === "pastdue" && <PastDueDetail onClose={onClose} />}
           {kpiKey === "vacant" && <VacantDetail />}
           {kpiKey === "electric" && <ElectricDetail />}
-          {kpiKey === "expiring" && <ExpiringDetail />}
+          {kpiKey === "expiring" && <ExpiringDetail onClose={onClose} />}
         </div>
       </div>
     </div>

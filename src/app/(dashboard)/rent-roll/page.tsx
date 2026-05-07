@@ -1,5 +1,6 @@
 "use client";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, RowClickedEvent } from "ag-grid-community";
 import { useTenants, useUnits, useActiveProperty, formatCurrency, leasedUnitKeys, useChargeSummary, normalizeTenantName } from "@/hooks/useConvexData";
@@ -82,6 +83,13 @@ export default function RentRollPage() {
   const unitsAll = useUnits(activeProperty?._id);
   const { byTenant: chargeSummary, latestMonth: chargeMonth } = useChargeSummary(activeProperty?._id);
 
+  // Deep-link support: ?unit=A-103 (or ?unit=A-103,A-112,A-85 for multi-unit
+  // leases) opens the rent-roll filtered to that unit and auto-opens the
+  // drawer. Used by the dashboard KPI drawers (Past Due, Expiring) so the
+  // user can drill from a tenant row to the rent roll in one click.
+  const searchParams = useSearchParams();
+  const deepLinkUnit = searchParams.get("unit");
+
   // Build the rent roll: one row per LEASE (multi-unit leases stay merged),
   // plus one row per VACANT unit.
   //
@@ -159,6 +167,25 @@ export default function RentRollPage() {
     if (!selectedKey) return null;
     return tenants.find((t: any) => `${activeProperty?.code || "x"}-${t.unit}` === selectedKey) || null;
   }, [tenants, selectedKey]);
+
+  // When the page loads with ?unit= in the URL, find the matching tenant
+  // row, open the drawer for it, and apply a quick filter so only that
+  // tenant's rows are visible. Multi-unit leases come in as the comma
+  // string from Yardi — match against the first unit token to find the row.
+  useEffect(() => {
+    if (!deepLinkUnit || !activeProperty?.code || tenants.length === 0) return;
+    const norm = (s: string) => (s || "").trim().toLowerCase();
+    const target = norm(deepLinkUnit);
+    // Try exact match first, then "first-token" match for multi-unit leases
+    const match = tenants.find((t: any) => norm(t.unit) === target)
+      || tenants.find((t: any) => (t.unit || "").split(",").map((s: string) => norm(s)).includes(target.split(",")[0].trim()));
+    if (match) {
+      setSelectedKey(`${activeProperty.code}-${match.unit}`);
+      // Apply quick filter so the row is also visible in the grid below
+      const firstUnit = (match.unit || "").split(",")[0].trim();
+      gridRef.current?.api?.setGridOption("quickFilterText", firstUnit);
+    }
+  }, [deepLinkUnit, activeProperty?.code, tenants]);
 
   const columnDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
     const unitWidth = isMobile ? 90 : 120;
