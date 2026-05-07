@@ -709,9 +709,6 @@ function DebtPanel({
               {dscr === null ? "—" : `${dscr.toFixed(2)}×`}
             </p>
           </div>
-          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-2">
-            Lender covenant typically requires DSCR ≥ 1.20–1.25×. Below 1.0× means NOI alone doesn't cover debt service.
-          </p>
         </div>
       </div>
     </div>
