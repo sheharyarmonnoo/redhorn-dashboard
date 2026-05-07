@@ -168,7 +168,7 @@ export default function RentRollPage() {
         valueFormatter: (p: { value: string }) => p.value || "— Vacant —" },
       { field: "leaseType", headerName: "Lease Type", width: 130,
         valueFormatter: (p: { value: string }) => p.value?.replace("Office ", "") || "" },
-      { field: "sqft", headerName: "Sq Ft", width: 90, type: "numericColumn",
+      { field: "sqft", headerName: "Sq Ft", width: 90,
         valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
       { field: "leaseFrom", headerName: "Lease Start", width: 110,
         valueFormatter: (p: { value: string }) => p.value || "—" },
@@ -177,8 +177,6 @@ export default function RentRollPage() {
       // Days until lease expires + urgency band — replaces the old separate
       // /leases page. Hidden by default; users enable from column menu.
       { field: "daysToExpiry", headerName: "Lease Exp.", width: 110,
-        cellStyle: { textAlign: "left" } as any,
-        headerClass: "ag-left-aligned-header",
         valueGetter: (p: any) => {
           const to = p.data?.leaseTo;
           if (!to) return null;
@@ -235,12 +233,12 @@ export default function RentRollPage() {
         },
       },
       { field: "status", headerName: "Status", width: 130, cellRenderer: StatusCellRenderer, filter: true },
-      { field: "monthlyRent", headerName: "Rent", width: 110, type: "numericColumn",
+      { field: "monthlyRent", headerName: "Rent", width: 110,
         cellRenderer: CurrencyCellRenderer },
       // Prefer the Show Detail rent roll's monthlyRentPerSF column; fall
       // back to monthlyRent / sqft for properties not yet on the full
       // export. Display as $X.XX/SF.
-      { field: "monthlyRentPerSF", headerName: "Rent / SF", width: 110, type: "numericColumn",
+      { field: "monthlyRentPerSF", headerName: "Rent / SF", width: 110,
         valueGetter: (p: any) => {
           const d = p.data || {};
           if (typeof d.monthlyRentPerSF === "number" && d.monthlyRentPerSF > 0) return d.monthlyRentPerSF;
@@ -248,19 +246,19 @@ export default function RentRollPage() {
           return 0;
         },
         valueFormatter: (p: any) => p.value > 0 ? `$${p.value.toFixed(2)}/SF` : "—" },
-      { field: "securityDeposit", headerName: "Security Deposit", width: 140, type: "numericColumn",
+      { field: "securityDeposit", headerName: "Security Deposit", width: 140,
         cellRenderer: CurrencyCellRenderer },
       // Per-tenant current-month charges from the receivable detail. Hidden
       // by default — user enables via the column menu when they need them.
-      { field: "camCharge", headerName: "CAM", width: 110, type: "numericColumn",
+      { field: "camCharge", headerName: "CAM", width: 110,
         hide: true, cellRenderer: CurrencyCellRenderer },
-      { field: "electricCharge", headerName: "Electric Chg", width: 120, type: "numericColumn",
+      { field: "electricCharge", headerName: "Electric Chg", width: 120,
         hide: true, cellRenderer: CurrencyCellRenderer },
-      { field: "insuranceCharge", headerName: "Insurance", width: 110, type: "numericColumn",
+      { field: "insuranceCharge", headerName: "Insurance", width: 110,
         hide: true, cellRenderer: CurrencyCellRenderer },
-      { field: "currentMonthCharges", headerName: "Curr Charges", width: 130, type: "numericColumn",
+      { field: "currentMonthCharges", headerName: "Curr Charges", width: 130,
         hide: false, cellRenderer: CurrencyCellRenderer },
-      { field: "currentBalance", headerName: "Curr Balance", width: 130, type: "numericColumn",
+      { field: "currentBalance", headerName: "Curr Balance", width: 130,
         hide: false,
         cellRenderer: (p: { value: number }) => {
           const v = p.value || 0;
@@ -274,7 +272,7 @@ export default function RentRollPage() {
         valueFormatter: (p: { value: string }) => p.value || "—",
       },
       { field: "nextRentIncreaseAmount", headerName: "New Rent", width: 110, hide: true,
-        type: "numericColumn", cellRenderer: CurrencyCellRenderer,
+        cellRenderer: CurrencyCellRenderer,
       },
       // Net-lease electric posting status. Filterable so the user can
       // pull up "Not Posted" rows for the close.
@@ -302,6 +300,8 @@ export default function RentRollPage() {
     resizable: true,
     filter: true,
     suppressMovable: false,
+    cellStyle: { textAlign: "left" } as any,
+    headerClass: "ag-left-aligned-header",
   }), []);
 
   const persistence = useAgGridPersistence({
