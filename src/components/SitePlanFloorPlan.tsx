@@ -225,9 +225,7 @@ export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSele
           const isHovered = hovered === r.unit;
           const fill = isHovered
             ? HOVER_FILL[dec.status]
-            : isSelected
-              ? STATUS_FILL[dec.status]
-              : "transparent";
+            : STATUS_FILL[dec.status];
           const stroke = isSelected ? STATUS_STROKE[dec.status] : "#1f2937";
           const strokeWidth = isSelected ? 3 : 2;
           return (

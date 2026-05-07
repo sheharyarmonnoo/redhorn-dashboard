@@ -339,9 +339,7 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
               const isHovered = hovered === r.unit;
               const fill = isHovered
                 ? HOVER_FILL[dec.status]
-                : isSelected
-                  ? STATUS_FILL[dec.status]
-                  : STATUS_FILL.vacant;
+                : STATUS_FILL[dec.status];
               const stroke = isSelected ? STATUS_STROKE[dec.status] : "#3f3f46";
               const strokeWidth = isSelected ? 2.5 : 1;
               return (
