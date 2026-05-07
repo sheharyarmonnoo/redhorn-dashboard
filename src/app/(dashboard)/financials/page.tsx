@@ -260,9 +260,6 @@ export default function FinancialsPage() {
             onChangeComparePeriod={setComparePeriod}
             compareIndex={compareIndex}
           />
-          {recoveries.items.length > 0 && (
-            <RecoveriesPanel items={recoveries.items} total={recoveries.total} />
-          )}
         </>
       )}
       {view === "trend" && <TrendTable trend={trend} formatMonth={formatMonth} />}
