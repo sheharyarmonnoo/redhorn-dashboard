@@ -155,7 +155,7 @@ export default function AIChatbot() {
         className={`fixed z-50 bg-white dark:bg-[#0c0c0d] border border-[#e4e4e7] dark:border-[#27272a] shadow-2xl transition-all duration-200 flex flex-col ${
           size === "half"
             ? "bottom-0 right-0 h-[55vh] w-full sm:w-[420px] sm:bottom-3 sm:right-3 sm:rounded-lg"
-            : "top-0 right-0 h-full w-full sm:w-[480px] border-l"
+            : "top-0 right-0 h-full w-full sm:w-[640px] lg:w-[720px] border-l"
         } ${open ? "translate-x-0 translate-y-0" : (size === "half" ? "translate-y-full" : "translate-x-full")}`}
         aria-hidden={!open}
       >
