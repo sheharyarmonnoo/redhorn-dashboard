@@ -125,6 +125,28 @@ export async function runRentRollFullForProperty(
     }
   }
 
+  // 4c. FINAL Show Detail verification right before submit. The ASP.NET
+  //     ViewState round-trips on every Property/ReportType/FromDate change
+  //     have repeatedly stripped this flag. Without this last check, Yardi
+  //     ships a 10-column property-summary export that fails ingest with
+  //     "missing the lease-detail columns" — wiping all 36 Hollister
+  //     tenants on the bulk-replace path.
+  const finalDetailCheck = await showDetailLoc.isChecked().catch(() => false);
+  if (!finalDetailCheck) {
+    console.log(`   Show Detail was reset just before submit — re-checking once more`);
+    await showDetailLoc.check({ force: true, timeout: 10_000 });
+    // Give Yardi a moment to register the server-side postback if any
+    await voyagerPage.waitForTimeout(1500);
+    const finalRecheck = await showDetailLoc.isChecked().catch(() => false);
+    if (!finalRecheck) {
+      throw new Error(
+        `Show Detail unrecoverable for ${property.code} — refusing to ` +
+        `submit and produce a summary-only export that would wipe lease data.`
+      );
+    }
+  }
+  console.log(`   Final Show Detail check: ${finalDetailCheck ? "still on" : "re-enabled"}`);
+
   // 5. Click Excel and capture the download
   const outPath = resolve(
     downloadDirFor(asOfMonthIso),
