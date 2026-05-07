@@ -418,6 +418,92 @@ const IMPORT_ROW = v.object({
 });
 
 /**
+ * One-shot maintenance: rename a user across every place a person's name is
+ * stored (deal.assignedTo, deal.tasks[].assignedTo, deal.notes[].author,
+ * activity_log.user, email_log.sentBy, action_items.assignedTo).
+ * Idempotent — re-running with the same args is a no-op.
+ */
+export const renameUserEverywhere = mutation({
+  args: { from: v.string(), to: v.string() },
+  handler: async (ctx, args) => {
+    const stats: Record<string, number> = {
+      dealAssignedTo: 0,
+      dealTasksAssignedTo: 0,
+      dealNotesAuthor: 0,
+      activityLogUser: 0,
+      emailLogSentBy: 0,
+      actionItemsAssignedTo: 0,
+    };
+    const now = new Date().toISOString();
+
+    // 1. deals: assignedTo + tasks[].assignedTo + notes[].author
+    const allDeals = await ctx.db.query("deals").take(2500);
+    for (const d of allDeals) {
+      const patch: any = {};
+      if (d.assignedTo === args.from) {
+        patch.assignedTo = args.to;
+        stats.dealAssignedTo++;
+      }
+      const tasks = d.tasks || [];
+      let tasksDirty = false;
+      const newTasks = tasks.map((t: any) => {
+        if (t.assignedTo === args.from) {
+          tasksDirty = true;
+          stats.dealTasksAssignedTo++;
+          return { ...t, assignedTo: args.to };
+        }
+        return t;
+      });
+      if (tasksDirty) patch.tasks = newTasks;
+      const notes = d.notes || [];
+      let notesDirty = false;
+      const newNotes = notes.map((n: any) => {
+        if (n.author === args.from) {
+          notesDirty = true;
+          stats.dealNotesAuthor++;
+          return { ...n, author: args.to };
+        }
+        return n;
+      });
+      if (notesDirty) patch.notes = newNotes;
+      if (Object.keys(patch).length > 0) {
+        patch.updatedAt = now;
+        await ctx.db.patch(d._id, patch);
+      }
+    }
+
+    // 2. activity_log.user
+    const acts = await ctx.db.query("activity_log").take(2500);
+    for (const a of acts) {
+      if (a.user === args.from) {
+        await ctx.db.patch(a._id, { user: args.to } as any);
+        stats.activityLogUser++;
+      }
+    }
+
+    // 3. email_log.sentBy
+    const emails = await ctx.db.query("email_log").take(2500);
+    for (const e of emails) {
+      if (e.sentBy === args.from) {
+        await ctx.db.patch(e._id, { sentBy: args.to } as any);
+        stats.emailLogSentBy++;
+      }
+    }
+
+    // 4. action_items.assignedTo
+    const items = await ctx.db.query("action_items").take(2500);
+    for (const i of items) {
+      if (i.assignedTo === args.from) {
+        await ctx.db.patch(i._id, { assignedTo: args.to } as any);
+        stats.actionItemsAssignedTo++;
+      }
+    }
+
+    return stats;
+  },
+});
+
+/**
  * One-shot maintenance: walk every deal whose city/state are blank and try
  * to derive them from the address string. Safe to re-run — only patches
  * deals where (city is empty OR state is empty) AND the address parses.

@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Plus, X, Check, Trash2, RotateCcw } from "lucide-react";
+import { Plus, X, Check, Trash2, RotateCcw, Pencil } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
 import { useActiveProperty, useUnits, useMaintenance, formatCurrency } from "@/hooks/useConvexData";
@@ -393,6 +393,13 @@ function ItemList({
               </span>
             </span>
             <span className="flex items-center justify-end gap-1">
+              <button
+                onClick={() => onEdit(r)}
+                title="Edit"
+                className="p-1 rounded hover:bg-[#71717a]/10 text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
               {r.status !== "completed" && (
                 <button
                   onClick={() => onComplete(r._id)}

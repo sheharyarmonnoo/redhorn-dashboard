@@ -187,10 +187,30 @@ export function DealDetail({
               <Building2 size={14} className="text-[#71717a] dark:text-[#a1a1aa]" />
               <p className="text-[15px] font-semibold text-[#18181b] dark:text-[#fafafa] truncate">{deal.name}</p>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#71717a] dark:text-[#a1a1aa]">
-              <MapPin size={11} />
-              <span>{deal.address}, {deal.city}, {deal.state}</span>
-            </div>
+            {(() => {
+              // Many Monday-imported deals have name === address, so the
+              // subline duplicates the headline. Only render when the
+              // address adds info beyond the name (different street, or
+              // city/state not already in the name).
+              const nameLow = (deal.name || "").toLowerCase().trim();
+              const addrLow = (deal.address || "").toLowerCase().trim();
+              const cityState = [deal.city, deal.state].filter(Boolean).join(", ").trim();
+              const cityStateLow = cityState.toLowerCase();
+              const addrIsRedundant = !addrLow || addrLow === nameLow || nameLow.includes(addrLow);
+              const cityStateIsRedundant = !cityStateLow || nameLow.includes(cityStateLow);
+              if (addrIsRedundant && cityStateIsRedundant) return null;
+              const display = addrIsRedundant
+                ? cityState
+                : cityStateIsRedundant
+                  ? deal.address
+                  : `${deal.address}, ${cityState}`;
+              return (
+                <div className="flex items-center gap-1.5 text-[11px] text-[#71717a] dark:text-[#a1a1aa]">
+                  <MapPin size={11} />
+                  <span>{display}</span>
+                </div>
+              );
+            })()}
           </div>
           <div className="flex items-center gap-2 ml-3">
             <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa]" title="Acting as the logged-in user">as {currentUser}</span>
@@ -449,7 +469,7 @@ export function DealDetail({
                   <div key={note.id || idx} className="border-l-2 border-[#e4e4e7] dark:border-[#3f3f46] pl-3 py-1">
                     <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed whitespace-pre-wrap">{note.text}</p>
                     <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1">
-                      {note.author} \u00B7 {formatDateTime(note.createdAt)}
+                      {note.author} · {formatDateTime(note.createdAt)}
                     </p>
                   </div>
                 ))}

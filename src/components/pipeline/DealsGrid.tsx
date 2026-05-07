@@ -220,6 +220,10 @@ export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter
       <AgGridReact
         ref={gridRef}
         rowData={deals}
+        // Stable row identity prevents AG Grid from tearing down + remounting
+        // every row when Convex pushes a new deals[] array. Without this the
+        // table flickers on every mutation (e.g. a single stage change).
+        getRowId={(p: any) => String(p.data?._id ?? "")}
         columnDefs={columnDefs}
         defaultColDef={defaultColDef}
         quickFilterText={quickSearch}
