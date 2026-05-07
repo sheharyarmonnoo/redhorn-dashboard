@@ -14,16 +14,16 @@ export type EmailProvider = "gmail" | "outlook" | "mailto";
 export const EMAIL_PROVIDER_LABELS: Record<EmailProvider, string> = {
   gmail: "Gmail (web)",
   outlook: "Outlook (web)",
-  mailto: "Default mail client (mailto:)",
+  mailto: "Default mail client",
 };
 
 const STORAGE_KEY = "redhorn_email_provider";
 
 export function getEmailProvider(): EmailProvider {
-  if (typeof window === "undefined") return "gmail";
+  if (typeof window === "undefined") return "mailto";
   const stored = window.localStorage.getItem(STORAGE_KEY) as EmailProvider | null;
   if (stored === "gmail" || stored === "outlook" || stored === "mailto") return stored;
-  return "gmail";
+  return "mailto";
 }
 
 export function setEmailProvider(provider: EmailProvider) {

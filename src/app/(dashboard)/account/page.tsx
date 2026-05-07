@@ -63,14 +63,9 @@ export default function AccountPage() {
           users. We never SMTP-send anything ourselves; the user's webmail
           handles delivery. Selection persists in localStorage. */}
       <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-5 mb-6 max-w-2xl mx-auto">
-        <div className="mb-3 flex items-start gap-2">
-          <Mail className="w-4 h-4 text-[#71717a] dark:text-[#a1a1aa] mt-0.5 flex-shrink-0" />
-          <div>
-            <h2 className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Email Provider</h2>
-            <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5">
-              When you click "Open in &lt;provider&gt;" on an alert or tenant email, we open a pre-filled compose tab in your webmail — no SMTP keys, no server-side delivery.
-            </p>
-          </div>
+        <div className="mb-3 flex items-center gap-2">
+          <Mail className="w-4 h-4 text-[#71717a] dark:text-[#a1a1aa] flex-shrink-0" />
+          <h2 className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Email Provider</h2>
         </div>
         <div className="flex flex-wrap gap-2">
           {(Object.entries(EMAIL_PROVIDER_LABELS) as Array<[EmailProvider, string]>).map(([key, label]) => {

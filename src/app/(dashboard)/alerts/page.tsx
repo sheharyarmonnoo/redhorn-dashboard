@@ -821,6 +821,13 @@ function AlertDrawer({
         <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46] sticky bottom-0 bg-white dark:bg-[#18181b]">
           <div className="flex items-center gap-2 flex-wrap">
             <button
+              onClick={() => setEmailCtx(buildAlertEmail(alert, tenants, propertyPm, propertyId))}
+              className="flex items-center gap-1.5 text-[12px] font-medium bg-[#2563eb] text-white hover:bg-[#1d4ed8] px-3 py-1.5 rounded cursor-pointer"
+              title="Compose an email about this alert"
+            >
+              <Mail size={12} /> Send Email
+            </button>
+            <button
               onClick={() => onMarkCompleted(alert)}
               className="text-[12px] font-medium bg-[#16a34a] text-white hover:bg-[#15803d] px-3 py-1.5 rounded cursor-pointer"
             >
