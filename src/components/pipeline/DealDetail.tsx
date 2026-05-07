@@ -328,7 +328,7 @@ export function DealDetail({
                 <div className="grid grid-cols-2 gap-3">
                   <EditableField
                     label="Assigned To"
-                    value={deal.assignedTo || currentUser}
+                    value={deal.assignedTo}
                     icon={<User size={11} />}
                     onSave={(v) => saveField("assignedTo", v)}
                   />
