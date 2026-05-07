@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import Sidebar from "@/components/Sidebar";
 import MainContent from "@/components/MainContent";
-import AIChatbot from "@/components/AIChatbot";
+// AIChatbot intentionally hidden for now — re-mount when ready.
 
 // Single source of truth for who can see the dashboard. Must match
 // src/components/ActionItems.tsx so the UI assignee logic stays in sync.
@@ -36,7 +36,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <>
       <Sidebar />
       <MainContent>{children}</MainContent>
-      <AIChatbot />
     </>
   );
 }

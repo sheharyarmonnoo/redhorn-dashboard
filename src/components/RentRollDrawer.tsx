@@ -11,6 +11,13 @@ interface Props {
   onClose: () => void;
 }
 
+const STATUS_PILL: Record<string, { label: string; cls: string }> = {
+  current:       { label: "Current",       cls: "bg-green-100 dark:bg-green-950/40 text-[#16a34a] border-green-200 dark:border-green-900" },
+  past_due:      { label: "Past Due",      cls: "bg-red-100 dark:bg-red-950/40 text-[#dc2626] border-red-200 dark:border-red-900" },
+  expiring_soon: { label: "Expiring Soon", cls: "bg-blue-100 dark:bg-blue-950/40 text-[#2563eb] border-blue-200 dark:border-blue-900" },
+  locked_out:    { label: "Locked Out",    cls: "bg-orange-100 dark:bg-orange-950/40 text-[#d97706] border-orange-200 dark:border-orange-900" },
+  vacant:        { label: "Vacant",        cls: "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] border-[#e4e4e7] dark:border-[#3f3f46]" },
+};
 const STATUS_LABELS: Record<string, string> = {
   current: "Current",
   past_due: "Past Due",
@@ -172,7 +179,13 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Status">
-              <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{STATUS_LABELS[tenant.status] || tenant.status || "—"}</p>
+              {(() => {
+                const cfg = STATUS_PILL[tenant.status as string] || { label: tenant.status || "—", cls: "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] border-[#e4e4e7] dark:border-[#3f3f46]" };
+                return (
+                  <span className={`inline-block text-[11px] font-semibold px-2.5 py-1 rounded border ${cfg.cls}`}>{cfg.label}</span>
+                );
+              })()}
+              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">Auto-derived from Yardi sync data.</p>
             </Field>
             <Field label="Lease Type">
               <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{tenant.leaseType || "—"}</p>
