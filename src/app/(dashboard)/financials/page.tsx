@@ -4,7 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import PageHeader from "@/components/PageHeader";
 import { api } from "../../../../convex/_generated/api";
-import { useActiveProperty, useIncomeLines, useMonthlyRevenue, useDebt, useLineBudgets, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useIncomeLinesWithLoading, useMonthlyRevenue, useDebt, useLineBudgets, formatCurrency } from "@/hooks/useConvexData";
 
 const SECTION_ORDER = ["income", "expense", "net"];
 
@@ -59,7 +59,7 @@ function indexByLineItem(rows: any[]) {
 
 export default function FinancialsPage() {
   const property = useActiveProperty();
-  const rawLines = useIncomeLines(property?._id);
+  const { lines: rawLines, loading: linesLoading } = useIncomeLinesWithLoading(property?._id);
   const monthlyRevenue = useMonthlyRevenue(property?._id);
   const { debt, upsertDebt, clearDebt } = useDebt(property?._id);
   const updateProperty = useMutation(api.properties.update);
@@ -205,6 +205,32 @@ export default function FinancialsPage() {
 
   if (!property) return null;
 
+  // Skeleton while income_lines streams in. Without this, the page flashes
+  // "$0 / $0 / NOI $0 / 'No monthly trend data yet'" because the empty []
+  // fallback can't be distinguished from a real empty result.
+  if (linesLoading) {
+    return (
+      <div>
+        <PageHeader title="Financials" subtitle="Loading…" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 animate-pulse">
+              <div className="h-6 w-24 bg-[#f4f4f5] dark:bg-[#27272a] rounded mb-1.5" />
+              <div className="h-2 w-16 bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6">
+          <div className="space-y-2 animate-pulse">
+            {[1,2,3,4,5,6,7,8].map(i => (
+              <div key={i} className="h-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded" style={{ width: `${60 + (i * 5) % 35}%` }} />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const formatMonth = (m: string) => {
     const [y, mo] = m.split("-");
     const date = new Date(Number(y), Number(mo) - 1);
@@ -251,6 +277,7 @@ export default function FinancialsPage() {
 
       {view === "statement" && (
         <>
+          <ISSummaryPanel lines={lines} compareIndex={compareIndex} comparePeriod={comparePeriod} currentPeriod={period} />
           <IncomeStatement
             lines={lines}
             totalIncome={totalIncome}
@@ -1587,5 +1614,94 @@ function BudgetVsActualsHighLevel({
       })}
       </div>
     </>
+  );
+}
+
+// Summary panel showing the 4 income-statement grand totals (TOTAL INCOME,
+// TOTAL OPERATING EXPENSE, NET OPERATING INCOME (LOSS), NET INCOME (LOSS))
+// at the top of the Income Statement view. Always visible by default —
+// before the user expands any section. Pulls current + compare values for
+// each row.
+function ISSummaryPanel({
+  lines,
+  compareIndex,
+  comparePeriod,
+  currentPeriod,
+}: {
+  lines: any[];
+  compareIndex: Map<string, { currentPeriod: number; yearToDate: number }> | null;
+  comparePeriod: string | null;
+  currentPeriod: string | null;
+}) {
+  const KEY_TOTALS = [
+    { match: /^total\s+income\s*$/i, label: "Total Income", color: "text-[#16a34a]" },
+    { match: /^total\s+(operating\s+)?expense\s*$/i, label: "Total Operating Expense", color: "text-[#dc2626]" },
+    { match: /^net\s+operating\s+income/i, label: "NOI (Net Operating Income)", color: "text-[#16a34a]", emphasized: true },
+    { match: /^net\s+income\s*\(loss\)/i, label: "Net Income (Loss)", color: "text-[#16a34a]", emphasized: true },
+  ];
+
+  const found = KEY_TOTALS.map(t => {
+    const row = lines.find((l: any) => t.match.test((l.lineItem || "").trim()));
+    if (!row) return null;
+    const li = (row.lineItem || "").trim();
+    const cp = row.currentPeriod || 0;
+    const ytd = row.yearToDate || 0;
+    const cmp = compareIndex?.get(li)?.currentPeriod ?? null;
+    const cmpYtd = compareIndex?.get(li)?.yearToDate ?? null;
+    const variance = cmp !== null ? cp - cmp : null;
+    const variancePct = cmp !== null && cmp !== 0 ? (variance! / Math.abs(cmp)) * 100 : null;
+    const ytdVariance = cmpYtd !== null ? ytd - cmpYtd : null;
+    const ytdVariancePct = cmpYtd !== null && cmpYtd !== 0 ? (ytdVariance! / Math.abs(cmpYtd)) * 100 : null;
+    return { spec: t, line: row, cp, ytd, cmp, variance, variancePct, ytdVariance, ytdVariancePct };
+  }).filter(Boolean) as any[];
+
+  if (found.length === 0) return null;
+
+  const cpLabel = currentPeriod ? formatPeriodShort(currentPeriod) : "Current";
+  const cmpLabel = comparePeriod ? formatPeriodShort(comparePeriod) : "Prior";
+
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden mb-4">
+      <div className="grid grid-cols-[1fr_120px_120px_90px_120px_120px_90px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <span>Summary</span>
+        <span className="text-right">{cpLabel}</span>
+        <span className="text-right">{cmpLabel}</span>
+        <span className="text-right">Var %</span>
+        <span className="text-right">YTD</span>
+        <span className="text-right">YTD {cmpLabel}</span>
+        <span className="text-right">Var %</span>
+      </div>
+      {found.map((f: any, i: number) => {
+        const isNeg = f.cp < 0;
+        return (
+          <div
+            key={i}
+            className={`grid grid-cols-[1fr_120px_120px_90px_120px_120px_90px] px-4 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] ${
+              f.spec.emphasized ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-bold text-[#18181b] dark:text-[#fafafa]" : "font-semibold text-[#18181b] dark:text-[#fafafa]"
+            }`}
+          >
+            <span className="truncate">{f.spec.label}</span>
+            <span className={`text-right ${isNeg ? "text-[#dc2626]" : ""}`}>
+              {f.cp === 0 ? "—" : formatCurrency(Math.abs(f.cp))}
+            </span>
+            <span className={`text-right text-[#71717a] dark:text-[#a1a1aa]`}>
+              {f.cmp === null || f.cmp === 0 ? "—" : formatCurrency(Math.abs(f.cmp))}
+            </span>
+            <span className={`text-right ${f.variancePct === null ? "text-[#a1a1aa]" : f.variancePct >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
+              {f.variancePct === null ? "—" : `${f.variancePct >= 0 ? "+" : ""}${f.variancePct.toFixed(0)}%`}
+            </span>
+            <span className={`text-right ${f.ytd < 0 ? "text-[#dc2626]" : ""}`}>
+              {f.ytd === 0 ? "—" : formatCurrency(Math.abs(f.ytd))}
+            </span>
+            <span className={`text-right text-[#71717a] dark:text-[#a1a1aa]`}>
+              {f.ytdVariance === null ? "—" : f.cmp === null || compareIndex?.get((f.line.lineItem||"").trim())?.yearToDate === undefined ? "—" : formatCurrency(Math.abs(f.ytd - f.ytdVariance))}
+            </span>
+            <span className={`text-right ${f.ytdVariancePct === null ? "text-[#a1a1aa]" : f.ytdVariancePct >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
+              {f.ytdVariancePct === null ? "—" : `${f.ytdVariancePct >= 0 ? "+" : ""}${f.ytdVariancePct.toFixed(0)}%`}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }

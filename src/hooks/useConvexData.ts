@@ -310,6 +310,16 @@ export function useIncomeLines(propertyId: string | undefined) {
   return lines ?? [];
 }
 
+// Same query, but exposes loading state so the Financials page can show a
+// skeleton instead of misleading $0 placeholders while the query streams in.
+export function useIncomeLinesWithLoading(propertyId: string | undefined) {
+  const lines = useQuery(
+    api.incomeLines.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  return { lines: lines ?? [], loading: !!propertyId && lines === undefined };
+}
+
 // ===== PROPERTY DEBT (manual input for DSCR) =====
 
 export function useDebt(propertyId: string | undefined) {
