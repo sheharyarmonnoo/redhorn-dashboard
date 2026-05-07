@@ -28,8 +28,7 @@ interface AlertRow {
   // the action buttons hit Convex mutations instead of the localStorage archive.
   convexAlertId?: string;
   isAIInsight?: boolean;
-  resolution?: "resolved" | "false_flag"; // populated for AI insights already actioned
-  falseFlagReason?: string;
+  resolution?: "resolved"; // populated for AI insights already actioned
 }
 
 function SeverityCellRenderer(props: { value: string }) {
@@ -129,8 +128,8 @@ export default function AlertsPage() {
   const { alerts: convexAlerts } = useAlerts();
   const { user } = useUser();
   const updateAlertStatus = useMutation(api.alerts.updateStatus);
-  const markFalseFlag = useMutation(api.alerts.markFalseFlag);
-  const undoFalseFlag = useMutation(api.alerts.undoFalseFlag);
+  // False-flag mutations intentionally not wired up — feature is hidden from
+  // the UI but the backend mutations and stored rows are preserved.
   const createAlert = useMutation(api.alerts.create);
   const updateAlert = useMutation(api.alerts.updateAlert);
   const removeAlert = useMutation(api.alerts.remove);
@@ -140,7 +139,6 @@ export default function AlertsPage() {
   const [newAlert, setNewAlert] = useState({ unit: "", category: "General", severity: "Warning" as AlertRow["severity"], detail: "" });
   const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
-  const [flagging, setFlagging] = useState<{ row: AlertRow } | null>(null);
   const [handledPage, setHandledPage] = useState(0);
 
   useEffect(() => { setArchivedIds(loadArchived()); setHiddenIds(loadHidden()); }, []);
@@ -304,9 +302,11 @@ export default function AlertsPage() {
     return alerts;
   }, [tenants, convexAlerts, activeProperty?._id]);
 
-  // AI insights resolved or false-flagged via Convex (e.g. from the dashboard's
-  // Mark as Completed action) — surface them in the Handled section so the
-  // alerts page mirrors the dashboard's state without a refresh.
+  // AI insights resolved via Convex (e.g. from the dashboard's Mark as
+  // Completed action) — surface them in the Handled section so the alerts
+  // page mirrors the dashboard's state without a refresh. False-flagged
+  // rows are intentionally excluded; the underlying records still live in
+  // Convex but the UI does not expose that state.
   const resolvedAIInsights = useMemo<AlertRow[]>(() => {
     const sevTitle: Record<string, AlertRow["severity"]> = {
       critical: "Critical",
@@ -316,7 +316,7 @@ export default function AlertsPage() {
     return (convexAlerts as any[])
       .filter(a => a.alertType === "income_insight"
         && a.propertyId === activeProperty?._id
-        && (a.status === "resolved" || a.status === "false_flag"))
+        && a.status === "resolved")
       .map(a => ({
         id: `aii-${a._id}`,
         unit: a.unit || "—",
@@ -330,8 +330,7 @@ export default function AlertsPage() {
         date: (a.date || "").slice(0, 10),
         convexAlertId: a._id,
         isAIInsight: true,
-        resolution: a.status as "resolved" | "false_flag",
-        falseFlagReason: a.dataContext?.falseFlagReason,
+        resolution: "resolved" as const,
       }));
   }, [convexAlerts, activeProperty?._id]);
 
@@ -367,25 +366,11 @@ export default function AlertsPage() {
     setSelectedAlertId(null);
   }
 
-  async function handleSubmitFalseFlag(reason: string) {
-    if (!flagging) return;
-    const row = flagging.row;
-    if (row.isAIInsight && row.convexAlertId) {
-      await markFalseFlag({
-        id: row.convexAlertId as any,
-        reason: reason.trim(),
-        markedBy: user?.fullName || user?.firstName || "User",
-      });
-    }
-    setFlagging(null);
-    setSelectedAlertId(null);
-  }
-
   async function handleRestore(row: AlertRow) {
     if (row.isAIInsight && row.convexAlertId) {
-      // undoFalseFlag also clears resolved status (sets back to "new") and
-      // strips any falseFlagReason — universal restore for AI insights.
-      await undoFalseFlag({ id: row.convexAlertId as any });
+      // Reopen a resolved AI insight by sending it back to "new". The
+      // backend keeps the record either way; this just flips the status.
+      await updateAlertStatus({ id: row.convexAlertId as any, status: "new" });
     } else {
       restoreAlert(row.id);
     }
@@ -500,19 +485,10 @@ export default function AlertsPage() {
           });
         }}
         onMarkCompleted={handleMarkCompleted}
-        onMarkFalseFlag={(row) => setFlagging({ row })}
         propertyId={activeProperty?._id}
         tenants={tenants}
         propertyPm={activeProperty ? { name: activeProperty.pmName, email: activeProperty.pmEmail, company: activeProperty.pmCompany } : null}
       />
-
-      {flagging && (
-        <FalseFlagModal
-          title={flagging.row.title || flagging.row.detail.slice(0, 80) || "this finding"}
-          onCancel={() => setFlagging(null)}
-          onSubmit={handleSubmitFalseFlag}
-        />
-      )}
 
       {/* Archived / Handled */}
       {archivedAlerts.length > 0 && (
@@ -538,19 +514,14 @@ export default function AlertsPage() {
           <div className="space-y-0 border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
             {handledPageRows.map(a => (
               <div key={a.id} className="group flex items-center gap-3 px-3 py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 bg-[#fafafa] dark:bg-[#27272a]">
-                <span className={`text-[11px] font-medium ${a.resolution === "false_flag" ? "text-[#d97706]" : "text-[#16a34a]"}`}>
-                  {a.resolution === "false_flag" ? "⚑" : "✓"}
-                </span>
+                <span className="text-[11px] font-medium text-[#16a34a]">✓</span>
                 <span className="text-[12px] font-medium text-[#71717a] dark:text-[#a1a1aa] w-14 flex-shrink-0">{a.unit}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a] line-through truncate">{a.title || a.detail}</p>
-                  {a.falseFlagReason && (
-                    <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] italic truncate mt-0.5">"{a.falseFlagReason}"</p>
-                  )}
                 </div>
                 {a.resolution && (
                   <span className="text-[9px] uppercase tracking-wide font-medium text-[#a1a1aa] dark:text-[#71717a] flex-shrink-0">
-                    {a.resolution === "false_flag" ? "false flag" : "completed"}
+                    completed
                   </span>
                 )}
                 <button onClick={() => handleRestore(a)}
@@ -670,13 +641,12 @@ function AlertModal({
 }
 
 function AlertDrawer({
-  alert: alertProp, onClose, onSave, onMarkCompleted, onMarkFalseFlag, propertyId, tenants, propertyPm,
+  alert: alertProp, onClose, onSave, onMarkCompleted, propertyId, tenants, propertyPm,
 }: {
   alert: AlertRow | null;
   onClose: () => void;
   onSave: (updates: Partial<AlertRow>) => void;
   onMarkCompleted: (row: AlertRow) => void | Promise<void>;
-  onMarkFalseFlag: (row: AlertRow) => void;
   propertyId?: string;
   tenants: any[];
   propertyPm: { name?: string; email?: string; company?: string } | null;
@@ -812,8 +782,6 @@ function AlertDrawer({
           {alert.isAIInsight && (
             <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] italic leading-relaxed">
               <strong className="not-italic">Mark as Completed</strong> — addressed; resolves the finding.
-              {" "}
-              <strong className="not-italic">Mark as False Flag</strong> — not actually an issue; suppresses the same pattern in the next sync's prompt.
             </p>
           )}
         </div>
@@ -833,14 +801,6 @@ function AlertDrawer({
             >
               Mark as Completed
             </button>
-            {alert.isAIInsight && (
-              <button
-                onClick={() => onMarkFalseFlag(alert)}
-                className="text-[12px] font-medium border border-[#d97706] text-[#d97706] hover:bg-[#fffbeb] dark:hover:bg-[#451a03] px-3 py-1.5 rounded cursor-pointer"
-              >
-                Mark as False Flag
-              </button>
-            )}
           </div>
           <div className="flex items-center gap-2">
             <button

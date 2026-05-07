@@ -231,10 +231,9 @@ export default function DashboardPage() {
   );
 }
 
-function InsightRow({ insight, dotClass, onFlag, onComplete, leaving, index = 0 }: {
+function InsightRow({ insight, dotClass, onComplete, leaving, index = 0 }: {
   insight: any;
   dotClass: string;
-  onFlag: () => void;
   onComplete: () => void | Promise<void>;
   leaving?: boolean;
   index?: number;
@@ -287,13 +286,6 @@ function InsightRow({ insight, dotClass, onFlag, onComplete, leaving, index = 0 
               </p>
             )}
             <div className="mt-2 flex items-center justify-end gap-3">
-              <button
-                onClick={(e) => { e.stopPropagation(); onFlag(); }}
-                className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#d97706] cursor-pointer"
-                title="Not actually an issue — Claude won't re-flag this pattern next sync"
-              >
-                Mark as False Flag
-              </button>
               <button
                 onClick={handleComplete}
                 disabled={completing}
@@ -394,15 +386,9 @@ function FalseFlagCard({ insight, onUnflag, onAddComment }: {
 function LatestInsights({ propertyId }: { propertyId: string }) {
   const { alerts, loading } = useAlerts();
   const { user } = useUser();
-  const markFalseFlag = useMutation(api.alerts.markFalseFlag);
-  const undoFalseFlag = useMutation(api.alerts.undoFalseFlag);
-  const addComment = useMutation(api.alerts.addComment);
+  // False-flag mutations intentionally not wired up — feature is hidden
+  // from the UI but the backend mutations and stored rows are preserved.
   const updateStatus = useMutation(api.alerts.updateStatus);
-  const [showSuppressed, setShowSuppressed] = useState(false);
-  const [flagging, setFlagging] = useState<{ id: any; title: string } | null>(null);
-  // Track which rows are mid-removal so the leave animation plays before the
-  // Convex subscription removes them. Avoids the jarring snap on action.
-  const [leavingIds, setLeavingIds] = useState<Set<string>>(new Set());
   // Persist the summary card's expand state per property in localStorage so the
   // user lands back where they left off across page reloads / property switches.
   const summaryKey = `redhorn_summary_expanded_${propertyId}`;
@@ -421,16 +407,17 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
     });
   };
 
-  const { active, suppressed, latestSummary, latestSummaryAt, hasAnyHistory } = useMemo(() => {
+  const { active, latestSummary, latestSummaryAt, hasAnyHistory } = useMemo(() => {
     const all = (alerts as any[])
       .filter(a => a.alertType === "income_insight" && a.propertyId === propertyId)
       .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
+    // false_flag rows are still excluded from the active list — the
+    // backend records remain, but they don't surface in the UI either as
+    // findings or in a suppressed list.
     const active = all.filter(a => a.status !== "false_flag" && a.status !== "resolved" && a.status !== "dismissed").slice(0, 6);
-    const suppressed = all.filter(a => a.status === "false_flag");
     const top = active[0] ?? all[0];
     return {
       active,
-      suppressed,
       latestSummary: top?.aiAnalysis,
       latestSummaryAt: top?._creationTime,
       hasAnyHistory: all.length > 0,
@@ -477,26 +464,6 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
     info: "bg-[#2563eb]",
   };
 
-  function openFlag(insight: any) {
-    setFlagging({ id: insight._id, title: insight.title || "this finding" });
-  }
-
-  async function submitFlag(reason: string) {
-    if (!flagging) return;
-    const id = flagging.id;
-    // Animate the row out first, THEN mutate. Mirrors the smoothness of the
-    // Mark-as-Completed flow.
-    setLeavingIds(prev => new Set(prev).add(String(id)));
-    setFlagging(null);
-    await new Promise(r => setTimeout(r, 280));
-    await markFalseFlag({ id, reason: reason.trim(), markedBy: user?.fullName || user?.firstName || "User" });
-  }
-
-  async function unflag(id: any) {
-    if (!window.confirm("Reopen this insight? It will appear again on the next sync.")) return;
-    await undoFalseFlag({ id });
-  }
-
   return (
     <div className="mb-6 mt-6">
       <div className="flex items-baseline justify-between mb-3">
@@ -518,9 +485,7 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
               key={ins._id}
               insight={ins}
               dotClass={sevDot[ins.severity] || sevDot.info}
-              onFlag={() => openFlag(ins)}
               onComplete={async () => { await updateStatus({ id: ins._id, status: "resolved", resolvedBy: user?.fullName || user?.firstName || "User" }); }}
-              leaving={leavingIds.has(String(ins._id))}
               index={i}
             />
           ))}
@@ -530,37 +495,6 @@ function LatestInsights({ propertyId }: { propertyId: string }) {
           <p className="text-[12px] text-[#16a34a] font-medium">All clear · no active findings this run</p>
           <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1">Past insights are kept for continuity. Next sync will flag anything new.</p>
         </div>
-      )}
-
-      {suppressed.length > 0 && (
-        <div className="mt-3">
-          <button
-            onClick={() => setShowSuppressed(s => !s)}
-            className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#71717a] dark:hover:text-[#a1a1aa] cursor-pointer underline decoration-dotted"
-          >
-            {showSuppressed ? "Hide" : "Show"} {suppressed.length} suppressed false flag{suppressed.length === 1 ? "" : "s"}
-          </button>
-          {showSuppressed && (
-            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-              {suppressed.map(ins => (
-                <FalseFlagCard
-                  key={ins._id}
-                  insight={ins}
-                  onUnflag={() => unflag(ins._id)}
-                  onAddComment={async (text) => { await addComment({ id: ins._id, text, author: user?.fullName || user?.firstName || "User" }); }}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {flagging && (
-        <FalseFlagModal
-          title={flagging.title}
-          onCancel={() => setFlagging(null)}
-          onSubmit={submitFlag}
-        />
       )}
     </div>
   );
