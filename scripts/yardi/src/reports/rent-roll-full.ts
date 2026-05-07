@@ -40,7 +40,44 @@ export async function runRentRollFullForProperty(
   // Wait for the Property field to render (signal the form is ready)
   await frame.locator("#PropertyId_LookupCode").waitFor({ timeout: 30_000 });
 
-  // 1. Property — set both LookupCode + Description so Yardi doesn't fall back
+  // 1. Force Show Detail = checked FIRST — before any other field. The form's
+  //    default is "checked" on a fresh load, but Yardi reuses the iframe across
+  //    properties in the same session and ASP.NET ViewState carries the
+  //    previous-property state (often "unchecked" after a postback). Worse,
+  //    setting the DOM `.checked = true` directly does NOT update the server's
+  //    perception — when Excel_Button submits, Yardi serializes from the
+  //    current DOM but its server-side state machine treats unchecked-at-
+  //    render as the source of truth for the report layout, producing a
+  //    10-column property-summary export (1 row per property) instead of the
+  //    16-column per-lease detail. That mismatch is why the previous fix
+  //    (`.checked = true` + `change` event) logged "Show Detail = on" yet
+  //    Yardi still exported summary-only — wiping Hollister's 37 tenants down
+  //    to a single rollup row on the 2026-05 sync.
+  //
+  //    The reliable fix is to use Playwright's locator.check() which performs
+  //    a real user-style click when the box is unchecked. That fires the
+  //    onclick handler, updates the form's submit-time state, and (because we
+  //    do this BEFORE setting Property/ReportType/FromDate) any postback that
+  //    follows can't clobber values we haven't set yet. check() is a no-op
+  //    when already checked, so it doesn't toggle a default-on state OFF.
+  const showDetailLoc = frame.locator("#chkIsDetail_CheckBox");
+  await showDetailLoc.waitFor({ timeout: 10_000 }).catch(() => {});
+  const initiallyChecked = await showDetailLoc.isChecked().catch(() => false);
+  await showDetailLoc.check({ force: true, timeout: 10_000 });
+  // Let any onclick-driven postback settle. The form may briefly tear down
+  // and re-render — wait for the Property field to be available again before
+  // proceeding.
+  await frame.locator("#PropertyId_LookupCode").waitFor({ timeout: 30_000 });
+  const detailChecked = await showDetailLoc.isChecked().catch(() => false);
+  if (!detailChecked) {
+    throw new Error(
+      `Show Detail checkbox failed to enable for ${property.code}; refusing to ` +
+      `submit (would produce summary-only export and wipe lease data on ingest).`
+    );
+  }
+  console.log(`   Show Detail = on (was ${initiallyChecked ? "already" : "set via check()"})`);
+
+  // 2. Property — set both LookupCode + Description so Yardi doesn't fall back
   //    to the multi-property default ("bel^.redhorn^hol")
   await frame.evaluate(({ code, name }: any) => {
     const codeEl = document.getElementById("PropertyId_LookupCode") as HTMLInputElement | null;
@@ -59,10 +96,10 @@ export async function runRentRollFullForProperty(
   const settledCode = await frame.locator("#PropertyId_LookupCode").inputValue().catch(() => "");
   console.log(`   PropertyId set to: "${settledCode}"`);
 
-  // 2. Report Type = Rent Roll
+  // 3. Report Type = Rent Roll
   await frame.locator("#ReportType_DropDownList").selectOption("2");
 
-  // 3. From Date = first day of as-of month (e.g. "05/01/2026")
+  // 4. From Date = first day of as-of month (e.g. "05/01/2026")
   const [y, m] = asOfMonthIso.split("-").map(Number);
   const mmddyyyy = `${String(m).padStart(2, "0")}/01/${y}`;
   const dateField = frame.locator("#FromDate_TextBox");
@@ -72,37 +109,21 @@ export async function runRentRollFullForProperty(
   await dateField.press("Tab");
   console.log(`   FromDate = ${mmddyyyy}`);
 
-  // 4. Force Show Detail = checked. The form's default is already checked,
-  //    but Yardi/ASP.NET sometimes serves the page with it cleared (esp. on
-  //    repeat property loads in the same session). We:
-  //      - read the current state via the DOM
-  //      - if unchecked, set checked=true and fire ONLY a `change` event
-  //        (NOT `click` — click would re-toggle the checkbox OFF and trigger
-  //        a postback that resets other fields)
-  //      - re-verify and refuse to submit if it's still off
-  //    Without detail = checked, Yardi exports a 10-column property-summary
-  //    layout (1 row per property) which the parser correctly rejects, but
-  //    that means an unrecoverable failure. Better to set it deterministically.
-  const showDetailLoc = frame.locator("#chkIsDetail_CheckBox");
-  await showDetailLoc.waitFor({ timeout: 10_000 }).catch(() => {});
-  const initiallyChecked = await showDetailLoc.isChecked().catch(() => false);
-  if (!initiallyChecked) {
-    await frame.evaluate(() => {
-      const cb = document.getElementById("chkIsDetail_CheckBox") as HTMLInputElement | null;
-      if (cb && !cb.checked) {
-        cb.checked = true;
-        cb.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    });
+  // 4b. Re-verify Show Detail survived any field-driven postback. If a server
+  //     handler for the Property/ReportType change re-rendered the form, the
+  //     checkbox state could have been blown away. Re-check if needed.
+  const detailStillChecked = await showDetailLoc.isChecked().catch(() => false);
+  if (!detailStillChecked) {
+    console.log(`   Show Detail was reset by a postback — re-checking`);
+    await showDetailLoc.check({ force: true, timeout: 10_000 });
+    const recheck = await showDetailLoc.isChecked().catch(() => false);
+    if (!recheck) {
+      throw new Error(
+        `Show Detail checkbox could not be re-enabled after field changes ` +
+        `for ${property.code}; refusing to submit.`
+      );
+    }
   }
-  const detailChecked = await showDetailLoc.isChecked().catch(() => false);
-  if (!detailChecked) {
-    throw new Error(
-      `Show Detail checkbox failed to enable for ${property.code}; refusing to ` +
-      `submit (would produce summary-only export and wipe lease data on ingest).`
-    );
-  }
-  console.log(`   Show Detail = on (was ${initiallyChecked ? "already" : "set"})`);
 
   // 5. Click Excel and capture the download
   const outPath = resolve(
