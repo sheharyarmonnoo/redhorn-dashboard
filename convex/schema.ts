@@ -107,6 +107,11 @@ export default defineSchema({
     annualRecPerSF: v.optional(v.number()),
     annualMiscPerSF: v.optional(v.number()),
     locAmount: v.optional(v.number()),
+    // Next scheduled rent escalation — synced from the Yardi Tenancy
+    // Schedule (Lease Admin → Rent Steps). Only set on leases with an
+    // upcoming step; leases without an escalation leave both undefined.
+    nextRentIncrease: v.optional(v.string()),         // ISO date YYYY-MM-DD
+    nextRentIncreaseAmount: v.optional(v.number()),   // new monthly $
     status: v.string(),
     pastDueAmount: v.number(),
     electricPosted: v.boolean(),

@@ -9,6 +9,7 @@ import { parsePastDue } from "./parse-past-due.js";
 import { parseGlDetail } from "./parse-gl-detail.js";
 import { parseReceivableDetail } from "./parse-receivable-detail.js";
 import { parseBudget } from "./parse-budget.js";
+import { parseTenancySchedule } from "./parse-tenancy-schedule.js";
 import { sendSyncDigest, type DigestProperty } from "./digest.js";
 
 // Generated API surface lives in the parent project. We reference functions by
@@ -277,6 +278,39 @@ export async function uploadRunToConvex(
             } catch (err: any) {
               console.error(`   apply-past-due-from-RD failed: ${err?.message || err}`);
             }
+          }
+        }
+      } else if (u.reportType === "tenancy_schedule") {
+        // Tenancy Schedule → enrich tenants with next rent escalation date
+        // + new monthly amount. Only writes for leases that have a future
+        // step within the lease term; tenants without an upcoming bump get
+        // nothing (we don't blank-out values here — old values just persist
+        // until the next sync overwrites them).
+        const parsed = parseTenancySchedule(u.filePath);
+        console.log(
+          `   parsed TS ${u.fileName}: ${parsed.rows.length} leases with future rent steps (asOf ${parsed.asOfDate})`
+        );
+        if (parsed.rows.length === 0) {
+          // Empty rows is valid — property may have no scheduled bumps.
+          console.log(`   no scheduled rent increases — skipping enrich`);
+        } else {
+          try {
+            const er: any = await client.mutation(FN.enrichRent as any, {
+              propertyCode: u.propertyCode,
+              rows: parsed.rows.map((r) => ({
+                unit: r.unit,
+                tenant: r.tenant,
+                nextRentIncrease: r.nextRentIncrease,
+                nextRentIncreaseAmount: r.nextRentIncreaseAmount,
+              })),
+            });
+            console.log(
+              `   enriched RR from TS → matched ${er.matched}/${er.tenants} tenants (next rent ↑ date + amount)`
+            );
+            perFileRows = er.matched;
+            totalRowsIngested += er.matched;
+          } catch (err: any) {
+            console.error(`   TS enrich failed: ${err?.message || err}`);
           }
         }
       } else if (u.reportType === "twelve_month_budget") {

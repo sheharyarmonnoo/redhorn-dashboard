@@ -5,6 +5,7 @@ import { runTotalUnitsForProperty } from "./reports/rent-roll.js";
 import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
 import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
 import { runTwelveMonthBudgetForProperty } from "./reports/twelve-month-budget.js";
+import { runTenancyScheduleForProperty } from "./reports/tenancy-schedule.js";
 // Held back:
 //   import { runPastDueForProperty } from "./reports/rent-roll.js";
 //   import { runGlDetailForProperty } from "./reports/gl-detail.js";
@@ -14,7 +15,7 @@ import { uploadRunToConvex } from "./convex-upload.js";
 interface RunResult {
   property: string;
   propertyCode: string;
-  reportType: "income_statement" | "rent_roll" | "total_units" | "past_due" | "rent_roll_full" | "gl_detail" | "receivable_detail" | "twelve_month_budget";
+  reportType: "income_statement" | "rent_roll" | "total_units" | "past_due" | "rent_roll_full" | "gl_detail" | "receivable_detail" | "twelve_month_budget" | "tenancy_schedule";
   ok: boolean;
   path?: string;
   error?: string;
@@ -117,6 +118,20 @@ async function main() {
         const msg = err?.message || String(err);
         console.error(`   Budget FAILED — ${msg}`);
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "twelve_month_budget", ok: false, error: msg });
+      }
+
+      // Tenancy Schedule — pulls the per-lease rent step rows so we know
+      // every lease's NEXT scheduled rent escalation (date + new monthly
+      // amount). Drives the rent-roll "Next Rent Increase" column. Soft-
+      // fails so a parsing/export hiccup doesn't break the rest of the sync;
+      // smaller properties may legitimately have no scheduled escalations.
+      try {
+        const path = await runTenancyScheduleForProperty(voyager, property, month);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "tenancy_schedule", ok: true, path });
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        console.error(`   TS FAILED — ${msg}`);
+        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "tenancy_schedule", ok: false, error: msg });
       }
     }
 

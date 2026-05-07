@@ -410,6 +410,9 @@ export const enrichRentByCode = mutation({
         annualRecPerSF: v.optional(v.number()),
         annualMiscPerSF: v.optional(v.number()),
         locAmount: v.optional(v.number()),
+        // Tenancy Schedule fields — next scheduled rent step.
+        nextRentIncrease: v.optional(v.string()),
+        nextRentIncreaseAmount: v.optional(v.number()),
       })
     ),
   },
@@ -468,6 +471,14 @@ export const enrichRentByCode = mutation({
       if (typeof hit.annualRecPerSF === "number" && hit.annualRecPerSF > 0) patch.annualRecPerSF = hit.annualRecPerSF;
       if (typeof hit.annualMiscPerSF === "number" && hit.annualMiscPerSF > 0) patch.annualMiscPerSF = hit.annualMiscPerSF;
       if (typeof hit.locAmount === "number" && hit.locAmount > 0) patch.locAmount = hit.locAmount;
+      // Tenancy Schedule fields — write whenever present. These are sparse
+      // (only leases with a future step have them) so missing source value
+      // means "no scheduled bump" not "preserve old value" — we leave the
+      // tenant's existing value alone in that case.
+      if (hit.nextRentIncrease && hit.nextRentIncrease.trim()) patch.nextRentIncrease = hit.nextRentIncrease;
+      if (typeof hit.nextRentIncreaseAmount === "number" && hit.nextRentIncreaseAmount > 0) {
+        patch.nextRentIncreaseAmount = hit.nextRentIncreaseAmount;
+      }
       if (Object.keys(patch).length > 0) {
         await ctx.db.patch(t._id, patch);
         matched++;

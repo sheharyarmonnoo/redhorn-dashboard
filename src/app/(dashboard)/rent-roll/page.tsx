@@ -294,12 +294,14 @@ export default function RentRollPage() {
           },
         ],
       },
-      // Manual entry until the Tenancy Schedule scraper lands. Hidden by
-      // default; user can toggle visibility via the column menu.
-      { field: "nextRentIncrease", headerName: "Next Rent ↑", width: 130, hide: true,
+      // Synced from Yardi's Tenancy Schedule (CommTenancyScheduleSummary).
+      // The scraper writes nextRentIncrease + nextRentIncreaseAmount directly
+      // onto the tenant doc, so the row already carries the values — no
+      // override merge needed. Visible by default now that the data is real.
+      { field: "nextRentIncrease", headerName: "Next Rent ↑", width: 130,
         valueFormatter: (p: { value: string }) => p.value || "—",
       },
-      { field: "nextRentIncreaseAmount", headerName: "New Rent", width: 110, hide: true,
+      { field: "nextRentIncreaseAmount", headerName: "New Rent", width: 110,
         cellRenderer: CurrencyCellRenderer,
       },
       // Monthly Electric ($ amount) and Past Due intentionally hidden from
