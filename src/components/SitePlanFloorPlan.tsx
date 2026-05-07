@@ -77,14 +77,18 @@ const ROOMS: Room[] = [
   // so it's clearly part of the building footprint, not a missing rectangle).
   { label: "", x: 148, y: 489, w: 176, h: 69, type: "common" },
 
-  // ── Common Area (y 323 → 594) ────────────────────────────────────────────
-  // Width trimmed to x=608→767 so it doesn't bleed under A-102 (was overlapping).
-  { label: "Common Area", x: 608, y: 323, w: 159, h: 271, type: "common" },
+  // ── Common Area (y 323 → 558) ────────────────────────────────────────────
+  // Height trimmed to end at y=558 (the top of the bottom-row band) so it
+  // doesn't bleed under Conference Room / A-85A. Width 608→767 so it doesn't
+  // bleed under A-102.
+  { label: "Common Area", x: 608, y: 323, w: 159, h: 235, type: "common" },
 
   // ── Right-side suites ────────────────────────────────────────────────────
+  // A-102 height trimmed to end at y=558 so the bottom-row units (A-90, A-85A)
+  // get a clean horizontal band without A-102 dipping into them.
   { unit: "A-101", x: 888, y: 323, w: 202, h: 111, type: "unit" },
-  { unit: "A-102", x: 767, y: 434, w: 121, h: 160, type: "unit" },
-  { unit: "A-100", x: 888, y: 434, w: 202, h: 160, type: "unit" },
+  { unit: "A-102", x: 767, y: 434, w: 121, h: 124, type: "unit" },
+  { unit: "A-100", x: 888, y: 434, w: 202, h: 124, type: "unit" },
 
   { label: "EXIT", x: 870, y: 540, w: 50, h: 16, type: "exit" },
 
