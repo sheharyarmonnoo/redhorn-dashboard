@@ -143,13 +143,44 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
     : "Last sync: (none)";
 
   // ---- Headline counts so Claude can reference totals without the full list ----
-  const occupied = (tenants || []).filter((t: any) => t.status !== "vacant" && (t.monthlyRent || 0) > 0).length;
+  const occupiedTenants = (tenants || []).filter((t: any) => t.status !== "vacant" && (t.monthlyRent || 0) > 0);
+  const occupied = occupiedTenants.length;
   const totalTenants = (tenants || []).length;
+
+  // ---- Full rent roll (occupied tenants only) ----
+  // Every unit that has a tenant and a rent. Without this, questions like
+  // "what's the in-place rent for unit A-102" return "I don't have that
+  // unit" because the past-due / expiring slices only surface a subset.
+  // We sort by unit so Claude can scan it. Cap at 200 occupied units —
+  // properties beyond that should switch to a tool-based lookup, but our
+  // current portfolio (Hollister ~80, Belgold ~20, Bradenburg none) fits
+  // comfortably below the cap.
+  const sortedRoll = [...occupiedTenants].sort((a: any, b: any) =>
+    String(a.unit || "").localeCompare(String(b.unit || ""), undefined, { numeric: true })
+  );
+  const rollLines = trimList(sortedRoll, 200).map((t: any) => {
+    const rent = t.monthlyRent ? fmt$(t.monthlyRent) : "—";
+    const sf = t.sqft ? `${t.sqft.toLocaleString()} SF` : "—";
+    const rentPerSf = (t.monthlyRent && t.sqft && t.sqft > 0)
+      ? `$${(t.monthlyRent / t.sqft).toFixed(2)}/SF`
+      : "—";
+    const leaseEnd = t.leaseTo || "—";
+    const status = t.status || "—";
+    return `- ${t.unit || "?"} | ${t.tenant || "?"} | ${rent}/mo | ${sf} | ${rentPerSf} | lease ends ${leaseEnd} | ${status}`;
+  });
 
   const sections: string[] = [];
   sections.push(`Property: ${propertyName} (${property?.code || "?"}) — ${property?.location || ""}`);
   sections.push(syncLine);
   sections.push(`Tenants on rent roll: ${totalTenants} (occupied: ${occupied})`);
+  sections.push("");
+
+  sections.push(`Full rent roll — occupied units (${rollLines.length}):`);
+  sections.push("Format: unit | tenant | rent/mo | sqft | rent/SF | lease end | status");
+  sections.push(rollLines.length ? rollLines.join("\n") : "- (none)");
+  if (sortedRoll.length > rollLines.length) {
+    sections.push(`…and ${sortedRoll.length - rollLines.length} more occupied units (truncated for context size).`);
+  }
   sections.push("");
 
   sections.push(`Past-due tenants (${pastDue.length}):`);
