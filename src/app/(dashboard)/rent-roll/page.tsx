@@ -172,21 +172,31 @@ export default function RentRollPage() {
   // When the page loads with ?unit= in the URL, find the matching tenant
   // row, open the drawer for it, and apply a quick filter so only that
   // tenant's rows are visible. Multi-unit leases come in as the comma
-  // string from Yardi — match against the first unit token to find the row.
-  // Apply ONCE per deep link — otherwise tenant query updates would re-open
-  // the drawer every time the user closes it.
+  // string from Yardi (often with irregular whitespace like "A-103,  A-112,
+  // A-85"). Tokenize on comma and compare the normalized token sets so
+  // any-order matches work too.
   const deepLinkAppliedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!deepLinkUnit || !activeProperty?.code || tenants.length === 0) return;
     if (deepLinkAppliedRef.current === deepLinkUnit) return;
-    const norm = (s: string) => (s || "").trim().toLowerCase();
-    const target = norm(deepLinkUnit);
-    const match = tenants.find((t: any) => norm(t.unit) === target)
-      || tenants.find((t: any) => (t.unit || "").split(",").map((s: string) => norm(s)).includes(target.split(",")[0].trim()));
+    const tokenize = (s: string) =>
+      (s || "")
+        .toLowerCase()
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+    const targetTokens = tokenize(deepLinkUnit);
+    if (targetTokens.length === 0) return;
+    const match = tenants.find((t: any) => {
+      const tt = tokenize(t.unit);
+      // Either every target token is in the tenant's units, or the tenant's
+      // first token equals the target's first token (cheap fallback).
+      return targetTokens.every((tk) => tt.includes(tk)) || tt[0] === targetTokens[0];
+    });
     if (match) {
       deepLinkAppliedRef.current = deepLinkUnit;
       setSelectedKey(`${activeProperty.code}-${match.unit}`);
-      const firstUnit = (match.unit || "").split(",")[0].trim();
+      const firstUnit = tokenize(match.unit)[0] || match.unit;
       gridRef.current?.api?.setGridOption("quickFilterText", firstUnit);
       setQuickSearch(firstUnit);
     }
