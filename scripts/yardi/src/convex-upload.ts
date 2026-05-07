@@ -361,6 +361,35 @@ export async function uploadRunToConvex(
     }
   }
 
+  // Phase 2.4 — re-apply past-due AFTER all files are ingested. The
+  // receivable-detail branch calls applyPastDueByCode inline, but if
+  // RR-full ingest runs after RD (current order), it inserts fresh
+  // tenant rows with pastDueAmount=0, wiping the work. Post-pass
+  // re-runs applyPastDue using the Lease Ledger's aging data so the
+  // final tenant rows carry the right past-due numbers regardless of
+  // file order.
+  for (const u of uploaded) {
+    if (u.reportType !== "receivable_detail") continue;
+    try {
+      const parsed = parseReceivableDetail(u.filePath);
+      const pastDueRows = parsed.leases
+        .filter(l => (l.unit || l.tenantName) && typeof l.amountDue === "number")
+        .map(l => ({
+          leaseName: l.tenantName,
+          unit: (l.unit || "").trim() || undefined,
+          pastDueAmount: l.amountDue ?? 0,
+        }));
+      if (pastDueRows.length === 0) continue;
+      const pd: any = await client.mutation(FN.applyPastDue as any, {
+        propertyCode: u.propertyCode,
+        rows: pastDueRows,
+      });
+      console.log(`   re-applied past-due (post-pass) → ${u.propertyCode}: matched ${pd.matched}/${pd.tenants} · cleared ${pd.cleared}`);
+    } catch (err: any) {
+      console.error(`   post-pass past-due failed for ${u.propertyCode}: ${err?.message || err}`);
+    }
+  }
+
   // Phase 2.5 — recompute monthly_revenue rollup. The month key MUST come
   // from the income statement's actual reporting period (e.g. "Period =
   // Apr 2026" → "2026-04"), not today's date. Otherwise the chart and KPI
