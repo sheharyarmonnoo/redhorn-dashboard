@@ -1,9 +1,16 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useAction } from "convex/react";
+import { useMutation } from "convex/react";
 import { useUser } from "@clerk/nextjs";
-import { X, Send } from "lucide-react";
+import { X, ExternalLink } from "lucide-react";
 import { api } from "../../convex/_generated/api";
+import {
+  EMAIL_PROVIDER_LABELS,
+  getEmailProvider,
+  openComposeWindow,
+  type EmailProvider,
+} from "@/lib/emailProvider";
+import Link from "next/link";
 
 export interface EmailContext {
   propertyId?: string;
@@ -24,15 +31,19 @@ interface Props {
 }
 
 export default function EmailComposer({ open, context, onClose, onSent }: Props) {
-  const sendEmail = useAction(api.emails.send);
+  // Outbound mail goes through the user's webmail (Gmail / Outlook web) or a
+  // mailto: handoff — no SMTP credentials live on the server. We just record
+  // "compose_opened" in email_log for the audit trail.
+  const logCompose = useMutation(api.emailsLog.logCompose);
   const { user } = useUser();
   const [toEmail, setToEmail] = useState("");
   const [toName, setToName] = useState("");
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [provider, setProvider] = useState<EmailProvider>("gmail");
 
   useEffect(() => {
     if (open && context) {
@@ -42,38 +53,58 @@ export default function EmailComposer({ open, context, onClose, onSent }: Props)
       setSubject(context.subject || "");
       setBody(context.body || "");
       setResult(null);
+      setProvider(getEmailProvider());
     }
   }, [open, context]);
 
+  // Re-read the saved provider any time it changes elsewhere (e.g. user
+  // toggles it on the Account page while a composer modal is open).
+  useEffect(() => {
+    function refresh() { setProvider(getEmailProvider()); }
+    window.addEventListener("redhorn-email-provider-changed", refresh);
+    return () => window.removeEventListener("redhorn-email-provider-changed", refresh);
+  }, []);
+
   if (!open || !context) return null;
 
-  async function handleSend() {
+  async function handleOpenInProvider() {
     if (!toEmail.trim() || !subject.trim() || !body.trim()) return;
-    setSending(true);
+    setOpening(true);
     setResult(null);
+    const ccList = cc.split(",").map(s => s.trim()).filter(Boolean);
     try {
-      const res = await sendEmail({
-        propertyId: context!.propertyId as any,
-        relatedType: context!.relatedType,
-        relatedId: context!.relatedId,
-        toEmail: toEmail.trim(),
-        toName: toName.trim() || undefined,
-        cc: cc.split(",").map(s => s.trim()).filter(Boolean),
+      const opened = openComposeWindow(provider, {
+        to: toEmail.trim(),
+        cc: ccList,
         subject: subject.trim(),
         body,
-        sentBy: user?.fullName || user?.primaryEmailAddress?.emailAddress || "User",
       });
-      if (res.ok) {
-        setResult({ ok: true, message: "Sent successfully." });
-        onSent?.();
-        setTimeout(() => onClose(), 1200);
-      } else {
-        setResult({ ok: false, message: res.error || "Send failed." });
+      if (!opened && provider !== "mailto") {
+        setResult({ ok: false, message: "Couldn't open the compose tab — check that pop-ups are allowed for this site." });
+        return;
       }
-    } catch (err: any) {
-      setResult({ ok: false, message: err?.message || "Send failed." });
+      // Best-effort audit log. Don't block the user if it fails.
+      try {
+        await logCompose({
+          propertyId: context!.propertyId as any,
+          relatedType: context!.relatedType,
+          relatedId: context!.relatedId,
+          toEmail: toEmail.trim(),
+          toName: toName.trim() || undefined,
+          cc: ccList,
+          subject: subject.trim(),
+          body,
+          sentBy: user?.fullName || user?.primaryEmailAddress?.emailAddress || "User",
+          provider,
+        });
+      } catch {
+        /* non-fatal */
+      }
+      setResult({ ok: true, message: `Compose window opened in ${EMAIL_PROVIDER_LABELS[provider]}. Review and click Send there.` });
+      onSent?.();
+      setTimeout(() => onClose(), 1500);
     } finally {
-      setSending(false);
+      setOpening(false);
     }
   }
 
@@ -84,7 +115,13 @@ export default function EmailComposer({ open, context, onClose, onSent }: Props)
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
-          <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">New Email</p>
+          <div>
+            <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">New Email</p>
+            <p className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5">
+              Will open in {EMAIL_PROVIDER_LABELS[provider]} —{" "}
+              <Link href="/account" className="underline hover:text-[#18181b] dark:hover:text-[#fafafa]">change provider</Link>
+            </p>
+          </div>
           <button onClick={onClose} className="p-1 hover:bg-[#f4f4f5] dark:hover:bg-[#27272a] rounded cursor-pointer">
             <X size={16} className="text-[#a1a1aa]" />
           </button>
@@ -152,18 +189,18 @@ export default function EmailComposer({ open, context, onClose, onSent }: Props)
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46]">
           <button
             onClick={onClose}
-            disabled={sending}
+            disabled={opening}
             className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] px-3 py-1.5 rounded cursor-pointer disabled:opacity-30"
           >
             Cancel
           </button>
           <button
-            onClick={handleSend}
-            disabled={sending || !toEmail.trim() || !subject.trim() || !body.trim()}
+            onClick={handleOpenInProvider}
+            disabled={opening || !toEmail.trim() || !subject.trim() || !body.trim()}
             className="flex items-center gap-1.5 text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-4 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Send size={13} />
-            {sending ? "Sending…" : "Send"}
+            <ExternalLink size={13} />
+            {opening ? "Opening…" : `Open in ${EMAIL_PROVIDER_LABELS[provider]}`}
           </button>
         </div>
       </div>
