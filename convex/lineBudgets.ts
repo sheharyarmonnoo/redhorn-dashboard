@@ -1,6 +1,24 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+/**
+ * One-shot cleanup: drop line_budgets rows for a given year (e.g. "2025").
+ */
+export const clearByYear = mutation({
+  args: { year: v.string() },
+  handler: async (ctx, args) => {
+    const all = await ctx.db.query("line_budgets").collect();
+    let removed = 0;
+    for (const r of all) {
+      if (r.year === args.year) {
+        await ctx.db.delete(r._id);
+        removed++;
+      }
+    }
+    return { scanned: all.length, removed };
+  },
+});
+
 export const listByPropertyYear = query({
   args: { propertyId: v.id("properties"), year: v.string() },
   handler: async (ctx, args) => {

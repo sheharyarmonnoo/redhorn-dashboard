@@ -2,6 +2,28 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 /**
+ * One-shot cleanup: nuke all income_lines rows whose `period` (or fallback
+ * `snapshotDate`) is older than `keepFromMonth`. Used to drop prior-year
+ * historical backfills the dashboard no longer surfaces.
+ */
+export const clearOlderThanMonth = mutation({
+  args: { keepFromMonth: v.string() }, // "2026-01" → keep 2026-01 onward
+  handler: async (ctx, args) => {
+    const all = await ctx.db.query("income_lines").collect();
+    let removed = 0;
+    for (const r of all) {
+      const stamp = (r.period || r.snapshotDate || "").slice(0, 7);
+      if (!stamp) continue;
+      if (stamp < args.keepFromMonth) {
+        await ctx.db.delete(r._id);
+        removed++;
+      }
+    }
+    return { scanned: all.length, removed };
+  },
+});
+
+/**
  * Bulk-insert income statement rows for a property. Server-side resolves
  * propertyId from the Yardi property code and flips isLatest on prior rows so
  * the dashboard always shows the most recent snapshot.

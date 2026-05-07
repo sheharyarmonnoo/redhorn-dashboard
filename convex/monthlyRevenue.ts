@@ -1,6 +1,25 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
+/**
+ * One-shot cleanup: drop monthly_revenue rollup rows older than
+ * `keepFromMonth`. Mirrors incomeLines.clearOlderThanMonth.
+ */
+export const clearOlderThanMonth = mutation({
+  args: { keepFromMonth: v.string() },
+  handler: async (ctx, args) => {
+    const all = await ctx.db.query("monthly_revenue").collect();
+    let removed = 0;
+    for (const r of all) {
+      if ((r.month || "") && r.month < args.keepFromMonth) {
+        await ctx.db.delete(r._id);
+        removed++;
+      }
+    }
+    return { scanned: all.length, removed };
+  },
+});
+
 export const listByProperty = query({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, args) => {
