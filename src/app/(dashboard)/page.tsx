@@ -132,6 +132,12 @@ export default function DashboardPage() {
 
   const occupancySeries = [{ name: "Occupancy", data: monthlyRevenue.map(m => m.occupancy) }];
 
+  // No Yardi feed yet for this property — every numeric is going to read $0
+  // / 0%. Show a banner above the KPI strip instead of letting the user think
+  // the property has zero rent and zero occupancy. Driven by the `hasData`
+  // flag on the properties row + the absence of monthly_revenue rollups.
+  const noYardiData = !property.hasData && tenants.length === 0 && monthlyRevenue.length === 0;
+
   return (
     <div>
       <PageHeader
@@ -147,6 +153,15 @@ export default function DashboardPage() {
           return pretty ? `${property.name} — ${pretty}` : property.name;
         })()}
       />
+
+      {noYardiData && (
+        <div className="mb-4 bg-[#fef9c3] dark:bg-[#422006]/40 border border-[#fde68a] dark:border-[#854d0e] rounded p-3">
+          <p className="text-[12px] font-semibold text-[#713f12] dark:text-[#fde68a]">No Yardi data yet for {property.name}</p>
+          <p className="text-[11px] text-[#854d0e] dark:text-[#fcd34d] mt-0.5">
+            The KPIs below will show zeros until a Yardi sync runs — or this property may not have a Yardi feed at all. Check the Data Pipeline page to import data.
+          </p>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 mb-6">

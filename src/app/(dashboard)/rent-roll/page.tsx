@@ -465,6 +465,11 @@ export default function RentRollPage() {
     );
   }
 
+  // No leases AND no units = property hasn't been onboarded into Yardi.
+  // Show a banner above the (empty) grid so the user doesn't stare at a
+  // blank "0 Units" / "$0/mo" header wondering whether the page is broken.
+  const noYardiData = !activeProperty?.hasData && tenantsLeased.length === 0 && unitsAll.length === 0;
+
   return (
     <div>
       <PageHeader title="Rent Roll" subtitle={`${activeProperty?.name || ""} — Tap any row for details`}>
@@ -472,6 +477,15 @@ export default function RentRollPage() {
           <Download size={14} />
         </button>
       </PageHeader>
+
+      {noYardiData && (
+        <div className="mb-4 bg-[#fef9c3] dark:bg-[#422006]/40 border border-[#fde68a] dark:border-[#854d0e] rounded p-3">
+          <p className="text-[12px] font-semibold text-[#713f12] dark:text-[#fde68a]">No rent roll data yet for {activeProperty?.name}</p>
+          <p className="text-[11px] text-[#854d0e] dark:text-[#fcd34d] mt-0.5">
+            This property hasn't been synced from Yardi yet — or it doesn't have a Yardi feed. Once tenants are imported they'll show up here.
+          </p>
+        </div>
+      )}
 
       {/* Summary bar */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">

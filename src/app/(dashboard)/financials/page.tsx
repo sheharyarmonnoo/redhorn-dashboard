@@ -243,12 +243,26 @@ export default function FinancialsPage() {
     return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   };
 
+  // Empty income_lines = no Yardi income statement ingested yet for this
+  // property. Without a banner the KPI strip would show "$0 / $0 / NOI $0",
+  // which reads exactly like a real (broken) statement.
+  const noYardiData = !property.hasData && rawLines.length === 0;
+
   return (
     <div>
       <PageHeader
         title="Financials"
         subtitle={period ? `Income Statement · ${formatPeriod(period)}` : "Income Statement"}
       />
+
+      {noYardiData && (
+        <div className="mb-4 bg-[#fef9c3] dark:bg-[#422006]/40 border border-[#fde68a] dark:border-[#854d0e] rounded p-3">
+          <p className="text-[12px] font-semibold text-[#713f12] dark:text-[#fde68a]">No financial data yet for {property.name}</p>
+          <p className="text-[11px] text-[#854d0e] dark:text-[#fcd34d] mt-0.5">
+            No income statement has been imported for this property. The figures below will read $0 until a Yardi sync runs — or this property may not have a Yardi feed.
+          </p>
+        </div>
+      )}
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
