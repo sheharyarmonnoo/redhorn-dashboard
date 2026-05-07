@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import PageHeader from "@/components/PageHeader";
 import { api } from "../../../../convex/_generated/api";
 import { useActiveProperty, useIncomeLines, useMonthlyRevenue, useDebt, useLineBudgets, formatCurrency } from "@/hooks/useConvexData";
@@ -22,6 +22,41 @@ function pct(val: number, total: number) {
   return `${Math.round((val / total) * 100)}%`;
 }
 
+// "2026-04" -> "Apr 2026"
+function formatPeriodShort(p: string) {
+  if (!p) return "";
+  const [y, mo] = p.split("-");
+  const date = new Date(Number(y), Number(mo) - 1);
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
+// Pick the most recent snapshot for a given period from a flat list of
+// income_lines rows (a period can have multiple snapshots from repeated
+// Yardi syncs). Returns the rows belonging to that single best snapshot.
+function pickLatestSnapshot(rows: any[], period: string) {
+  const periodRows = rows.filter((r: any) => r.period === period);
+  if (!periodRows.length) return [] as any[];
+  // Group by snapshotDate, find max
+  const dates = periodRows.map((r: any) => r.snapshotDate || "").filter(Boolean);
+  if (!dates.length) return periodRows;
+  const latest = dates.sort().reverse()[0];
+  return periodRows.filter((r: any) => (r.snapshotDate || "") === latest);
+}
+
+// Build a Map keyed by trimmed lineItem -> { currentPeriod, yearToDate }
+function indexByLineItem(rows: any[]) {
+  const m = new Map<string, { currentPeriod: number; yearToDate: number }>();
+  for (const r of rows) {
+    const key = (r.lineItem || "").trim();
+    if (!key) continue;
+    m.set(key, {
+      currentPeriod: r.currentPeriod || 0,
+      yearToDate: r.yearToDate || 0,
+    });
+  }
+  return m;
+}
+
 export default function FinancialsPage() {
   const property = useActiveProperty();
   const rawLines = useIncomeLines(property?._id);
@@ -32,7 +67,14 @@ export default function FinancialsPage() {
 
   const [view, setView] = useState<"statement" | "trend" | "budget" | "debt">("statement");
   const [budgetYear, setBudgetYear] = useState<string>(String(new Date().getFullYear()));
+  const [budgetCompareYear, setBudgetCompareYear] = useState<string>(String(new Date().getFullYear() - 1));
   const { budgets, upsertBudget } = useLineBudgets(property?._id, budgetYear);
+  const { budgets: compareBudgets } = useLineBudgets(property?._id, budgetCompareYear);
+  const compareBudgetByLine = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of compareBudgets) m.set((b.lineItem || "").trim(), b.annualBudget || 0);
+    return m;
+  }, [compareBudgets]);
   const budgetByLine = useMemo(() => {
     const m = new Map<string, { annualBudget: number; isSynced: boolean; snapshotDate?: string }>();
     for (const b of budgets) {
@@ -62,6 +104,45 @@ export default function FinancialsPage() {
     if (!periods.length) return null;
     return periods.sort().reverse()[0];
   }, [rawLines]);
+
+  // Pull every snapshot ever recorded so the user can compare the current
+  // period against any prior period in history.
+  const allHistoricLines = useQuery(
+    api.incomeLines.allForProperty,
+    property?._id ? { propertyId: property._id as any } : "skip"
+  );
+
+  // Distinct periods available for comparison (sorted ascending, current
+  // period excluded — it's already the left column).
+  const availablePeriods = useMemo(() => {
+    const rows = allHistoricLines || [];
+    const set = new Set<string>();
+    for (const r of rows) if (r.period) set.add(r.period);
+    return Array.from(set).sort();
+  }, [allHistoricLines]);
+
+  // Default the IS comparison to the latest period strictly before `period`.
+  const [comparePeriod, setComparePeriod] = useState<string | null>(null);
+  useEffect(() => {
+    if (!period || !availablePeriods.length) return;
+    setComparePeriod(prev => {
+      if (prev && availablePeriods.includes(prev) && prev !== period) return prev;
+      const candidates = availablePeriods.filter(p => p < period);
+      return candidates.length ? candidates[candidates.length - 1] : null;
+    });
+  }, [period, availablePeriods]);
+
+  // Index of compare-period values keyed by line item (for quick lookups
+  // while rendering the income statement).
+  const compareIndex = useMemo(() => {
+    if (!allHistoricLines || !comparePeriod) return null;
+    const snap = pickLatestSnapshot(allHistoricLines, comparePeriod);
+    return indexByLineItem(snap);
+  }, [allHistoricLines, comparePeriod]);
+
+  // Toggle that exposes leaf rows in the IS view. Default OFF -> Yardi-style
+  // high-level summary (level-1 headers + TOTAL/NET subtotal rows only).
+  const [showAllLines, setShowAllLines] = useState(false);
 
   // Sort lines by hierarchy so subtotals follow their children
   const lines = useMemo(() => {
@@ -176,7 +257,17 @@ export default function FinancialsPage() {
 
       {view === "statement" && (
         <>
-          <IncomeStatement lines={lines} totalIncome={totalIncome} />
+          <IncomeStatement
+            lines={lines}
+            totalIncome={totalIncome}
+            currentPeriod={period}
+            comparePeriod={comparePeriod}
+            availablePeriods={availablePeriods}
+            onChangeComparePeriod={setComparePeriod}
+            compareIndex={compareIndex}
+            showAllLines={showAllLines}
+            onToggleShowAll={() => setShowAllLines(v => !v)}
+          />
           {recoveries.items.length > 0 && (
             <RecoveriesPanel items={recoveries.items} total={recoveries.total} />
           )}
@@ -187,6 +278,9 @@ export default function FinancialsPage() {
         <BudgetVsActuals
           lines={lines}
           budgetByLine={budgetByLine}
+          compareBudgetByLine={compareBudgetByLine}
+          compareYear={budgetCompareYear}
+          setCompareYear={setBudgetCompareYear}
           lastSyncDate={lastSyncDate}
           year={budgetYear}
           setYear={setBudgetYear}
@@ -245,7 +339,27 @@ function KPIBox({ label, value, color, hint }: { label: string; value: string; c
   );
 }
 
-function IncomeStatement({ lines, totalIncome }: { lines: any[]; totalIncome: number }) {
+function IncomeStatement({
+  lines,
+  totalIncome,
+  currentPeriod,
+  comparePeriod,
+  availablePeriods,
+  onChangeComparePeriod,
+  compareIndex,
+  showAllLines,
+  onToggleShowAll,
+}: {
+  lines: any[];
+  totalIncome: number;
+  currentPeriod: string | null;
+  comparePeriod: string | null;
+  availablePeriods: string[];
+  onChangeComparePeriod: (p: string | null) => void;
+  compareIndex: Map<string, { currentPeriod: number; yearToDate: number }> | null;
+  showAllLines: boolean;
+  onToggleShowAll: () => void;
+}) {
   if (!lines.length) {
     return (
       <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-8 text-center">
@@ -254,11 +368,27 @@ function IncomeStatement({ lines, totalIncome }: { lines: any[]; totalIncome: nu
     );
   }
 
+  // Apply the "high-level" filter unless the user has toggled "Show all lines".
+  // High-level = level-1 headers (INCOME, OPERATING EXPENSE, ...) + every
+  // TOTAL/NET subtotal row (TOTAL RENTAL REVENUE, NET OPERATING INCOME, etc).
+  const filteredLines = useMemo(() => {
+    if (showAllLines) return lines;
+    return lines.filter((l: any) => {
+      const li = (l.lineItem || "").trim();
+      if (!li) return false;
+      const isSubtotal = /^total\b|^net\b/i.test(li);
+      return l.hierarchyLevel <= 1 || isSubtotal;
+    });
+  }, [lines, showAllLines]);
+
+  // Compare-period options for the picker (exclude the current period).
+  const periodOptions = availablePeriods.filter(p => p !== currentPeriod);
+
   // Separate income vs expense vs net sections based on parentLine grouping
   const sections: { header: string; rows: any[]; isNet?: boolean }[] = [];
   let currentSection: { header: string; rows: any[]; isNet?: boolean } | null = null;
 
-  for (const line of lines) {
+  for (const line of filteredLines) {
     const isTotal = /^\s*total\b/i.test(line.lineItem) || /^\s*net\b/i.test(line.lineItem);
     const isHeader = line.hierarchyLevel === 0 && !isTotal;
 
@@ -274,65 +404,106 @@ function IncomeStatement({ lines, totalIncome }: { lines: any[]; totalIncome: nu
   }
   if (currentSection) sections.push(currentSection);
 
+  const compareLabel = comparePeriod ? formatPeriodShort(comparePeriod) : "Prior";
+  const currentLabel = currentPeriod ? formatPeriodShort(currentPeriod) : "Current Period";
+
   return (
-    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-      {/* Table header */}
-      <div className="grid grid-cols-[1fr_140px_140px_80px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
-        <span>Line Item</span>
-        <span className="text-right">Current Period</span>
-        <span className="text-right">Year to Date</span>
-        <span className="text-right">% Income</span>
+    <>
+      {/* Picker row — Compare-to dropdown + Show-all-lines toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2 text-[12px] text-[#71717a] dark:text-[#a1a1aa]">
+          <span>Compare to</span>
+          <select
+            value={comparePeriod || ""}
+            onChange={e => onChangeComparePeriod(e.target.value || null)}
+            disabled={!periodOptions.length}
+            className="text-[12px] px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] disabled:opacity-40"
+          >
+            {!periodOptions.length && <option value="">No prior periods</option>}
+            {periodOptions.length > 0 && <option value="">— None —</option>}
+            {periodOptions.map(p => (
+              <option key={p} value={p}>{formatPeriodShort(p)}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          onClick={onToggleShowAll}
+          className="text-[11px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] border border-[#e4e4e7] dark:border-[#3f3f46] px-2.5 py-1 rounded cursor-pointer"
+        >
+          {showAllLines ? "Hide detail lines" : "Show all lines"}
+        </button>
       </div>
 
-      {sections.map((section, si) => {
-        const isNetSection = /total|net\s+operating|noi/i.test(section.header);
-        return (
-          <div key={si} className={si > 0 ? "border-t border-[#e4e4e7] dark:border-[#3f3f46]" : ""}>
-            {section.header && (
-              <div className={`px-4 py-2 text-[11px] font-semibold uppercase tracking-wide ${
-                isNetSection
-                  ? "bg-[#f4f4f5] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa]"
-                  : "text-[#71717a] dark:text-[#a1a1aa] bg-[#fafafa]/60 dark:bg-[#27272a]/40"
-              }`}>
-                {section.header}
-              </div>
-            )}
-            {section.rows.map((line: any, ri: number) => {
-              const isSubtotal = /^\s*total\b/i.test(line.lineItem) || /^\s*net\b/i.test(line.lineItem);
-              const indent = Math.max(0, (line.hierarchyLevel - 1)) * 16;
-              const cp = line.currentPeriod || 0;
-              const ytd = line.yearToDate || 0;
-              const isNeg = cp < 0;
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
+        {/* Table header */}
+        <div className="grid grid-cols-[1fr_120px_120px_110px_80px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+          <span>Line Item</span>
+          <span className="text-right">{currentLabel}</span>
+          <span className="text-right">{compareLabel}</span>
+          <span className="text-right">Variance $</span>
+          <span className="text-right">Var %</span>
+          <span className="text-right">% Income</span>
+        </div>
 
-              return (
-                <div
-                  key={ri}
-                  className={`grid grid-cols-[1fr_140px_140px_80px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] ${
-                    isSubtotal
-                      ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]"
-                      : "text-[#18181b] dark:text-[#fafafa]"
-                  }`}
-                >
-                  <span style={{ paddingLeft: indent }} className="truncate">
-                    {line.lineItem.trim()}
-                  </span>
-                  <span className={`text-right font-${isSubtotal ? "semibold" : "normal"} ${isNeg ? "text-[#dc2626]" : ""}`}>
-                    {cp !== 0 ? formatCurrency(Math.abs(cp)) : "—"}
-                    {isNeg && cp !== 0 ? <span className="text-[#dc2626]"> ▼</span> : null}
-                  </span>
-                  <span className={`text-right ${ytd < 0 ? "text-[#dc2626]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
-                    {ytd !== 0 ? formatCurrency(Math.abs(ytd)) : "—"}
-                  </span>
-                  <span className="text-right text-[#a1a1aa] dark:text-[#71717a]">
-                    {cp !== 0 && totalIncome > 0 ? pct(Math.abs(cp), totalIncome) : ""}
-                  </span>
+        {sections.map((section, si) => {
+          const isNetSection = /total|net\s+operating|noi/i.test(section.header);
+          return (
+            <div key={si} className={si > 0 ? "border-t border-[#e4e4e7] dark:border-[#3f3f46]" : ""}>
+              {section.header && (
+                <div className={`px-4 py-2 text-[11px] font-semibold uppercase tracking-wide ${
+                  isNetSection
+                    ? "bg-[#f4f4f5] dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa]"
+                    : "text-[#71717a] dark:text-[#a1a1aa] bg-[#fafafa]/60 dark:bg-[#27272a]/40"
+                }`}>
+                  {section.header}
                 </div>
-              );
-            })}
-          </div>
-        );
-      })}
-    </div>
+              )}
+              {section.rows.map((line: any, ri: number) => {
+                const li = (line.lineItem || "").trim();
+                const isSubtotal = /^\s*total\b/i.test(li) || /^\s*net\b/i.test(li);
+                const indent = Math.max(0, (line.hierarchyLevel - 1)) * 16;
+                const cp = line.currentPeriod || 0;
+                const isNeg = cp < 0;
+                const cmp = compareIndex?.get(li)?.currentPeriod ?? null;
+                const variance = cmp !== null ? cp - cmp : null;
+                const variancePct = cmp !== null && cmp !== 0 ? (variance! / Math.abs(cmp)) * 100 : null;
+
+                return (
+                  <div
+                    key={ri}
+                    className={`grid grid-cols-[1fr_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] ${
+                      isSubtotal
+                        ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]"
+                        : "text-[#18181b] dark:text-[#fafafa]"
+                    }`}
+                  >
+                    <span style={{ paddingLeft: indent }} className="truncate">
+                      {li}
+                    </span>
+                    <span className={`text-right font-${isSubtotal ? "semibold" : "normal"} ${isNeg ? "text-[#dc2626]" : ""}`}>
+                      {cp !== 0 ? formatCurrency(Math.abs(cp)) : "—"}
+                      {isNeg && cp !== 0 ? <span className="text-[#dc2626]"> ▼</span> : null}
+                    </span>
+                    <span className={`text-right ${cmp !== null && cmp < 0 ? "text-[#dc2626]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
+                      {cmp === null ? "—" : cmp === 0 ? "—" : formatCurrency(Math.abs(cmp))}
+                    </span>
+                    <span className={`text-right ${variance === null ? "text-[#a1a1aa]" : variance > 0 ? "text-[#16a34a]" : variance < 0 ? "text-[#dc2626]" : "text-[#a1a1aa]"}`}>
+                      {variance === null ? "—" : `${variance >= 0 ? "+" : "−"}${formatCurrency(Math.abs(variance))}`}
+                    </span>
+                    <span className={`text-right ${variancePct === null ? "text-[#a1a1aa]" : variancePct > 0 ? "text-[#16a34a]" : variancePct < 0 ? "text-[#dc2626]" : "text-[#a1a1aa]"}`}>
+                      {variancePct === null ? "—" : `${variancePct >= 0 ? "+" : ""}${variancePct.toFixed(0)}%`}
+                    </span>
+                    <span className="text-right text-[#a1a1aa] dark:text-[#71717a]">
+                      {cp !== 0 && totalIncome > 0 ? pct(Math.abs(cp), totalIncome) : ""}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -678,6 +849,9 @@ function PmContactPanel({
 function BudgetVsActuals({
   lines,
   budgetByLine,
+  compareBudgetByLine,
+  compareYear,
+  setCompareYear,
   lastSyncDate,
   year,
   setYear,
@@ -685,6 +859,9 @@ function BudgetVsActuals({
 }: {
   lines: any[];
   budgetByLine: Map<string, { annualBudget: number; isSynced: boolean; snapshotDate?: string }>;
+  compareBudgetByLine: Map<string, number>;
+  compareYear: string;
+  setCompareYear: (y: string) => void;
   lastSyncDate: string | null;
   year: string;
   setYear: (y: string) => void;
@@ -704,8 +881,9 @@ function BudgetVsActuals({
   const [saving, setSaving] = useState<string | null>(null);
   const yearOptions = useMemo(() => {
     const y = new Date().getFullYear();
-    return [String(y - 1), String(y), String(y + 1)];
+    return [String(y - 2), String(y - 1), String(y), String(y + 1)];
   }, []);
+  const compareYearOptions = useMemo(() => yearOptions.filter(y => y !== year), [yearOptions, year]);
 
   async function handleSave(lineItem: string) {
     const raw = drafts[lineItem];
@@ -753,19 +931,35 @@ function BudgetVsActuals({
             </span>
           </p>
         </div>
-        <select
-          value={year}
-          onChange={e => setYear(e.target.value)}
-          className="text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
-        >
-          {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col">
+            <label className="text-[9px] font-medium text-[#a1a1aa] uppercase tracking-wide">Year</label>
+            <select
+              value={year}
+              onChange={e => setYear(e.target.value)}
+              className="text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            >
+              {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <label className="text-[9px] font-medium text-[#a1a1aa] uppercase tracking-wide">Compare to</label>
+            <select
+              value={compareYear}
+              onChange={e => setCompareYear(e.target.value)}
+              className="text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            >
+              {compareYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-        <div className="grid grid-cols-[1fr_140px_140px_140px_140px_80px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <div className="grid grid-cols-[1fr_120px_120px_120px_110px_80px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
           <span>Line Item</span>
-          <span className="text-right">Annual Budget</span>
+          <span className="text-right">{year} Budget</span>
+          <span className="text-right">{compareYear} Budget</span>
           <span className="text-right">YTD Actual</span>
           <span className="text-right">Variance $</span>
           <span className="text-right">% Used</span>
@@ -776,6 +970,7 @@ function BudgetVsActuals({
           const indent = Math.max(0, (line.hierarchyLevel - 1)) * 16;
           const entry = budgetByLine.get(li);
           const budget = entry?.annualBudget || 0;
+          const compareBudget = compareBudgetByLine.get(li) || 0;
           const isSynced = !!entry?.isSynced;
           const ytd = line.yearToDate || 0;
           const variance = ytd - budget;
@@ -785,7 +980,7 @@ function BudgetVsActuals({
           return (
             <div
               key={i}
-              className="grid grid-cols-[1fr_140px_140px_140px_140px_80px] px-4 py-1.5 text-[12px] text-[#18181b] dark:text-[#fafafa] border-t border-[#f4f4f5] dark:border-[#27272a] items-center"
+              className="grid grid-cols-[1fr_120px_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px] text-[#18181b] dark:text-[#fafafa] border-t border-[#f4f4f5] dark:border-[#27272a] items-center"
             >
               <span style={{ paddingLeft: indent }} className="truncate flex items-center gap-1">
                 {li}
@@ -814,6 +1009,7 @@ function BudgetVsActuals({
                   />
                 )}
               </span>
+              <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">{compareBudget > 0 ? formatCurrency(compareBudget) : "—"}</span>
               <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">{ytd !== 0 ? formatCurrency(ytd) : "—"}</span>
               <span className={`text-right ${variance > 0 ? "text-[#dc2626]" : variance < 0 ? "text-[#16a34a]" : "text-[#a1a1aa]"}`}>
                 {budget > 0 ? formatCurrency(variance) : "—"}
