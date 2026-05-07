@@ -126,6 +126,7 @@ export default function RentRollPage() {
         camCharge: cs?.cam ?? 0,
         electricCharge: cs?.electric ?? 0,
         insuranceCharge: cs?.insurance ?? 0,
+        totalRecoveries: cs?.recoveries ?? 0,
         currentMonthCharges: cs?.currentMonthCharges ?? 0,
         currentBalance: cs?.currentBalance ?? 0,
       });
@@ -270,13 +271,16 @@ export default function RentRollPage() {
             cellRenderer: CurrencyCellRenderer },
         ],
       },
-      // CAM / Electric / Insurance billbacks group — CAM / SF stays visible;
-      // CAM, Electric, Insurance dollar amounts reveal on expand. Per-SF is
-      // the comparable rate across tenants of different sizes.
+      // CAM / Electric / Insurance billbacks group — Total Recoveries +
+      // CAM / SF stay visible; CAM, Electric, Insurance dollar amounts
+      // reveal on expand. Total Recoveries = CAM + Electric + Insurance +
+      // late fees (everything billed back to the tenant beyond base rent).
       {
         headerName: "",
         marryChildren: true,
         children: [
+          { field: "totalRecoveries", headerName: "Recoveries", width: 120,
+            cellRenderer: CurrencyCellRenderer },
           { field: "camPerSF", headerName: "CAM / SF", width: 110,
             valueGetter: (p: any) => {
               const d = p.data || {};

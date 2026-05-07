@@ -23,7 +23,7 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   const [notesDraft, setNotesDraft] = useState<string>("");
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<string>("");
-  const [tab, setTab] = useState<"details" | "ledger" | "electric" | "payments">("details");
+  const [tab, setTab] = useState<"details" | "ledger" | "electric" | "recoveries" | "payments">("details");
   const [emailCtx, setEmailCtx] = useState<EmailContext | null>(null);
   const { properties } = useProperties();
   const property = useMemo(() => properties.find((p: any) => p._id === tenant?.propertyId) || null, [properties, tenant?.propertyId]);
@@ -52,6 +52,18 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   }, [allRows, tenant?.tenant]);
 
   const electricTx = useMemo(() => tenantTx.filter((r: any) => /electric|electricity|cam-elec/i.test(r.description || "") || /electric|cam-elec/i.test(r.chargeCode || "")), [tenantTx]);
+  const recoveriesTx = useMemo(() => tenantTx.filter((r: any) => {
+    const d = (r.description || "").toLowerCase();
+    const c = (r.chargeCode || "").toLowerCase();
+    // Recovery charges = CAM + Electric + Insurance + late fees + escalation.
+    // Anything the landlord bills back to the tenant beyond base rent.
+    if (/electric|electricity|cam-elec/.test(d) || /electric|cam-elec/.test(c)) return true;
+    if (/cam-ins|insurance/.test(d) || /cam-ins|insurance/.test(c)) return true;
+    if (/^cam\b|cam-cy|cam-py|common\s*area/.test(d) || /^cam/.test(c)) return true;
+    if (/late\s*fee/.test(d) || /late/.test(c)) return true;
+    if (/escalation/.test(d)) return true;
+    return false;
+  }), [tenantTx]);
   const paymentsTx = useMemo(() => tenantTx.filter((r: any) => (r.receipts || 0) > 0), [tenantTx]);
 
   if (!tenant) return null;
@@ -127,6 +139,7 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
             { value: "details", label: "Details" },
             { value: "ledger", label: `Ledger${tenantTx.length ? ` (${tenantTx.length})` : ""}` },
             { value: "electric", label: `Electric${electricTx.length ? ` (${electricTx.length})` : ""}` },
+            { value: "recoveries", label: `Recoveries${recoveriesTx.length ? ` (${recoveriesTx.length})` : ""}` },
             { value: "payments", label: `Payments${paymentsTx.length ? ` (${paymentsTx.length})` : ""}` },
           ] as const).map(t => (
             <button
@@ -148,6 +161,9 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
         )}
         {tab === "electric" && (
           <LedgerTable rows={electricTx} emptyLabel="No electric charges or payments for this tenant." />
+        )}
+        {tab === "recoveries" && (
+          <LedgerTable rows={recoveriesTx} emptyLabel="No recovery charges or payments for this tenant." />
         )}
         {tab === "payments" && (
           <LedgerTable rows={paymentsTx} emptyLabel="No payments recorded for this tenant." hideCharges />

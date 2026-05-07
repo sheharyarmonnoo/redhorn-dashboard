@@ -237,7 +237,7 @@ function useChargeSummaryFromRows(rows: any[]) {
     if (!key) continue;
     let entry = byTenant.get(key);
     if (!entry) {
-      entry = { rent: 0, cam: 0, electric: 0, insurance: 0, lateFees: 0, other: 0, currentMonthCharges: 0, currentBalance: 0, _lastTxDate: "" };
+      entry = { rent: 0, cam: 0, electric: 0, insurance: 0, lateFees: 0, other: 0, currentMonthCharges: 0, currentBalance: 0, recoveries: 0, _lastTxDate: "" };
       byTenant.set(key, entry);
     }
     const cat = classifyCharge(r.description || "", r.chargeCode || "");
@@ -257,6 +257,12 @@ function useChargeSummaryFromRows(rows: any[]) {
       entry.currentBalance = r.balance || 0;
     }
   }
+  // Recoveries = total billed-back operating costs for the current month
+  // (CAM + Electric + Insurance + late fees). These are the line items
+  // landlord recovers from tenants under net leases.
+  byTenant.forEach((entry) => {
+    entry.recoveries = entry.cam + entry.electric + entry.insurance + entry.lateFees;
+  });
   return { byTenant, latestMonth };
 }
 
@@ -269,6 +275,7 @@ export interface ChargeSummary {
   other: number;
   currentMonthCharges: number;
   currentBalance: number;
+  recoveries: number;
   _lastTxDate: string;
 }
 
