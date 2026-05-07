@@ -65,7 +65,7 @@ export default function FinancialsPage() {
   const updateProperty = useMutation(api.properties.update);
   const { user } = useUser();
 
-  const [view, setView] = useState<"statement" | "trend">("statement");
+  const [view, setView] = useState<"statement" | "trend" | "budget">("statement");
   const [budgetYear, setBudgetYear] = useState<string>(String(new Date().getFullYear()));
   const [budgetCompareYear, setBudgetCompareYear] = useState<string>(String(new Date().getFullYear() - 1));
   const { budgets, upsertBudget } = useLineBudgets(property?._id, budgetYear);
@@ -76,11 +76,12 @@ export default function FinancialsPage() {
     return m;
   }, [compareBudgets]);
   const budgetByLine = useMemo(() => {
-    const m = new Map<string, { annualBudget: number; isSynced: boolean; snapshotDate?: string }>();
+    const m = new Map<string, { annualBudget: number; monthlyBudgets?: number[]; isSynced: boolean; snapshotDate?: string }>();
     for (const b of budgets) {
       const isSynced = (b as any).updatedBy === "yardi" || !!(b as any).syncId;
       m.set((b.lineItem || "").trim(), {
         annualBudget: b.annualBudget || 0,
+        monthlyBudgets: (b as any).monthlyBudgets,
         isSynced,
         snapshotDate: (b as any).snapshotDate || (b as any).updatedAt,
       });
@@ -233,7 +234,7 @@ export default function FinancialsPage() {
 
       {/* Tab switcher */}
       <div className="flex gap-1 mb-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
-        {(["statement", "trend"] as const).map(t => (
+        {(["statement", "trend", "budget"] as const).map(t => (
           <button
             key={t}
             onClick={() => setView(t)}
@@ -243,7 +244,7 @@ export default function FinancialsPage() {
                 : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
             }`}
           >
-            {t === "statement" ? "Income Statement" : "Monthly Trend"}
+            {t === "statement" ? "Income Statement" : t === "trend" ? "Monthly Trend" : "Budget vs Actuals"}
           </button>
         ))}
       </div>
@@ -265,6 +266,13 @@ export default function FinancialsPage() {
         </>
       )}
       {view === "trend" && <TrendTable trend={trend} formatMonth={formatMonth} />}
+      {view === "budget" && (
+        <BudgetVsActualsHighLevel
+          lines={lines}
+          budgetByLine={budgetByLine}
+          period={period}
+        />
+      )}
     </div>
   );
 }
@@ -404,7 +412,7 @@ function IncomeStatement({
     const showValue = cp !== 0;
 
     const rowClass = [
-      "grid grid-cols-[1fr_120px_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px]",
+      "grid grid-cols-[1fr_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px]",
       opts.topBorder ? "border-t-2 border-[#18181b] dark:border-[#fafafa]" : "border-t border-[#f4f4f5] dark:border-[#27272a]",
       isLevel24 ? "bg-[#f4f4f5] dark:bg-[#27272a] font-bold text-[#18181b] dark:text-[#fafafa]" :
         isLevel16 ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]" :
@@ -432,9 +440,6 @@ function IncomeStatement({
         <span className={`text-right ${isNeg ? "text-[#dc2626]" : ""}`}>
           {showValue ? formatCurrency(Math.abs(cp)) : "—"}
           {isNeg && showValue ? <span className="text-[#dc2626]"> ▼</span> : null}
-        </span>
-        <span className={`text-right ${ytd < 0 ? "text-[#dc2626]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
-          {ytd === 0 ? "—" : formatCurrency(Math.abs(ytd))}
         </span>
         <span className={`text-right ${cmp !== null && cmp !== undefined && cmp < 0 ? "text-[#dc2626]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
           {cmp === null || cmp === undefined || cmp === 0 ? "—" : formatCurrency(Math.abs(cmp))}
@@ -473,10 +478,9 @@ function IncomeStatement({
       </div>
 
       <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-        <div className="grid grid-cols-[1fr_120px_120px_120px_110px_80px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <div className="grid grid-cols-[1fr_120px_120px_110px_80px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
           <span>Line Item</span>
           <span className="text-right">{currentLabel}</span>
-          <span className="text-right">YTD</span>
           <span className="text-right">{compareLabel}</span>
           <span className="text-right">Variance $</span>
           <span className="text-right">Var %</span>
@@ -1026,7 +1030,7 @@ function BudgetVsActuals({
     const editable = isLevel3 && !isSynced;
 
     const rowClass = [
-      "grid grid-cols-[1fr_120px_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px] items-center",
+      "grid grid-cols-[1fr_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px] items-center",
       opts.topBorder ? "border-t-2 border-[#18181b] dark:border-[#fafafa]" : "border-t border-[#f4f4f5] dark:border-[#27272a]",
       isLevel24 ? "bg-[#f4f4f5] dark:bg-[#27272a] font-bold text-[#18181b] dark:text-[#fafafa]" :
         isLevel16 ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]" :
@@ -1159,7 +1163,7 @@ function BudgetVsActuals({
       </div>
 
       <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-        <div className="grid grid-cols-[1fr_120px_120px_120px_110px_80px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <div className="grid grid-cols-[1fr_120px_120px_110px_80px_70px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
           <span>Line Item</span>
           <span className="text-right">{year} Budget</span>
           <span className="text-right">{compareYear} Budget</span>
@@ -1222,6 +1226,127 @@ function BudgetVsActuals({
       <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-2">
         Tip: click a section header to expand. Inline-edit budget on leaf rows; subtotals and grand totals are computed from Yardi.
       </p>
+    </div>
+  );
+}
+
+// High-level Budget vs Actuals — only shows section headers + subtotals +
+// grand totals (no leaf line items). Compares both the current month and
+// YTD against budget. Budget month = monthlyBudgets[month_index]; budget
+// YTD = sum of monthlyBudgets[0..current_month_index].
+function BudgetVsActualsHighLevel({
+  lines,
+  budgetByLine,
+  period,
+}: {
+  lines: any[];
+  budgetByLine: Map<string, { annualBudget: number; monthlyBudgets?: number[]; isSynced: boolean; snapshotDate?: string }>;
+  period: string | null;
+}) {
+  // Index of the current month in a 0-11 calendar (Jan=0). Defaults to
+  // current calendar month minus 1 (the most recently closed month).
+  const currentMonthIdx = useMemo(() => {
+    if (period) {
+      const m = period.split("-")[1];
+      const n = Number(m);
+      if (Number.isFinite(n)) return n - 1;
+    }
+    const today = new Date();
+    return Math.max(0, today.getMonth() - 1);
+  }, [period]);
+
+  // High-level filter: only level-1 headers + subtotals + grand totals
+  const highLevelRows = useMemo(() => {
+    return lines.filter((l: any) => {
+      const li = (l.lineItem || "").trim();
+      if (!li) return false;
+      const isSubtotal = /^total\b|^net\b/i.test(li);
+      return l.hierarchyLevel === 1 || isSubtotal;
+    });
+  }, [lines]);
+
+  function getBudgetForLine(li: string) {
+    const b = budgetByLine.get(li);
+    if (!b) return { monthBudget: 0, ytdBudget: 0, hasBudget: false };
+    const monthly = b.monthlyBudgets;
+    let monthBudget = 0;
+    let ytdBudget = 0;
+    if (Array.isArray(monthly) && monthly.length === 12) {
+      monthBudget = monthly[currentMonthIdx] || 0;
+      ytdBudget = monthly.slice(0, currentMonthIdx + 1).reduce((s, v) => s + (v || 0), 0);
+    } else {
+      // No monthly breakdown — split annual budget evenly
+      monthBudget = (b.annualBudget || 0) / 12;
+      ytdBudget = monthBudget * (currentMonthIdx + 1);
+    }
+    return { monthBudget, ytdBudget, hasBudget: b.annualBudget > 0 || (Array.isArray(monthly) && monthly.length === 12) };
+  }
+
+  const periodLabel = period ? formatPeriodShort(period) : "Current";
+
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
+      <div className="grid grid-cols-[1fr_110px_110px_90px_110px_110px_90px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <span>Line Item</span>
+        <span className="text-right">{periodLabel} Actual</span>
+        <span className="text-right">{periodLabel} Budget</span>
+        <span className="text-right">Var %</span>
+        <span className="text-right">YTD Actual</span>
+        <span className="text-right">YTD Budget</span>
+        <span className="text-right">Var %</span>
+      </div>
+      {highLevelRows.length === 0 ? (
+        <div className="p-8 text-center">
+          <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a]">No income statement data yet.</p>
+        </div>
+      ) : highLevelRows.map((line: any, i: number) => {
+        const li = (line.lineItem || "").trim();
+        const lvl = line.hierarchyLevel;
+        const isLevel1 = lvl === 1;
+        const isLevel16 = lvl === 16;
+        const isLevel24 = lvl === 24;
+        const isSubtotal = /^total\b|^net\b/i.test(li);
+        const indent = isLevel1 ? 0 : isLevel16 ? 16 : 0;
+
+        const monthActual = line.currentPeriod || 0;
+        const ytdActual = line.yearToDate || 0;
+        const { monthBudget, ytdBudget, hasBudget } = getBudgetForLine(li);
+
+        const monthVarPct = monthBudget !== 0 ? ((monthActual - monthBudget) / Math.abs(monthBudget)) * 100 : null;
+        const ytdVarPct = ytdBudget !== 0 ? ((ytdActual - ytdBudget) / Math.abs(ytdBudget)) * 100 : null;
+
+        const rowClass = [
+          "grid grid-cols-[1fr_110px_110px_90px_110px_110px_90px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a]",
+          isLevel24 ? "bg-[#f4f4f5] dark:bg-[#27272a] font-bold border-t-2 border-[#18181b] dark:border-[#fafafa]" :
+            isLevel16 ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold" :
+            isLevel1 ? "uppercase tracking-wide font-semibold" : "",
+          "text-[#18181b] dark:text-[#fafafa]",
+        ].filter(Boolean).join(" ");
+
+        return (
+          <div key={i} className={rowClass}>
+            <span style={{ paddingLeft: indent }} className="truncate">{li}</span>
+            <span className={`text-right ${monthActual < 0 ? "text-[#dc2626]" : ""}`}>
+              {monthActual === 0 ? "—" : formatCurrency(Math.abs(monthActual))}
+            </span>
+            <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">
+              {hasBudget ? formatCurrency(Math.abs(monthBudget)) : "—"}
+            </span>
+            <span className={`text-right ${monthVarPct === null ? "text-[#a1a1aa]" : monthVarPct >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
+              {monthVarPct === null ? "—" : `${monthVarPct >= 0 ? "+" : ""}${monthVarPct.toFixed(0)}%`}
+            </span>
+            <span className={`text-right ${ytdActual < 0 ? "text-[#dc2626]" : ""}`}>
+              {ytdActual === 0 ? "—" : formatCurrency(Math.abs(ytdActual))}
+            </span>
+            <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">
+              {hasBudget ? formatCurrency(Math.abs(ytdBudget)) : "—"}
+            </span>
+            <span className={`text-right ${ytdVarPct === null ? "text-[#a1a1aa]" : ytdVarPct >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
+              {ytdVarPct === null ? "—" : `${ytdVarPct >= 0 ? "+" : ""}${ytdVarPct.toFixed(0)}%`}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
