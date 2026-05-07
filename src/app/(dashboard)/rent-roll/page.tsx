@@ -172,16 +172,19 @@ export default function RentRollPage() {
   // row, open the drawer for it, and apply a quick filter so only that
   // tenant's rows are visible. Multi-unit leases come in as the comma
   // string from Yardi — match against the first unit token to find the row.
+  // Apply ONCE per deep link — otherwise tenant query updates would re-open
+  // the drawer every time the user closes it.
+  const deepLinkAppliedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!deepLinkUnit || !activeProperty?.code || tenants.length === 0) return;
+    if (deepLinkAppliedRef.current === deepLinkUnit) return;
     const norm = (s: string) => (s || "").trim().toLowerCase();
     const target = norm(deepLinkUnit);
-    // Try exact match first, then "first-token" match for multi-unit leases
     const match = tenants.find((t: any) => norm(t.unit) === target)
       || tenants.find((t: any) => (t.unit || "").split(",").map((s: string) => norm(s)).includes(target.split(",")[0].trim()));
     if (match) {
+      deepLinkAppliedRef.current = deepLinkUnit;
       setSelectedKey(`${activeProperty.code}-${match.unit}`);
-      // Apply quick filter so the row is also visible in the grid below
       const firstUnit = (match.unit || "").split(",")[0].trim();
       gridRef.current?.api?.setGridOption("quickFilterText", firstUnit);
     }
