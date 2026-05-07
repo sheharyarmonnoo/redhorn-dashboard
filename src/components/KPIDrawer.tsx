@@ -41,10 +41,13 @@ function RevenueDetail() {
   const cutoff = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
   const monthlyRevenue = monthlyRevenueRaw.filter((m: any) => m.month && m.month >= "2026-01" && m.month <= cutoff);
   const occupied = tenants.filter((t: any) => t.status !== "vacant" && t.monthlyRent > 0 && !t.tenant?.includes("Owner"));
-  const totalRent = occupied.reduce((s: number, t: any) => s + t.monthlyRent, 0);
-  const totalElectric = occupied.reduce((s: number, t: any) => s + t.monthlyElectric, 0);
   const top5 = [...occupied].sort((a: any, b: any) => b.monthlyRent - a.monthlyRent).slice(0, 5);
   const latest = monthlyRevenue[monthlyRevenue.length - 1];
+  // Pull breakdown straight from monthly_revenue (derived from the income
+  // statement during sync) — summing tenant.monthlyRent under-counts when the
+  // rent-roll snapshot is partial or in flux.
+  const totalRent = latest?.rent || 0;
+  const totalElectric = latest?.electric || 0;
   return (
     <div className="space-y-5">
       <div>
