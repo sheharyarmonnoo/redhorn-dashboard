@@ -268,6 +268,8 @@ export default function FinancialsPage() {
           propertyId={property?._id}
           lines={lines}
           period={period}
+          allHistoricLines={(allHistoricLines as any[]) || []}
+          availablePeriods={availablePeriods}
         />
       )}
     </div>
@@ -350,7 +352,22 @@ function IncomeStatement({
     // total in block" reliably picks the right subtotal (e.g. INCOME -> TOTAL
     // RENTAL REVENUE, OPERATING EXPENSE -> TOTAL OPERATING EXPENSE).
     for (const b of out) {
-      if (b.totals.length) b.sectionTotal = b.totals[b.totals.length - 1];
+      // Pick the FIRST level-16 total whose name matches the header section
+      // ("TOTAL <header text>"). Falls back to the first level-16 in the block
+      // if no name match. Last-in-block was wrong: MISC INCOME would pick up
+      // "TOTAL RENTAL REVENUE/PROPERTY INCOME" (combined rental+misc) instead
+      // of "TOTAL MISC INCOME".
+      if (b.totals.length && b.header) {
+        const headerName = (b.header.lineItem || "").trim().toLowerCase();
+        const named = b.totals.find((t: any) =>
+          /^total\b/i.test((t.lineItem || "").trim()) &&
+          (t.lineItem || "").toLowerCase().includes(headerName) &&
+          t.hierarchyLevel === 16
+        );
+        b.sectionTotal = named || b.totals.find((t: any) => t.hierarchyLevel === 16) || b.totals[0];
+      } else if (b.totals.length) {
+        b.sectionTotal = b.totals[0];
+      }
     }
     return out;
   }, [lines]);
@@ -938,7 +955,22 @@ function BudgetVsActuals({
     }
     if (cur) out.push(cur);
     for (const b of out) {
-      if (b.totals.length) b.sectionTotal = b.totals[b.totals.length - 1];
+      // Pick the FIRST level-16 total whose name matches the header section
+      // ("TOTAL <header text>"). Falls back to the first level-16 in the block
+      // if no name match. Last-in-block was wrong: MISC INCOME would pick up
+      // "TOTAL RENTAL REVENUE/PROPERTY INCOME" (combined rental+misc) instead
+      // of "TOTAL MISC INCOME".
+      if (b.totals.length && b.header) {
+        const headerName = (b.header.lineItem || "").trim().toLowerCase();
+        const named = b.totals.find((t: any) =>
+          /^total\b/i.test((t.lineItem || "").trim()) &&
+          (t.lineItem || "").toLowerCase().includes(headerName) &&
+          t.hierarchyLevel === 16
+        );
+        b.sectionTotal = named || b.totals.find((t: any) => t.hierarchyLevel === 16) || b.totals[0];
+      } else if (b.totals.length) {
+        b.sectionTotal = b.totals[0];
+      }
     }
     return out;
   }, [lines]);
@@ -1237,15 +1269,25 @@ function BudgetVsActualsHighLevel({
   propertyId,
   lines,
   period,
+  allHistoricLines,
+  availablePeriods,
 }: {
   propertyId: string | undefined;
   lines: any[];
   period: string | null;
+  allHistoricLines: any[];
+  availablePeriods: string[];
 }) {
-  // Default to the IS period's year (e.g. period="2026-05" -> "2026").
-  const defaultYear = period ? period.split("-")[0] : String(new Date().getFullYear());
-  const [year, setYear] = useState<string>(defaultYear);
-  useEffect(() => { setYear(defaultYear); }, [defaultYear]);
+  // The user can pick ANY period that has data; both the budget AND the
+  // actuals re-key off this. Defaults to the latest period (the income
+  // statement's current period).
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(period || availablePeriods[0] || "");
+  useEffect(() => {
+    if (period && !availablePeriods.includes(selectedPeriod)) setSelectedPeriod(period);
+  }, [period, availablePeriods]);
+
+  // Year derived from selected period (e.g. "2026-05" -> "2026")
+  const year = selectedPeriod ? selectedPeriod.split("-")[0] : String(new Date().getFullYear());
   const { budgets } = useLineBudgets(propertyId, year);
   const budgetByLine = useMemo(() => {
     const m = new Map<string, { annualBudget: number; monthlyBudgets?: number[] }>();
@@ -1257,31 +1299,55 @@ function BudgetVsActualsHighLevel({
     }
     return m;
   }, [budgets]);
-  const yearOptions = useMemo(() => {
-    const yrs = new Set<string>([defaultYear]);
-    const now = new Date().getFullYear();
-    yrs.add(String(now)); yrs.add(String(now - 1)); yrs.add(String(now + 1));
-    return Array.from(yrs).sort((a, b) => Number(b) - Number(a));
-  }, [defaultYear]);
-  // Index of the current month in a 0-11 calendar (Jan=0). Defaults to
-  // current calendar month minus 1 (the most recently closed month).
+
+  // Calendar month index from selected period
   const currentMonthIdx = useMemo(() => {
-    if (period) {
-      const m = period.split("-")[1];
+    if (selectedPeriod) {
+      const m = selectedPeriod.split("-")[1];
       const n = Number(m);
       if (Number.isFinite(n)) return n - 1;
     }
-    const today = new Date();
-    return Math.max(0, today.getMonth() - 1);
-  }, [period]);
+    return Math.max(0, new Date().getMonth() - 1);
+  }, [selectedPeriod]);
 
-  // High-level filter: only level-1 headers + subtotals + grand totals
+  // For non-current periods, look up actual values from the historic
+  // income_lines snapshots. Each (lineItem, period) pair → the latest
+  // snapshot's currentPeriod + yearToDate values.
+  const actualsForPeriod = useMemo(() => {
+    const m = new Map<string, { currentPeriod: number; yearToDate: number }>();
+    if (!selectedPeriod) return m;
+    if (period && selectedPeriod === period) {
+      // Use the live latest-snapshot values from `lines` directly
+      for (const l of lines) {
+        const li = (l.lineItem || "").trim();
+        if (li) m.set(li, { currentPeriod: l.currentPeriod || 0, yearToDate: l.yearToDate || 0 });
+      }
+      return m;
+    }
+    // Historic period: find rows with matching period, pick the latest snapshot
+    const matching = allHistoricLines.filter((l: any) => l.period === selectedPeriod);
+    if (matching.length === 0) return m;
+    // Group by snapshotDate, keep latest
+    const latestSnap = matching.reduce((acc: string, r: any) => (r.snapshotDate || "") > acc ? (r.snapshotDate || "") : acc, "");
+    for (const l of matching) {
+      if (l.snapshotDate !== latestSnap) continue;
+      const li = (l.lineItem || "").trim();
+      if (li) m.set(li, { currentPeriod: l.currentPeriod || 0, yearToDate: l.yearToDate || 0 });
+    }
+    return m;
+  }, [selectedPeriod, period, lines, allHistoricLines]);
+
+  const periodOptions = availablePeriods.length > 0 ? availablePeriods : (period ? [period] : []);
+
+  // High-level filter: ONLY section headers (level 1) + grand totals (level 24).
+  // Section subtotals (level 16, e.g. TOTAL RENTAL REVENUE, TOTAL MISC INCOME)
+  // are hidden — section header rows already show that value inline via the
+  // rollup logic.
   const highLevelRows = useMemo(() => {
     return lines.filter((l: any) => {
       const li = (l.lineItem || "").trim();
       if (!li) return false;
-      const isSubtotal = /^total\b|^net\b/i.test(li);
-      return l.hierarchyLevel === 1 || isSubtotal;
+      return l.hierarchyLevel === 1 || l.hierarchyLevel === 24;
     });
   }, [lines]);
 
@@ -1417,16 +1483,22 @@ function BudgetVsActualsHighLevel({
 
   return (
     <>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2 text-[12px] text-[#71717a] dark:text-[#a1a1aa]">
-          <span>Budget year</span>
+          <span>Period</span>
           <select
-            value={year}
-            onChange={e => setYear(e.target.value)}
+            value={selectedPeriod}
+            onChange={e => setSelectedPeriod(e.target.value)}
             className="text-[12px] px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
           >
-            {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+            {periodOptions.length === 0 && <option value="">No data</option>}
+            {periodOptions.map(p => (
+              <option key={p} value={p}>{formatPeriodShort(p)}</option>
+            ))}
           </select>
+          <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">
+            (budget pulled from {year} fiscal year)
+          </span>
         </div>
         {!hasAnyBudgetData && (
           <span className="text-[11px] text-[#d97706] dark:text-[#fbbf24]">
@@ -1457,8 +1529,25 @@ function BudgetVsActualsHighLevel({
         const isSubtotal = /^total\b|^net\b/i.test(li);
         const indent = isLevel1 ? 0 : isLevel16 ? 16 : 0;
 
-        const monthActual = line.currentPeriod || 0;
-        const ytdActual = line.yearToDate || 0;
+        // For the selected period, look up actuals from the period-aware
+        // map. For section-header rows (level 1) the snapshot stores 0;
+        // roll up the leaf actuals to that header instead.
+        const periodActuals = actualsForPeriod.get(li);
+        let monthActual = periodActuals?.currentPeriod ?? (line.currentPeriod || 0);
+        let ytdActual = periodActuals?.yearToDate ?? (line.yearToDate || 0);
+        if (isLevel1 && (monthActual === 0 || ytdActual === 0)) {
+          // Section header — sum its level-3 leaves' actuals
+          let cpSum = 0, ytdSum = 0;
+          for (const l of lines) {
+            if (l.hierarchyLevel === 3 && l.parentLine === li) {
+              const a = actualsForPeriod.get((l.lineItem || "").trim());
+              cpSum += a?.currentPeriod ?? (l.currentPeriod || 0);
+              ytdSum += a?.yearToDate ?? (l.yearToDate || 0);
+            }
+          }
+          if (monthActual === 0) monthActual = cpSum;
+          if (ytdActual === 0) ytdActual = ytdSum;
+        }
         const { monthBudget, ytdBudget, hasBudget } = getBudgetForLine(li);
 
         const monthVarPct = monthBudget !== 0 ? ((monthActual - monthBudget) / Math.abs(monthBudget)) * 100 : null;
