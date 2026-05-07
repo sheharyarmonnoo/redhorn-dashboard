@@ -361,11 +361,12 @@ function ItemList({
   }
   return (
     <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[110px_1fr_100px_100px_120px_120px] sm:grid-cols-[110px_120px_1fr_100px_120px_120px_140px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+      <div className="grid grid-cols-[110px_1fr_100px_100px_120px_120px] sm:grid-cols-[110px_120px_1fr_100px_140px_120px_120px_140px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
         <span>Date</span>
         <span className="hidden sm:block">Category</span>
         <span>Description</span>
         <span>Unit</span>
+        <span className="hidden sm:block">Vendor</span>
         <span>Cost</span>
         <span>Status</span>
         <span className="text-right">Actions</span>
@@ -375,7 +376,7 @@ function ItemList({
         return (
           <div
             key={r._id}
-            className="grid grid-cols-[110px_1fr_100px_100px_120px_120px] sm:grid-cols-[110px_120px_1fr_100px_120px_120px_140px] px-4 py-2.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] text-[#18181b] dark:text-[#fafafa] items-center"
+            className="grid grid-cols-[110px_1fr_100px_100px_120px_120px] sm:grid-cols-[110px_120px_1fr_100px_140px_120px_120px_140px] px-4 py-2.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] text-[#18181b] dark:text-[#fafafa] items-center"
           >
             <span className="text-[#71717a] dark:text-[#a1a1aa] tabular-nums">{formatShortDate(r.date)}</span>
             <span className="hidden sm:flex items-center gap-1.5 text-[11px] capitalize">
@@ -407,6 +408,7 @@ function ItemList({
               )}
             </button>
             <span className="text-[#71717a] dark:text-[#a1a1aa]">{r.unit || "—"}</span>
+            <span className="hidden sm:block text-[#71717a] dark:text-[#a1a1aa] truncate" title={r.vendor || ""}>{r.vendor || "—"}</span>
             <span className="text-[#71717a] dark:text-[#a1a1aa]">{r.cost ? formatCurrency(r.cost) : "—"}</span>
             <span>
               <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${badge.className}`}>
