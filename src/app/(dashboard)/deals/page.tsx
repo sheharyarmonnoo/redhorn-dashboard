@@ -122,7 +122,7 @@ export default function DealsPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] min-h-0">
+    <div className="flex flex-col h-[calc(100dvh-9rem)] min-h-0 overflow-hidden">
       <PageHeader
         title="Deal Pipeline"
         subtitle={`${deals.length} ${deals.length === 1 ? "deal" : "deals"} across the acquisition funnel`}
