@@ -229,7 +229,6 @@ export function DealDetail({
         <div className="px-5 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex gap-5">
           {([
             { key: "overview", label: "Overview" },
-            { key: "tasks", label: "Tasks", count: tasks.length },
             { key: "docs", label: "Docs", count: documents.length },
             { key: "notes", label: "Notes", count: notes.length },
           ] as const).map((tab) => (
@@ -286,12 +285,10 @@ export function DealDetail({
                     options={["Office/Warehouse", "Industrial", "Flex/Office", "Retail", "Warehouse", "Mixed Use"]}
                     onSave={(v) => saveField("propertyType", v)}
                   />
-                  <EditableField
-                    label="Address"
-                    value={deal.address}
-                    icon={<MapPin size={11} />}
-                    onSave={(v) => saveField("address", v)}
-                  />
+                  {/* Address field intentionally hidden — the deal name at
+                      the top of the drawer already shows the full street
+                      address for Monday-imported deals (name === address).
+                      City + State are now derived from the address. */}
                   <EditableField label="City" value={deal.city} onSave={(v) => saveField("city", v)} />
                   <EditableField label="State" value={deal.state} onSave={(v) => saveField("state", v)} />
                   <EditableField
@@ -386,62 +383,6 @@ export function DealDetail({
                   </div>
                 </section>
               )}
-            </div>
-          )}
-
-          {activeTab === "tasks" && (
-            <div className="space-y-4">
-              {/* Add task */}
-              <div className="bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-3 space-y-2">
-                <input
-                  value={newTaskText}
-                  onChange={(e) => setNewTaskText(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
-                  placeholder="New task..."
-                  className="w-full text-[12px] px-3 py-2 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a] placeholder-[#a1a1aa]"
-                />
-                <div className="flex gap-2">
-                  <select
-                    value={newTaskAssignee}
-                    onChange={(e) => setNewTaskAssignee(e.target.value)}
-                    className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] flex-1"
-                  >
-                    <option value="">Unassigned</option>
-                    <option value={currentUser}>{currentUser}</option>
-                  </select>
-                  <input
-                    type="date"
-                    value={newTaskDueDate}
-                    onChange={(e) => setNewTaskDueDate(e.target.value)}
-                    className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] flex-1"
-                  />
-                  <button
-                    onClick={handleAddTask}
-                    disabled={!newTaskText.trim()}
-                    className="flex items-center gap-1 text-[11px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors cursor-pointer disabled:opacity-40"
-                  >
-                    <Plus size={11} /> Add
-                  </button>
-                </div>
-              </div>
-
-              {/* Task list */}
-              <div className="space-y-1.5">
-                {tasks.map((task: any) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    dealId={deal._id}
-                    currentUser={currentUser}
-                    toggleTask={toggleTask}
-                    updateTask={updateTask}
-                    removeTask={removeTask}
-                  />
-                ))}
-                {tasks.length === 0 && (
-                  <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a] text-center py-8">No tasks yet. Add one above.</p>
-                )}
-              </div>
             </div>
           )}
 

@@ -5,6 +5,25 @@ async function logActivity(ctx: any, entry: { type: string; description: string;
   await ctx.db.insert("activity_log", { ...entry, createdAt: new Date().toISOString() });
 }
 
+/**
+ * Parse "[street], [city], [state] [zip]" → { city, state }. Returns null
+ * when we can't extract both. Loose matcher — trims whitespace, accepts
+ * 2-letter state codes (TX, KY, etc.), zip optional.
+ */
+function parseCityStateFromAddress(address: string): { city: string; state: string } | null {
+  if (!address) return null;
+  // Strip a trailing zip if present so the regex doesn't have to handle it.
+  // "9007 North Fwy, Houston, Tx 77037" → "9007 North Fwy, Houston, Tx"
+  const cleaned = address.replace(/\s+\d{5}(-\d{4})?\s*$/, "").trim();
+  // Match the LAST ", word(s), STATE" tail.
+  const m = cleaned.match(/,\s*([^,]+?),\s*([A-Za-z]{2})\s*$/);
+  if (!m) return null;
+  const city = m[1].trim();
+  const state = m[2].trim().toUpperCase();
+  if (!city || !state) return null;
+  return { city, state };
+}
+
 export const list = query({
   handler: async (ctx) => {
     const deals = await ctx.db.query("deals").collect();
@@ -396,6 +415,34 @@ const IMPORT_ROW = v.object({
       })
     )
   ),
+});
+
+/**
+ * One-shot maintenance: walk every deal whose city/state are blank and try
+ * to derive them from the address string. Safe to re-run — only patches
+ * deals where (city is empty OR state is empty) AND the address parses.
+ */
+export const backfillCityStateFromAddress = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("deals").collect();
+    const now = new Date().toISOString();
+    let scanned = 0, patched = 0, unparseable = 0;
+    for (const d of all) {
+      scanned++;
+      const hasCity = !!(d.city && d.city.trim());
+      const hasState = !!(d.state && d.state.trim());
+      if (hasCity && hasState) continue;
+      const parsed = parseCityStateFromAddress(d.address || d.name || "");
+      if (!parsed) { unparseable++; continue; }
+      const patch: any = { updatedAt: now };
+      if (!hasCity) patch.city = parsed.city;
+      if (!hasState) patch.state = parsed.state;
+      await ctx.db.patch(d._id, patch);
+      patched++;
+    }
+    return { scanned, patched, unparseable };
+  },
 });
 
 /**

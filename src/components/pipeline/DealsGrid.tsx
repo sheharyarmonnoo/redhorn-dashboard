@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, RowClickedEvent } from "ag-grid-community";
 import { formatCurrency, useDealFieldDefinitions } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import { DealStage, getStageLabel } from "@/data/_seed_deals";
@@ -63,8 +63,8 @@ export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter
   const { defs } = useDealFieldDefinitions();
   const persistence = useAgGridPersistence({ storageKey: "redhorn_grid_deals" });
 
-  const columnDefs = useMemo<ColDef[]>(() => {
-    const base: ColDef[] = [
+  const columnDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
+    const base: (ColDef | ColGroupDef)[] = [
       { field: "name", headerName: "Name", width: 240, pinned: "left",
         cellRenderer: (p: any) => (
           <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{p.value || "—"}</span>
@@ -72,20 +72,37 @@ export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter
       { field: "stage", headerName: "Stage", width: 150, pinned: "left",
         filter: "agSetColumnFilter",
         cellRenderer: StageCellRenderer },
-      { field: "address", headerName: "Address", width: 260,
-        valueGetter: (p: any) => p.data?.address || "" },
-      { field: "city", headerName: "City", width: 110 },
-      { field: "state", headerName: "State", width: 80 },
+      // Address group — Address visible by default; City + State reveal on
+      // group expand. Saves horizontal real estate while keeping the
+      // city/state available for filtering.
+      {
+        headerName: "Location",
+        marryChildren: true,
+        children: [
+          { field: "address", headerName: "Address", width: 260,
+            valueGetter: (p: any) => p.data?.address || "" },
+          { field: "city", headerName: "City", width: 110, columnGroupShow: "open" },
+          { field: "state", headerName: "State", width: 80, columnGroupShow: "open" },
+        ],
+      } as ColGroupDef,
       { field: "propertyType", headerName: "Type", width: 130 },
       { field: "sqft", headerName: "Sq Ft", width: 110, filter: "agNumberColumnFilter",
         valueFormatter: (p: any) => p.value ? p.value.toLocaleString() : "—" },
-      { field: "askingPrice", headerName: "Asking Price", width: 140, filter: "agNumberColumnFilter",
-        cellRenderer: CurrencyCellRenderer },
-      { field: "pricePerSF", headerName: "$/SF", width: 90,
-        valueFormatter: (p: any) => p.value ? `$${p.value}` : "—" },
-      { field: "capRate", headerName: "Cap Rate", width: 100,
-        valueFormatter: (p: any) => p.value ? `${p.value}%` : "—" },
-      { field: "assignedTo", headerName: "Assigned To", width: 140 },
+      // Pricing group — Asking visible by default; $/SF + Cap Rate reveal on
+      // group expand.
+      {
+        headerName: "Pricing",
+        marryChildren: true,
+        children: [
+          { field: "askingPrice", headerName: "Asking Price", width: 140, filter: "agNumberColumnFilter",
+            cellRenderer: CurrencyCellRenderer },
+          { field: "pricePerSF", headerName: "$/SF", width: 90, columnGroupShow: "open",
+            valueFormatter: (p: any) => p.value ? `$${p.value}` : "—" },
+          { field: "capRate", headerName: "Cap Rate", width: 100, columnGroupShow: "open",
+            valueFormatter: (p: any) => p.value ? `${p.value}%` : "—" },
+        ],
+      } as ColGroupDef,
+      { field: "assignedTo", headerName: "Assigned To", width: 140, hide: true },
       { field: "source", headerName: "Source", width: 160 },
       { field: "createdAt", headerName: "Created", width: 110, hide: true,
         valueFormatter: (p: any) => {
