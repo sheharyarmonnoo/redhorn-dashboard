@@ -34,6 +34,12 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   // Pending-delete state. `kind: "log"` deletes a unit_notes row by id;
   // `kind: "seed"` clears the tenant.notes field. `null` = nothing pending.
   const [pendingDelete, setPendingDelete] = useState<{ kind: "log"; id: string } | { kind: "seed" } | null>(null);
+  // Optimistic local dismissal — once the user confirms a seed-note delete
+  // we hide it immediately, even if Convex hasn't echoed the patch back yet
+  // (or the mutation silently failed). Reset whenever the drawer points to
+  // a different tenant.
+  const [seedDismissed, setSeedDismissed] = useState(false);
+  useEffect(() => { setSeedDismissed(false); }, [tenant?._id]);
   const [tab, setTab] = useState<"details" | "ledger" | "electric" | "recoveries" | "payments">("details");
   const [emailCtx, setEmailCtx] = useState<EmailContext | null>(null);
   const { properties } = useProperties();
@@ -81,7 +87,7 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   if (!tenant) return null;
 
   // Seed note from tenant data if no log entries exist (matches UnitDetailPanel)
-  const seedNote = tenant.notes && notesLog.length === 0 ? tenant.notes : null;
+  const seedNote = !seedDismissed && tenant.notes && notesLog.length === 0 ? tenant.notes : null;
 
   async function handleAddNote() {
     if (!notesDraft.trim() || !tenant?.propertyId || !tenant?.unit) return;
@@ -102,16 +108,22 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
 
   // The "seed" note lives on the tenant document itself (`tenant.notes`)
   // rather than the unit_notes table — could be from Yardi import OR a
-  // legacy direct write. Clearing the field hides the card.
+  // legacy direct write. Clearing the field hides the card. We dismiss
+  // locally first (optimistic) so the user gets immediate feedback even
+  // if the Convex round-trip is slow; if the patch fails we surface the
+  // error and roll the dismissal back so they can retry.
   async function handleDeleteSeedNote() {
     if (!tenant?._id) {
       console.warn("[RentRollDrawer] cannot clear seed note: tenant._id missing");
       return;
     }
+    setSeedDismissed(true);
     try {
       await updateTenantNotes({ id: tenant._id, notes: "" });
-    } catch (err) {
+    } catch (err: any) {
       console.error("[RentRollDrawer] failed to clear seed note:", err);
+      setSeedDismissed(false);
+      alert(`Couldn't delete the note: ${err?.message || err}`);
     }
   }
 

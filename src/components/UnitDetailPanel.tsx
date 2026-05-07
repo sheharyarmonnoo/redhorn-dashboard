@@ -20,6 +20,10 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
   const [editDraft, setEditDraft] = useState("");
   const [tab, setTab] = useState<TabValue>("details");
   const [pendingDelete, setPendingDelete] = useState<{ kind: "log"; id: string } | { kind: "seed" } | null>(null);
+  // Optimistic local dismissal so the seed-note card hides immediately on
+  // confirm. Reset whenever the drawer's underlying tenant changes.
+  const [seedDismissed, setSeedDismissed] = useState(false);
+  useEffect(() => { setSeedDismissed(false); }, [tenantProp?._id]);
 
   const tenant = tenantProp ?? cached;
 
@@ -81,7 +85,7 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
   const ledger: any[] = [];
 
   // Seed note from tenant data if no log entries exist
-  const seedNote = tenant.notes && notesLog.length === 0 ? tenant.notes : null;
+  const seedNote = !seedDismissed && tenant.notes && notesLog.length === 0 ? tenant.notes : null;
 
   async function handleAddNote() {
     if (!notesDraft.trim() || !tenant) return;
@@ -106,11 +110,14 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
       console.warn("[UnitDetailPanel] cannot clear seed note: tenant._id missing");
       return;
     }
+    setSeedDismissed(true);
     try {
       await updateTenantNotes({ id: tenant._id, notes: "" });
       onUpdated?.();
-    } catch (err) {
+    } catch (err: any) {
       console.error("[UnitDetailPanel] failed to clear seed note:", err);
+      setSeedDismissed(false);
+      alert(`Couldn't delete the note: ${err?.message || err}`);
     }
   }
 
