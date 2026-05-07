@@ -306,8 +306,9 @@ export default function RentRollPage() {
           );
         },
       },
-      // Rent group — all four cols always visible: In-Place Rent (monthly),
-      // Annual In-Place, Rent/SF, Security Deposit.
+      // Rent group — all five cols always visible:
+      // In-Place Rent (monthly $) → Annual In-Place ($/yr) → Rent/SF (monthly)
+      // → Annual In-Place/SF ($/yr per SF) → Security Deposit.
       {
         headerName: "",
         marryChildren: true,
@@ -323,6 +324,15 @@ export default function RentRollPage() {
               if (typeof d.monthlyRentPerSF === "number" && d.monthlyRentPerSF > 0) return d.monthlyRentPerSF;
               if (d.monthlyRent > 0 && d.sqft > 0) return d.monthlyRent / d.sqft;
               return 0;
+            },
+            valueFormatter: (p: any) => p.value > 0 ? `$${p.value.toFixed(2)}/SF` : "—" },
+          { field: "annualInPlacePerSF", headerName: "Annual In-Place / SF", width: 160,
+            valueGetter: (p: any) => {
+              const d = p.data || {};
+              const monthlyPerSF = (typeof d.monthlyRentPerSF === "number" && d.monthlyRentPerSF > 0)
+                ? d.monthlyRentPerSF
+                : (d.monthlyRent > 0 && d.sqft > 0 ? d.monthlyRent / d.sqft : 0);
+              return monthlyPerSF * 12;
             },
             valueFormatter: (p: any) => p.value > 0 ? `$${p.value.toFixed(2)}/SF` : "—" },
           { field: "securityDeposit", headerName: "Security Deposit", width: 140,
