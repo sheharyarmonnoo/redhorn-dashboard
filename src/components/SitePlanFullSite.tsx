@@ -12,19 +12,21 @@ interface Props {
   onOpenExecSuites: () => void;
 }
 
-// Schematic top-down site plan of Hollister Business Park. Coordinates trace
-// the marketing map layout (Building D top, Building C middle-left, Building B
-// middle-right, Building A far right with Exec Suites annex). 1600x1000
-// viewBox keeps it square-ish on a typical dashboard layout.
+// Top-down site plan of Hollister Business Park, traced from the LandPark
+// Commercial marketing map. The 1600x1100 viewBox holds:
+//   - Building D across the top (Office/Flex/Warehouse, blue)
+//   - Building C down the left as a 3-column storage stack (yellow)
+//   - Building B in the right-center, irregular L-shape (red)
+//   - Building A on the far right with the Exec Suites annex (green)
 //
-// Building outlines + per-unit boxes sized to the data we actually have in
-// the units feed. Each unit is clickable; the Executive Suites annex is a
-// special clickable region that drills into the dedicated floor plan.
+// Every <rect> with a unit label is clickable -> onSelectUnit. The Exec
+// Suites annex is a single clickable region -> onOpenExecSuites.
 
 type Box = { unit: string; x: number; y: number; w: number; h: number };
 type BuildingDef = {
   name: string;
   subtitle?: string;
+  // Outline rect for the building chrome (drawn behind the unit grid)
   outline: { x: number; y: number; w: number; h: number };
   outlineColor: string;
   units: Box[];
@@ -32,104 +34,174 @@ type BuildingDef = {
 
 const NORM = (s: string) => (s || "").trim().toLowerCase();
 
+// ---------- Layout constants ----------
+// Building D (top row). Stretches across most of the top of the viewBox.
+const D_X = 80;
+const D_Y = 70;
+const D_H = 200;          // total vertical extent of Building D
+const D_TOP_H = 95;        // height of D-154 (top half of left stack)
+const D_BOT_H = D_H - D_TOP_H;
+// Cell widths along D. D-160 is the skinny vertical on the far left,
+// D-154/D-155 are stacked, then four large square-ish blocks.
+const D_W_160 = 90;
+const D_W_154 = 170;
+const D_W_150 = 260;       // largest, includes 400 sf common area
+const D_W_145 = 200;
+const D_W_140 = 200;
+const D_W_130 = 200;
+
+// Compute D x-offsets
+const D_X_160 = D_X;
+const D_X_154 = D_X_160 + D_W_160;
+const D_X_150 = D_X_154 + D_W_154;
+const D_X_145 = D_X_150 + D_W_150;
+const D_X_140 = D_X_145 + D_W_145;
+const D_X_130 = D_X_140 + D_W_140;
+const D_TOTAL_W = D_W_160 + D_W_154 + D_W_150 + D_W_145 + D_W_140 + D_W_130;
+
+// Building C — 3 columns of storage on the left.
+const C_X = 80;
+const C_Y = 340;
+const C_W = 480;
+const C_COL_W = 150;        // each of the 3 columns
+const C_COL_GAP = 5;
+const C_LEFT_X   = C_X + 10;
+const C_MID_X    = C_LEFT_X + C_COL_W + C_COL_GAP;
+const C_RIGHT_X  = C_MID_X + C_COL_W + C_COL_GAP;
+const C_ROW_H    = 44;       // typical storage row height
+const C_TOP      = C_Y + 30;
+
+// Building B — irregular footprint on the right-center.
+const B_X = 920;
+const B_Y = 320;
+
+// Building A — far right.
+const A_X = 1240;
+const A_Y = 320;
+const A_W = 280;
+const A_BLOCK_H = 470;
+const A_ANNEX_H = 130;
+
+// ---------- Building data ----------
+
 const BUILDINGS: BuildingDef[] = [
-  // Building D — Office/Flex/Warehouse, top of the property
+  // ============ Building D — Office / Flex / Warehouse ============
   {
     name: "Building D",
     subtitle: "Office / Flex / Warehouse",
-    outline: { x: 60, y: 60, w: 760, h: 130 },
+    outline: { x: D_X - 6, y: D_Y - 6, w: D_TOTAL_W + 12, h: D_H + 12 },
     outlineColor: "#2563eb",
     units: [
-      { unit: "D-154", x: 70,  y: 70, w: 100, h: 50 },
-      { unit: "D-155", x: 70,  y: 120, w: 100, h: 60 },
-      { unit: "D-150", x: 175, y: 70, w: 130, h: 110 },
-      { unit: "D-145", x: 310, y: 70, w: 130, h: 110 },
-      { unit: "D-140", x: 445, y: 70, w: 130, h: 110 },
-      { unit: "D-130", x: 580, y: 70, w: 230, h: 110 },
+      // D-160 — skinny full-height column on the far left
+      { unit: "D-160", x: D_X_160, y: D_Y, w: D_W_160, h: D_H },
+      // D-154 (top half) and D-155 (bottom half) stacked
+      { unit: "D-154", x: D_X_154, y: D_Y,             w: D_W_154, h: D_TOP_H },
+      { unit: "D-155", x: D_X_154, y: D_Y + D_TOP_H,   w: D_W_154, h: D_BOT_H },
+      // D-150 — large block, includes the 400 sf common-area note
+      { unit: "D-150", x: D_X_150, y: D_Y, w: D_W_150, h: D_H },
+      // D-145 — has the Common Loading Dock annex underneath in the photo
+      { unit: "D-145", x: D_X_145, y: D_Y, w: D_W_145, h: D_H },
+      // D-140 and D-130 finish the row
+      { unit: "D-140", x: D_X_140, y: D_Y, w: D_W_140, h: D_H },
+      { unit: "D-130", x: D_X_130, y: D_Y, w: D_W_130, h: D_H },
     ],
   },
-  // Building C — multi-column storage / commercial, left-middle.
-  // Pushed down +60 from Building D's bottom edge so the building label
-  // has breathing room and doesn't crash into D's unit row above.
+
+  // ============ Building C — Storage (3 columns) ============
   {
     name: "Building C",
-    subtitle: "Storage + commercial",
-    outline: { x: 60, y: 280, w: 480, h: 720 },
+    subtitle: "Storage",
+    outline: { x: C_X, y: C_Y, w: C_W, h: 700 },
     outlineColor: "#eab308",
     units: [
-      // Far-left column (C-205 down)
-      { unit: "C-205", x: 70,  y: 290, w: 90, h: 50 },
-      { unit: "C-204", x: 70,  y: 345, w: 90, h: 50 },
-      { unit: "C-203", x: 70,  y: 400, w: 90, h: 50 },
-      { unit: "C-202", x: 70,  y: 455, w: 90, h: 50 },
-      { unit: "C-201", x: 70,  y: 510, w: 90, h: 50 },
-      { unit: "C-200", x: 70,  y: 565, w: 90, h: 50 },
-      { unit: "C-194", x: 70,  y: 620, w: 90, h: 50 },
-      { unit: "C-192", x: 70,  y: 675, w: 90, h: 50 },
-      { unit: "C-301", x: 70,  y: 740, w: 90, h: 50 },
-      { unit: "C-302", x: 70,  y: 795, w: 90, h: 50 },
-      { unit: "C-303", x: 70,  y: 850, w: 90, h: 50 },
-      { unit: "C-304", x: 70,  y: 905, w: 90, h: 50 },
-      { unit: "C-305", x: 70,  y: 960, w: 90, h: 35 },
-      // Middle column (C-212A down)
-      { unit: "C-212A", x: 165, y: 290, w: 80, h: 50 },
-      { unit: "C-211",  x: 165, y: 345, w: 80, h: 50 },
-      { unit: "C-210",  x: 165, y: 400, w: 80, h: 50 },
-      { unit: "C-209",  x: 165, y: 455, w: 80, h: 50 },
-      { unit: "C-208",  x: 165, y: 510, w: 80, h: 50 },
-      { unit: "C-207",  x: 165, y: 565, w: 80, h: 50 },
-      { unit: "C-206",  x: 165, y: 620, w: 80, h: 50 },
-      { unit: "C-103",  x: 165, y: 675, w: 80, h: 50 },
-      { unit: "C-102",  x: 165, y: 730, w: 80, h: 50 },
-      { unit: "C-101",  x: 165, y: 785, w: 80, h: 50 },
-      { unit: "C-306",  x: 165, y: 840, w: 80, h: 50 },
-      { unit: "C-307",  x: 165, y: 895, w: 80, h: 50 },
-      { unit: "C-308",  x: 165, y: 950, w: 80, h: 45 },
-      // Right column (C-218 down)
-      { unit: "C-218", x: 250, y: 290, w: 90, h: 50 },
-      { unit: "C-217", x: 250, y: 345, w: 90, h: 50 },
-      { unit: "C-216", x: 250, y: 400, w: 90, h: 50 },
-      { unit: "C-215", x: 250, y: 455, w: 90, h: 50 },
-      { unit: "C-214", x: 250, y: 510, w: 90, h: 50 },
-      { unit: "C-213", x: 250, y: 565, w: 90, h: 50 },
-      { unit: "C-212", x: 250, y: 620, w: 90, h: 50 },
-      { unit: "C-100", x: 250, y: 860, w: 90, h: 130 },
+      // ----- Left column (top -> bottom): C-205 .. C-305 -----
+      { unit: "C-205", x: C_LEFT_X, y: C_TOP + C_ROW_H * 0,  w: C_COL_W, h: C_ROW_H },
+      { unit: "C-204", x: C_LEFT_X, y: C_TOP + C_ROW_H * 1,  w: C_COL_W, h: C_ROW_H },
+      { unit: "C-203", x: C_LEFT_X, y: C_TOP + C_ROW_H * 2,  w: C_COL_W, h: C_ROW_H },
+      { unit: "C-202", x: C_LEFT_X, y: C_TOP + C_ROW_H * 3,  w: C_COL_W, h: C_ROW_H },
+      { unit: "C-201", x: C_LEFT_X, y: C_TOP + C_ROW_H * 4,  w: C_COL_W, h: C_ROW_H },
+      { unit: "C-200", x: C_LEFT_X, y: C_TOP + C_ROW_H * 5,  w: C_COL_W, h: C_ROW_H },
+      { unit: "C-194", x: C_LEFT_X, y: C_TOP + C_ROW_H * 6,  w: C_COL_W, h: C_ROW_H },
+      { unit: "C-192", x: C_LEFT_X, y: C_TOP + C_ROW_H * 7,  w: C_COL_W, h: C_ROW_H },
+      { unit: "C-301", x: C_LEFT_X, y: C_TOP + C_ROW_H * 8,  w: C_COL_W, h: C_ROW_H },
+      { unit: "C-302", x: C_LEFT_X, y: C_TOP + C_ROW_H * 9,  w: C_COL_W, h: C_ROW_H },
+      { unit: "C-303", x: C_LEFT_X, y: C_TOP + C_ROW_H * 10, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-304", x: C_LEFT_X, y: C_TOP + C_ROW_H * 11, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-305", x: C_LEFT_X, y: C_TOP + C_ROW_H * 12, w: C_COL_W, h: C_ROW_H },
+
+      // ----- Middle column (top -> bottom): C-211 .. C-101, gap, C-306..C-308 -----
+      { unit: "C-211", x: C_MID_X, y: C_TOP + C_ROW_H * 0, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-210", x: C_MID_X, y: C_TOP + C_ROW_H * 1, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-209", x: C_MID_X, y: C_TOP + C_ROW_H * 2, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-208", x: C_MID_X, y: C_TOP + C_ROW_H * 3, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-207", x: C_MID_X, y: C_TOP + C_ROW_H * 4, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-206", x: C_MID_X, y: C_TOP + C_ROW_H * 5, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-103", x: C_MID_X, y: C_TOP + C_ROW_H * 6, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-102", x: C_MID_X, y: C_TOP + C_ROW_H * 7, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-101", x: C_MID_X, y: C_TOP + C_ROW_H * 8, w: C_COL_W, h: C_ROW_H },
+      // gap at row 9 (no unit there in the photo)
+      { unit: "C-306", x: C_MID_X, y: C_TOP + C_ROW_H * 10, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-307", x: C_MID_X, y: C_TOP + C_ROW_H * 11, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-308", x: C_MID_X, y: C_TOP + C_ROW_H * 12, w: C_COL_W, h: C_ROW_H },
+
+      // ----- Right column (top -> bottom): C-212A, C-218..C-212, then C-100 at bottom -----
+      { unit: "C-212A", x: C_RIGHT_X, y: C_TOP + C_ROW_H * 0, w: C_COL_W, h: C_ROW_H * 0.7 },
+      { unit: "C-218",  x: C_RIGHT_X, y: C_TOP + C_ROW_H * 0.7, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-217",  x: C_RIGHT_X, y: C_TOP + C_ROW_H * 1.7, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-216",  x: C_RIGHT_X, y: C_TOP + C_ROW_H * 2.7, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-215",  x: C_RIGHT_X, y: C_TOP + C_ROW_H * 3.7, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-214",  x: C_RIGHT_X, y: C_TOP + C_ROW_H * 4.7, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-213",  x: C_RIGHT_X, y: C_TOP + C_ROW_H * 5.7, w: C_COL_W, h: C_ROW_H },
+      { unit: "C-212",  x: C_RIGHT_X, y: C_TOP + C_ROW_H * 6.7, w: C_COL_W, h: C_ROW_H },
+      // C-100 sits as a wider block at the bottom of the right column
+      { unit: "C-100",  x: C_RIGHT_X, y: C_TOP + C_ROW_H * 10, w: C_COL_W, h: C_ROW_H * 3 },
     ],
   },
-  // Building B — Office/Warehouse, right-middle. Shifted left so the
-  // layout sits more centered within the viewBox (was 1080).
+
+  // ============ Building B — Office / Warehouse (irregular) ============
+  // The photo shows an irregular footprint:
+  //   - B-115 (top) juts out wider on the left than the rest of the building
+  //   - B-145/B-130 sit side by side
+  //   - B-120 wider, with B-110 small unit beside it
+  //   - B-105 large block
+  //   - B-100 with B-398 small unit beside it at the bottom
   {
     name: "Building B",
     subtitle: "Office / Warehouse",
-    outline: { x: 900, y: 220, w: 200, h: 600 },
+    outline: { x: B_X - 30, y: B_Y - 6, w: 290, h: 612 },
     outlineColor: "#dc2626",
     units: [
-      { unit: "B-115", x: 910, y: 230, w: 180, h: 80 },
-      { unit: "B-145", x: 910, y: 320, w: 90,  h: 80 },
-      { unit: "B-130", x: 1010, y: 320, w: 80,  h: 90 },
-      { unit: "B-120", x: 910, y: 410, w: 180, h: 80 },
-      { unit: "B-110", x: 1010, y: 500, w: 80,  h: 50 },
-      { unit: "B-105", x: 910, y: 560, w: 180, h: 130 },
-      { unit: "B-100", x: 910, y: 700, w: 110, h: 110 },
-      { unit: "B-398", x: 1030, y: 700, w: 60,  h: 110 },
+      // B-115 — irregular, wider, juts out left
+      { unit: "B-115", x: B_X - 24, y: B_Y,       w: 244, h: 80 },
+      // B-145 (left) and B-130 (right)
+      { unit: "B-145", x: B_X,      y: B_Y + 85,  w: 110, h: 70 },
+      { unit: "B-130", x: B_X + 115, y: B_Y + 85, w: 105, h: 70 },
+      // B-120 wider, with B-110 small unit beside it
+      { unit: "B-120", x: B_X,       y: B_Y + 160, w: 150, h: 80 },
+      { unit: "B-110", x: B_X + 155, y: B_Y + 160, w: 65,  h: 80 },
+      // B-105 — large block
+      { unit: "B-105", x: B_X,       y: B_Y + 245, w: 220, h: 140 },
+      // B-100 with B-398 small unit beside it
+      { unit: "B-100", x: B_X,       y: B_Y + 390, w: 150, h: 210 },
+      { unit: "B-398", x: B_X + 155, y: B_Y + 390, w: 65,  h: 210 },
     ],
   },
-  // Building A — Manufacturing, far right (with Exec Suites annex).
-  // Shifted left in lockstep with Building B (was 1320).
+
+  // ============ Building A — Manufacturing ============
+  // A-150 is the large block; the Exec Suites annex (A-101..A-130) is a
+  // separate clickable region drawn after this list (drills to floor plan).
   {
     name: "Building A",
     subtitle: "Manufacturing",
-    outline: { x: 1140, y: 220, w: 220, h: 600 },
+    outline: { x: A_X - 6, y: A_Y - 6, w: A_W + 12, h: A_BLOCK_H + A_ANNEX_H + 18 },
     outlineColor: "#16a34a",
     units: [
-      { unit: "A-150", x: 1150, y: 230, w: 200, h: 470 },
+      { unit: "A-150", x: A_X, y: A_Y, w: A_W, h: A_BLOCK_H },
     ],
   },
 ];
 
-// Status colors. Vacant default is transparent (so the card bg shows
-// through and unit text stays legible in both themes); on hover we
-// flash a subtle slate so vacants get a clear hit-area cue.
+// ---------- Status colors ----------
 const STATUS_FILL: Record<string, string> = {
   current:       "rgba(22,163,74,0.10)",
   past_due:      "rgba(220,38,38,0.16)",
@@ -137,9 +209,6 @@ const STATUS_FILL: Record<string, string> = {
   locked_out:    "rgba(217,119,6,0.14)",
   vacant:        "transparent",
 };
-// Hover fills — vacant gets a slate-gray lift; everything else uses the
-// status color (the user feels the cell react without needing the info
-// pill that used to sit in the bottom-right corner).
 const HOVER_FILL: Record<string, string> = {
   current:       "rgba(22,163,74,0.16)",
   past_due:      "rgba(220,38,38,0.22)",
@@ -166,9 +235,9 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
   const [hovered, setHovered] = useState<string | null>(null);
   const [hoveredAnnex, setHoveredAnnex] = useState(false);
 
-  // Pan + zoom state. viewBox starts at full extents (0 0 1420 1100); zoom and
-  // pan modify it so the SVG scales/translates without losing crisp text.
-  const VB_W = 1420;
+  // Pan + zoom state. viewBox starts at full extents (0 0 1600 1100); zoom
+  // and pan modify it so the SVG scales/translates without losing crispness.
+  const VB_W = 1600;
   const VB_H = 1100;
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -297,19 +366,37 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
       >
-        {/* No background rect — let the card's bg shine through so there's
-            no gray-vs-white seam between the SVG and its container. */}
+        {/* Site title */}
+        <text x={VB_W / 2} y={32} textAnchor="middle" fontSize={18} fontWeight={800} fill="#18181b" className="dark:[fill:#fafafa]" letterSpacing="0.18em">
+          HOLLISTER BUSINESS PARK
+        </text>
 
-        {/* "Hollister Street" label at bottom */}
-        <text x={710} y={1075} textAnchor="middle" fontSize={13} fontWeight={600} fill="#a1a1aa" letterSpacing="0.15em">
+        {/* Hollister Street label at bottom */}
+        <text x={VB_W / 2} y={1075} textAnchor="middle" fontSize={13} fontWeight={600} fill="#a1a1aa" letterSpacing="0.15em">
           16261 HOLLISTER STREET
+        </text>
+
+        {/* ENTRY arrow — between Building D and Building C (left edge) */}
+        <text x={140} y={310} textAnchor="middle" fontSize={11} fontWeight={700} fill="#dc2626" letterSpacing="0.1em">
+          ENTRY ›
         </text>
 
         {/* Each building */}
         {BUILDINGS.map(b => (
           <g key={b.name}>
-            {/* Building label above the units (no outline rect — let the
-                unit grid carry the visual structure) */}
+            {/* Building outline (drawn behind units) */}
+            <rect
+              x={b.outline.x}
+              y={b.outline.y}
+              width={b.outline.w}
+              height={b.outline.h}
+              fill="none"
+              stroke={b.outlineColor}
+              strokeWidth={3}
+              rx={4}
+              opacity={0.85}
+            />
+            {/* Building label above */}
             <text
               x={b.outline.x + b.outline.w / 2}
               y={b.outline.y - 22}
@@ -370,7 +457,7 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
                     x={r.x + r.w / 2}
                     y={r.y + r.h / 2 + (dec.status === "vacant" ? -2 : 4)}
                     textAnchor="middle"
-                    fontSize={Math.min(13, Math.max(9, Math.min(r.w, r.h) / 6))}
+                    fontSize={Math.min(13, Math.max(9, Math.min(r.w, r.h) / 4.5))}
                     fontWeight={600}
                     fill="#18181b"
                     className="dark:[fill:#fafafa]"
@@ -398,7 +485,71 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
           </g>
         ))}
 
-        {/* Executive Suites annex — separate clickable region inside Building A */}
+        {/* TUNNEL label between D-155 (left stack) and D-150 */}
+        <text x={D_X_150} y={D_Y + D_TOP_H + 6} textAnchor="middle" fontSize={9} fontWeight={700} fill="#71717a" letterSpacing="0.18em">
+          TUNNEL
+        </text>
+
+        {/* "Includes 400 sf common area" annotation under D-150 */}
+        <text x={D_X_150 + D_W_150 / 2} y={D_Y + D_H + 14} textAnchor="middle" fontSize={9} fontStyle="italic" fill="#a1a1aa">
+          Includes 400 sf common area
+        </text>
+
+        {/* Common Loading Dock — annex underneath D-145 */}
+        <g>
+          <rect
+            x={D_X_145 + 20}
+            y={D_Y + D_H + 4}
+            width={D_W_145 - 40}
+            height={26}
+            fill="rgba(37,99,235,0.06)"
+            stroke="#2563eb"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+            rx={2}
+          />
+          <text
+            x={D_X_145 + D_W_145 / 2}
+            y={D_Y + D_H + 22}
+            textAnchor="middle"
+            fontSize={9}
+            fontWeight={600}
+            fill="#2563eb"
+            style={{ letterSpacing: "0.04em" }}
+          >
+            Common Loading Dock
+          </text>
+        </g>
+
+        {/* Cage HBP Storage label at bottom edge of Building D */}
+        <text x={D_X + D_TOTAL_W / 2} y={D_Y + D_H + 56} textAnchor="middle" fontSize={10} fontWeight={600} fill="#71717a" letterSpacing="0.1em">
+          Cage HBP Storage
+        </text>
+
+        {/* Building C secondary label inside the building (top) */}
+        <text x={C_X + C_W / 2} y={C_Y + 18} textAnchor="middle" fontSize={10} fontWeight={600} fill="#a1a1aa" letterSpacing="0.12em">
+          Cage HBP Storage
+        </text>
+
+        {/* EXIT label on Building C left side */}
+        <text x={C_X - 10} y={C_Y + 350} textAnchor="end" fontSize={11} fontWeight={700} fill="#dc2626" letterSpacing="0.1em">
+          ‹ EXIT
+        </text>
+
+        {/* Beam label between buildings */}
+        <text x={750} y={620} textAnchor="middle" fontSize={11} fontStyle="italic" fill="#a1a1aa">
+          Beam
+        </text>
+
+        {/* Parking — between Building B/A and below Building C */}
+        <text x={750} y={520} textAnchor="middle" fontSize={11} fontStyle="italic" fill="#a1a1aa">
+          Parking
+        </text>
+        <text x={750} y={950} textAnchor="middle" fontSize={11} fontStyle="italic" fill="#a1a1aa">
+          Parking
+        </text>
+
+        {/* Executive Suites annex — clickable region inside Building A footprint */}
         <g
           onClick={onOpenExecSuites}
           onMouseEnter={() => setHoveredAnnex(true)}
@@ -406,36 +557,35 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
           style={{ cursor: "pointer" }}
         >
           <rect
-            x={1150}
-            y={710}
-            width={200}
-            height={100}
+            x={A_X}
+            y={A_Y + A_BLOCK_H + 10}
+            width={A_W}
+            height={A_ANNEX_H}
             fill={hoveredAnnex ? "rgba(22,163,74,0.18)" : "rgba(22,163,74,0.08)"}
             stroke="#16a34a"
             strokeWidth={2.5}
             rx={4}
             style={{ transition: "fill 160ms ease" }}
           />
-          <text x={1250} y={748} textAnchor="middle" fontSize={14} fontWeight={700} fill="#15803d">
+          <text x={A_X + A_W / 2} y={A_Y + A_BLOCK_H + 48} textAnchor="middle" fontSize={14} fontWeight={700} fill="#15803d">
             Executive Suites
           </text>
-          <text x={1250} y={768} textAnchor="middle" fontSize={11} fill="#15803d">
+          <text x={A_X + A_W / 2} y={A_Y + A_BLOCK_H + 70} textAnchor="middle" fontSize={11} fill="#15803d">
             A-101 → A-130
           </text>
-          <text x={1250} y={794} textAnchor="middle" fontSize={10} fontWeight={600} fill="#15803d" style={{ letterSpacing: "0.06em" }}>
+          <text x={A_X + A_W / 2} y={A_Y + A_BLOCK_H + 96} textAnchor="middle" fontSize={10} fontWeight={600} fill="#15803d" style={{ letterSpacing: "0.06em" }}>
             VIEW FLOOR PLAN ›
           </text>
         </g>
-
-        {/* Parking */}
-        <text x={700} y={520} textAnchor="middle" fontSize={11} fontStyle="italic" fill="#a1a1aa">
-          Parking
-        </text>
       </svg>
 
       {/* Legend */}
       <div className="absolute top-3 right-3 bg-white/90 dark:bg-[#18181b]/90 backdrop-blur border border-[#e4e4e7] dark:border-[#3f3f46] rounded-md px-2.5 py-1.5 flex items-center gap-3 text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
-        <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_STROKE.current }} />Occupied</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ backgroundColor: "#16a34a" }} />Bldg A</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ backgroundColor: "#dc2626" }} />Bldg B</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ backgroundColor: "#eab308" }} />Bldg C</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ backgroundColor: "#2563eb" }} />Bldg D</span>
+        <span className="inline-flex items-center gap-1.5 pl-2 border-l border-[#e4e4e7] dark:border-[#3f3f46]"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_STROKE.current }} />Occupied</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_STROKE.past_due }} />Past Due</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full border border-[#a1a1aa]" />Vacant</span>
       </div>

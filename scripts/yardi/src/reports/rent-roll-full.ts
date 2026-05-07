@@ -72,13 +72,30 @@ export async function runRentRollFullForProperty(
   await dateField.press("Tab");
   console.log(`   FromDate = ${mmddyyyy}`);
 
-  // 4. Make sure Show Detail is checked (gives us the per-lease rows we need)
-  const showDetail = frame.locator("#chkIsDetail_CheckBox");
-  if ((await showDetail.count()) > 0) {
-    if (!(await showDetail.isChecked().catch(() => false))) {
-      await showDetail.check().catch(() => {});
+  // 4. Force Show Detail = checked deterministically. Without this the export
+  //    collapses to a property-summary layout (10 cols, 1 row per property)
+  //    instead of the per-lease detail (16 cols). Yardi's UI sometimes ignores
+  //    Playwright's .check() — particularly on properties scraped after others
+  //    in the same session — so we set the DOM state directly and verify.
+  await frame.evaluate(() => {
+    const cb = document.getElementById("chkIsDetail_CheckBox") as HTMLInputElement | null;
+    if (cb) {
+      cb.checked = true;
+      cb.dispatchEvent(new Event("click", { bubbles: true }));
+      cb.dispatchEvent(new Event("change", { bubbles: true }));
     }
+  });
+  const detailChecked = await frame
+    .locator("#chkIsDetail_CheckBox")
+    .isChecked()
+    .catch(() => false);
+  if (!detailChecked) {
+    throw new Error(
+      `Show Detail checkbox failed to enable for ${property.code}; refusing to ` +
+      `submit (would produce summary-only export and wipe lease data on ingest).`
+    );
   }
+  console.log(`   Show Detail = on`);
 
   // 5. Click Excel and capture the download
   const outPath = resolve(

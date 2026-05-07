@@ -47,6 +47,23 @@ export function parseRentRollAnalytics(filePath: string): ParsedRentRoll {
   const propertyHeader = String(grid[0]?.[0] ?? "").trim();
   const asOfHeader = String(grid[1]?.[0] ?? "").trim();
 
+  // Sanity-check the layout. If the scraper accidentally submitted with
+  // "Show Detail" off, Yardi returns a property-summary export (10 cols,
+  // headers "Property | Name | Area | Monthly Rent | ...") with one row
+  // per property. Parsing that would silently produce a single fake "lease"
+  // and overwrite real tenant data on the next ingest. Better to fail loud.
+  const headerCells = (grid[2] || []).map((c) => String(c).trim().toLowerCase());
+  const hasUnitCol = headerCells.some((h) => h === "unit(s)" || h === "unit");
+  const hasLeaseCol = headerCells.some((h) => h === "lease");
+  if (!hasUnitCol || !hasLeaseCol) {
+    throw new Error(
+      `Rent Roll export at ${filePath} is missing the lease-detail columns ` +
+      `("Unit(s)" / "Lease"). Yardi appears to have produced a property-summary ` +
+      `export instead of the per-lease detail. Re-run the scraper with ` +
+      `Show Detail enabled. Header row: ${JSON.stringify(headerCells.slice(0, 8))}`
+    );
+  }
+
   // Fixed column indices — Yardi's Commercial Analytics export is
   // structurally stable. We don't need header sniffing because the report
   // template is identical every time.
