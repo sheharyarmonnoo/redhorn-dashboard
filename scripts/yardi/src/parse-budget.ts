@@ -4,8 +4,13 @@ export interface BudgetLine {
   lineItem: string;
   hierarchyLevel: number;
   parentLine?: string;
-  monthlyBudgets: number[];   // 12 entries, in column order from the report
+  monthlyBudgets: number[];   // 12 calendar-aligned entries (Jan=0..Dec=11)
   annualBudget: number;       // sum of the 12 months (matches the "Total" col)
+}
+
+export interface BudgetYearGroup {
+  year: string;               // calendar year (e.g. "2026")
+  rows: BudgetLine[];
 }
 
 export interface ParsedBudget {
@@ -14,8 +19,9 @@ export interface ParsedBudget {
   periodHeader: string;       // "Period = Jun 2025-May 2026"
   bookHeader: string;         // "Book = Accrual"
   monthLabels: string[];      // ["Jun 2025", "Jul 2025", ..., "May 2026"]
-  year: string;               // calendar year owning most months in the period
-  rows: BudgetLine[];
+  year: string;               // back-compat: calendar year owning most months
+  rows: BudgetLine[];         // back-compat: rows for the dominant year
+  byYear: BudgetYearGroup[];  // every calendar year covered by the report
 }
 
 /**
@@ -138,6 +144,60 @@ export function parseBudget(filePath: string): ParsedBudget {
     });
   }
 
+  // Build per-calendar-year groups. Each cell in the report has a column
+  // header like "Jun 2025" — we map that to (year, calendar-month-idx).
+  // Rows for a given year carry a 12-element calendar-aligned array (Jan=0
+  // ... Dec=11) with 0s for months not covered by this report's window.
+  const monthMap: Array<{ year: string; calIdx: number } | null> = monthLabels.map(parseMonthLabel);
+  const yearGroups = new Map<string, BudgetLine[]>();
+  for (const r of rows) {
+    const perYear: Record<string, number[]> = {};
+    for (let c = 0; c < 12; c++) {
+      const m = monthMap[c];
+      if (!m) continue;
+      const arr = (perYear[m.year] = perYear[m.year] || new Array(12).fill(0));
+      arr[m.calIdx] += r.monthlyBudgets[c] || 0;
+    }
+    for (const [yr, arr] of Object.entries(perYear)) {
+      const annual = arr.reduce((a, b) => a + b, 0);
+      // Skip zero-budget rows for years that don't actually have data,
+      // so 2025 doesn't carry every line as $0 / month for Jan-May (those
+      // are 2026 columns).
+      const hasAny = arr.some(v => v !== 0);
+      if (!hasAny) continue;
+      const list = yearGroups.get(yr) || [];
+      list.push({
+        lineItem: r.lineItem,
+        hierarchyLevel: r.hierarchyLevel,
+        parentLine: r.parentLine,
+        monthlyBudgets: arr,
+        annualBudget: annual,
+      });
+      yearGroups.set(yr, list);
+    }
+  }
+  // Always include EVERY line item under each year (even zero-budget) so
+  // section headers + subtotals render cleanly in the UI. Add empty-budget
+  // copies for line items missing from a year's group.
+  yearGroups.forEach((list) => {
+    const have = new Set(list.map((r: BudgetLine) => r.lineItem));
+    for (const r of rows) {
+      if (have.has(r.lineItem)) continue;
+      list.push({
+        lineItem: r.lineItem,
+        hierarchyLevel: r.hierarchyLevel,
+        parentLine: r.parentLine,
+        monthlyBudgets: new Array(12).fill(0),
+        annualBudget: 0,
+      });
+    }
+    list.sort((a: BudgetLine, b: BudgetLine) => rows.findIndex(r => r.lineItem === a.lineItem) - rows.findIndex(r => r.lineItem === b.lineItem));
+  });
+
+  const byYear: BudgetYearGroup[] = [];
+  yearGroups.forEach((rs, yr) => byYear.push({ year: yr, rows: rs }));
+  byYear.sort((a, b) => Number(a.year) - Number(b.year));
+
   return {
     propertyHeader,
     reportTitle,
@@ -145,8 +205,22 @@ export function parseBudget(filePath: string): ParsedBudget {
     bookHeader,
     monthLabels,
     year,
-    rows,
+    rows: byYear.find(g => g.year === year)?.rows ?? rows,
+    byYear,
   };
+}
+
+// "Jun 2025" -> { year: "2025", calIdx: 5 }
+function parseMonthLabel(lbl: string): { year: string; calIdx: number } | null {
+  const m = lbl.match(/^([A-Za-z]+)\s+(\d{4})/);
+  if (!m) return null;
+  const monthMap: Record<string, number> = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+  };
+  const idx = monthMap[m[1].toLowerCase().slice(0, 3)];
+  if (idx === undefined) return null;
+  return { year: m[2], calIdx: idx };
 }
 
 function toNumber(v: any): number {

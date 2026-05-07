@@ -314,36 +314,42 @@ export async function uploadRunToConvex(
           }
         }
       } else if (u.reportType === "twelve_month_budget") {
-        // Yardi 12-Month Budget → line_budgets table. The parser drops
-        // section headers + total/net rows; only leaf line items make it
-        // into Convex so the Budget vs Actuals UI can compare them
-        // directly against income_lines.
+        // Yardi 12-Month Budget → line_budgets table. The Yardi report's
+        // 12 columns may span multiple calendar years (e.g. "Jun 2025-May
+        // 2026"), so the parser splits rows into per-year groups, each
+        // calendar-aligned (Jan=0..Dec=11 with 0s for months outside the
+        // report window). We bulk-upsert each year separately so the
+        // Budget vs Actuals UI compares apples-to-apples.
         const parsed = parseBudget(u.filePath);
+        const yearGroups = parsed.byYear.length > 0
+          ? parsed.byYear
+          : [{ year: parsed.year, rows: parsed.rows }];
         console.log(
-          `   parsed Budget ${u.fileName}: ${parsed.rows.length} line items (${parsed.periodHeader} → year=${parsed.year})`
+          `   parsed Budget ${u.fileName}: ${parsed.rows.length} line items (${parsed.periodHeader}; years=${yearGroups.map(g => g.year).join(",")})`
         );
-        if (parsed.rows.length === 0) {
-          console.warn(`   warning: budget parser returned 0 rows — Excel layout may not match expected`);
-        }
         try {
-          const result: any = await client.mutation(FN.bulkUpsertLineBudgets as any, {
-            propertyCode: u.propertyCode,
-            year: parsed.year,
-            syncId: jobId,
-            snapshotDate,
-            rows: parsed.rows.map((r) => ({
-              lineItem: r.lineItem,
-              annualBudget: r.annualBudget,
-              monthlyBudgets: r.monthlyBudgets,
-              hierarchyLevel: r.hierarchyLevel,
-              parentLine: r.parentLine,
-            })),
-          });
-          console.log(
-            `   ingested Budget → ${result.inserted} rows · superseded ${result.supersededPrior} (year=${result.year})`
-          );
-          perFileRows = result.inserted;
-          totalRowsIngested += result.inserted;
+          let totalInserted = 0;
+          for (const grp of yearGroups) {
+            const result: any = await client.mutation(FN.bulkUpsertLineBudgets as any, {
+              propertyCode: u.propertyCode,
+              year: grp.year,
+              syncId: jobId,
+              snapshotDate,
+              rows: grp.rows.map((r) => ({
+                lineItem: r.lineItem,
+                annualBudget: r.annualBudget,
+                monthlyBudgets: r.monthlyBudgets,
+                hierarchyLevel: r.hierarchyLevel,
+                parentLine: r.parentLine,
+              })),
+            });
+            console.log(
+              `   ingested Budget ${grp.year} → ${result.inserted} rows · superseded ${result.supersededPrior}`
+            );
+            totalInserted += result.inserted;
+          }
+          perFileRows = totalInserted;
+          totalRowsIngested += totalInserted;
         } catch (err: any) {
           console.error(`   budget upsert failed: ${err?.message || err}`);
           throw err;

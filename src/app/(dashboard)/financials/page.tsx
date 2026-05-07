@@ -265,8 +265,8 @@ export default function FinancialsPage() {
       {view === "trend" && <TrendTable trend={trend} formatMonth={formatMonth} />}
       {view === "budget" && (
         <BudgetVsActualsHighLevel
+          propertyId={property?._id}
           lines={lines}
-          budgetByLine={budgetByLine}
           period={period}
         />
       )}
@@ -1230,16 +1230,39 @@ function BudgetVsActuals({
 // High-level Budget vs Actuals — only shows section headers + subtotals +
 // grand totals (no leaf line items). Compares both the current month and
 // YTD against budget. Budget month = monthlyBudgets[month_index]; budget
-// YTD = sum of monthlyBudgets[0..current_month_index].
+// YTD = sum of monthlyBudgets[0..current_month_index]. Year defaults to
+// the income statement period's year so May 2026 actuals compare against
+// 2026 budget without the user needing to pick.
 function BudgetVsActualsHighLevel({
+  propertyId,
   lines,
-  budgetByLine,
   period,
 }: {
+  propertyId: string | undefined;
   lines: any[];
-  budgetByLine: Map<string, { annualBudget: number; monthlyBudgets?: number[]; isSynced: boolean; snapshotDate?: string }>;
   period: string | null;
 }) {
+  // Default to the IS period's year (e.g. period="2026-05" -> "2026").
+  const defaultYear = period ? period.split("-")[0] : String(new Date().getFullYear());
+  const [year, setYear] = useState<string>(defaultYear);
+  useEffect(() => { setYear(defaultYear); }, [defaultYear]);
+  const { budgets } = useLineBudgets(propertyId, year);
+  const budgetByLine = useMemo(() => {
+    const m = new Map<string, { annualBudget: number; monthlyBudgets?: number[] }>();
+    for (const b of budgets) {
+      m.set((b.lineItem || "").trim(), {
+        annualBudget: b.annualBudget || 0,
+        monthlyBudgets: (b as any).monthlyBudgets,
+      });
+    }
+    return m;
+  }, [budgets]);
+  const yearOptions = useMemo(() => {
+    const yrs = new Set<string>([defaultYear]);
+    const now = new Date().getFullYear();
+    yrs.add(String(now)); yrs.add(String(now - 1)); yrs.add(String(now + 1));
+    return Array.from(yrs).sort((a, b) => Number(b) - Number(a));
+  }, [defaultYear]);
   // Index of the current month in a 0-11 calendar (Jan=0). Defaults to
   // current calendar month minus 1 (the most recently closed month).
   const currentMonthIdx = useMemo(() => {
@@ -1262,27 +1285,156 @@ function BudgetVsActualsHighLevel({
     });
   }, [lines]);
 
-  function getBudgetForLine(li: string) {
-    const b = budgetByLine.get(li);
-    if (!b) return { monthBudget: 0, ytdBudget: 0, hasBudget: false };
-    const monthly = b.monthlyBudgets;
-    let monthBudget = 0;
-    let ytdBudget = 0;
-    if (Array.isArray(monthly) && monthly.length === 12) {
-      monthBudget = monthly[currentMonthIdx] || 0;
-      ytdBudget = monthly.slice(0, currentMonthIdx + 1).reduce((s, v) => s + (v || 0), 0);
-    } else {
-      // No monthly breakdown — split annual budget evenly
-      monthBudget = (b.annualBudget || 0) / 12;
-      ytdBudget = monthBudget * (currentMonthIdx + 1);
+  // Walk the FULL income statement to map section/total rows to their leaf
+  // children. Budget table only carries leaf items (Yardi parser drops
+  // section headers + TOTAL rows), so rollup happens here in the UI.
+  // Strategy: walk lines top-to-bottom; track the currently open level-1
+  // section header. Every level-3 row "belongs to" the current section.
+  // When we hit a level-16 TOTAL, it closes the current section. Level-24
+  // grand totals roll up across all sections walked since the last grand
+  // total.
+  const lineBudgetRollup = useMemo(() => {
+    const result = new Map<string, { monthBudget: number; ytdBudget: number; hasBudget: boolean }>();
+    // Build leaf budget lookup
+    function leafBudget(name: string) {
+      const b = budgetByLine.get(name);
+      if (!b) return null;
+      const monthly = b.monthlyBudgets;
+      if (Array.isArray(monthly) && monthly.length === 12) {
+        return {
+          month: monthly[currentMonthIdx] || 0,
+          ytd: monthly.slice(0, currentMonthIdx + 1).reduce((s, v) => s + (v || 0), 0),
+          annual: b.annualBudget || 0,
+        };
+      }
+      return {
+        month: (b.annualBudget || 0) / 12,
+        ytd: ((b.annualBudget || 0) / 12) * (currentMonthIdx + 1),
+        annual: b.annualBudget || 0,
+      };
     }
-    return { monthBudget, ytdBudget, hasBudget: b.annualBudget > 0 || (Array.isArray(monthly) && monthly.length === 12) };
+
+    let currentSection: string | null = null;
+    let sectionLeaves: string[] = [];
+    let allLeavesSinceGrandTotal: string[] = [];
+
+    function flushSection(totalLineName: string) {
+      let mSum = 0, ySum = 0;
+      let any = false;
+      for (const leafName of sectionLeaves) {
+        const lb = leafBudget(leafName);
+        if (!lb) continue;
+        mSum += lb.month;
+        ySum += lb.ytd;
+        if (lb.annual !== 0 || lb.month !== 0) any = true;
+      }
+      result.set(totalLineName, { monthBudget: mSum, ytdBudget: ySum, hasBudget: any });
+      sectionLeaves = [];
+    }
+
+    function flushGrand(grandLineName: string) {
+      let mSum = 0, ySum = 0;
+      let any = false;
+      for (const leafName of allLeavesSinceGrandTotal) {
+        const lb = leafBudget(leafName);
+        if (!lb) continue;
+        mSum += lb.month;
+        ySum += lb.ytd;
+        if (lb.annual !== 0 || lb.month !== 0) any = true;
+      }
+      result.set(grandLineName, { monthBudget: mSum, ytdBudget: ySum, hasBudget: any });
+      allLeavesSinceGrandTotal = [];
+    }
+
+    for (const l of lines) {
+      const li = (l.lineItem || "").trim();
+      if (!li) continue;
+      const lvl = l.hierarchyLevel;
+      const isTotal = /^total\b|^net\b/i.test(li);
+
+      if (lvl === 1 && !isTotal) {
+        currentSection = li;
+        // Header: rollup will be all leaves under this section. Computed
+        // when we hit the next level-16 TOTAL (which closes the section).
+        // For now, also pre-store the header with running section sum so
+        // it shows leaf totals BEFORE the closing TOTAL row hits.
+        continue;
+      }
+      if (lvl === 3) {
+        sectionLeaves.push(li);
+        allLeavesSinceGrandTotal.push(li);
+        // Also store leaf rollup directly (for cases where leaves render)
+        const lb = leafBudget(li);
+        if (lb) result.set(li, { monthBudget: lb.month, ytdBudget: lb.ytd, hasBudget: lb.annual !== 0 || lb.month !== 0 });
+        continue;
+      }
+      if (isTotal && lvl === 16) {
+        flushSection(li);
+        continue;
+      }
+      if (isTotal && lvl === 24) {
+        flushGrand(li);
+        continue;
+      }
+    }
+
+    // Also compute a per-section-header budget by summing the leaves
+    // grouped by parentLine (covers the level-1 header rows that need
+    // a budget value when collapsed).
+    const leavesByParent = new Map<string, string[]>();
+    for (const l of lines) {
+      if (l.hierarchyLevel === 3 && l.parentLine) {
+        const list = leavesByParent.get(l.parentLine) || [];
+        list.push((l.lineItem || "").trim());
+        leavesByParent.set(l.parentLine, list);
+      }
+    }
+    leavesByParent.forEach((leafNames, parent) => {
+      let mSum = 0, ySum = 0, any = false;
+      for (const n of leafNames) {
+        const lb = leafBudget(n);
+        if (!lb) continue;
+        mSum += lb.month;
+        ySum += lb.ytd;
+        if (lb.annual !== 0 || lb.month !== 0) any = true;
+      }
+      if (!result.has(parent)) {
+        result.set(parent, { monthBudget: mSum, ytdBudget: ySum, hasBudget: any });
+      }
+    });
+
+    return result;
+  }, [lines, budgetByLine, currentMonthIdx]);
+
+  function getBudgetForLine(li: string) {
+    const r = lineBudgetRollup.get(li);
+    if (r) return r;
+    return { monthBudget: 0, ytdBudget: 0, hasBudget: false };
   }
 
   const periodLabel = period ? formatPeriodShort(period) : "Current";
+  const hasAnyBudgetData = budgets.some((b: any) => (b.annualBudget || 0) !== 0 || (Array.isArray(b.monthlyBudgets) && b.monthlyBudgets.some((v: number) => v !== 0)));
 
   return (
-    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
+    <>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 text-[12px] text-[#71717a] dark:text-[#a1a1aa]">
+          <span>Budget year</span>
+          <select
+            value={year}
+            onChange={e => setYear(e.target.value)}
+            className="text-[12px] px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+          >
+            {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        {!hasAnyBudgetData && (
+          <span className="text-[11px] text-[#d97706] dark:text-[#fbbf24]">
+            No Yardi budget for {year}. Showing actuals only — run a sync to populate.
+          </span>
+        )}
+      </div>
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
       <div className="grid grid-cols-[1fr_110px_110px_90px_110px_110px_90px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
         <span>Line Item</span>
         <span className="text-right">{periodLabel} Actual</span>
@@ -1344,6 +1496,7 @@ function BudgetVsActualsHighLevel({
           </div>
         );
       })}
-    </div>
+      </div>
+    </>
   );
 }
