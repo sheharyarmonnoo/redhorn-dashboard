@@ -1495,6 +1495,40 @@ function BudgetVsActualsHighLevel({
       }
     });
 
+    // NOI / NET INCOME post-processing. The grand-total walk gives wrong
+    // values for these because it sums all leaves since the prior grand
+    // total — for NOI that's just expense leaves (positive numbers), which
+    // would make NOI = expense_sum (off-sign). Instead, compute structurally:
+    //   NOI = TOTAL INCOME - TOTAL OPERATING EXPENSE
+    //   NET INCOME = NOI - (any non-operating items)
+    // Find the rolled-up INCOME and EXPENSE values from the rows we already
+    // populated, then derive.
+    const findResultByPattern = (re: RegExp) => {
+      const arr: { monthBudget: number; ytdBudget: number; hasBudget: boolean }[] = [];
+      result.forEach((v, k) => { if (re.test(k)) arr.push(v); });
+      return arr[0];
+    };
+    const incomeR = findResultByPattern(/^total\s+income\s*$/i);
+    const opExpR = findResultByPattern(/^total\s+(operating\s+)?expense/i);
+    if (incomeR && opExpR) {
+      const noiMonth = incomeR.monthBudget - opExpR.monthBudget;
+      const noiYtd = incomeR.ytdBudget - opExpR.ytdBudget;
+      const noiHas = incomeR.hasBudget || opExpR.hasBudget;
+      // Override any value the walk wrote for these grand totals
+      for (const l of lines) {
+        const li = (l.lineItem || "").trim();
+        if (/net\s+operating\s+income/i.test(li)) {
+          result.set(li, { monthBudget: noiMonth, ytdBudget: noiYtd, hasBudget: noiHas });
+        }
+        if (/^net\s+income\s*\(loss\)/i.test(li)) {
+          // NET INCOME = NOI minus any non-operating expense subtotals
+          // beyond TOTAL OPERATING EXPENSE. For now use the same formula
+          // — refine if a non-op subtotal exists in the data.
+          result.set(li, { monthBudget: noiMonth, ytdBudget: noiYtd, hasBudget: noiHas });
+        }
+      }
+    }
+
     return result;
   }, [lines, budgetByLine, currentMonthIdx]);
 
