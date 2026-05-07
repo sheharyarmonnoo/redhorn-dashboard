@@ -453,4 +453,27 @@ export default defineSchema({
     dealId: v.optional(v.string()),
     createdAt: v.string(),
   }).index("by_type", ["type"]),
+
+  // ===== AI CHAT THREADS =====
+  // Persistent Claude chat sessions scoped to a Clerk user. Title is
+  // auto-generated from the first user message so the thread list reads
+  // sensibly without making the user name each conversation.
+  chat_threads: defineTable({
+    userId: v.string(),                  // Clerk user id
+    title: v.string(),                   // auto-generated from first message
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }).index("by_user", ["userId"]),
+
+  // ===== AI CHAT MESSAGES =====
+  // One row per message in a thread. dataContext optionally captures the
+  // Convex data slice that informed the assistant's reply so we can audit
+  // (or re-render) what Claude was actually shown for that turn.
+  chat_messages: defineTable({
+    threadId: v.id("chat_threads"),
+    role: v.string(),                    // "user" | "assistant"
+    content: v.string(),
+    createdAt: v.string(),
+    dataContext: v.optional(v.any()),
+  }).index("by_thread", ["threadId"]),
 });
