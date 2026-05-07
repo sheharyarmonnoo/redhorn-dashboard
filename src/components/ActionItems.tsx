@@ -6,16 +6,14 @@ import { useActionItems } from "@/hooks/useConvexData";
 
 type KanbanColumn = "todo" | "in_progress" | "done";
 
-// Visible Redhorn assignees. Sheharyar / Matt / Dillon are operational accounts
-// for setup + delivery — they're "silent users" and don't appear in the
+// Visible Redhorn assignees. Setup + delivery — they're "silent users" and don't appear in the
 // assignee dropdown even if they happen to sign in. Anyone else with a
 // @redhorncapital.com email gets added to the dropdown automatically.
 const TEAM_ASSIGNEES = ["Ori", "Max"];
 const REDHORN_DOMAIN = "redhorncapital.com";
 const SILENT_EMAILS = new Set<string>([
   "sheharyarmonnoo@gmail.com",
-  "mattyellin1@gmail.com",
-  // Dillon: add when his login email is known
+  "mattyellin1@gmail.com",  
 ]);
 
 function useAssigneeOptions() {
