@@ -943,16 +943,53 @@ function BudgetVsActuals({
   setYear: (y: string) => void;
   onSaveBudget: (lineItem: string, annualBudget: number) => Promise<void>;
 }) {
-  // Skip subtotals + net rows. They're computed from children, not budgeted.
-  const budgetableLines = useMemo(() => {
-    return lines.filter((l: any) => {
-      const li = (l.lineItem || "").trim();
-      if (!li) return false;
-      if (/^\s*total\b|^\s*net\b/i.test(li)) return false;
-      return true;
-    });
+  // Use income_lines as the structural source — they're already sorted by
+  // _creationTime ascending and carry the hierarchyLevel sentinel from Yardi.
+  // Budget values are looked up by lineItem against budgetByLine /
+  // compareBudgetByLine. This mirrors the IncomeStatement hierarchy 1:1.
+  type Block = {
+    header: any | null;        // level-1 row
+    children: any[];           // level-3 rows (editable leaves)
+    totals: any[];             // level-16 / level-24 rows (computed)
+    sectionTotal: any | null;  // last total in block — for inline collapsed value
+    isExpense: boolean;
+  };
+
+  const blocks: Block[] = useMemo(() => {
+    const out: Block[] = [];
+    let cur: Block | null = null;
+    for (const line of lines) {
+      const lvl = line.hierarchyLevel;
+      if (lvl === 1) {
+        if (cur) out.push(cur);
+        cur = {
+          header: line,
+          children: [],
+          totals: [],
+          sectionTotal: null,
+          isExpense: /expense/i.test(line.lineItem || ""),
+        };
+      } else if (cur) {
+        if (lvl >= 16) cur.totals.push(line);
+        else cur.children.push(line);
+      } else {
+        if (!out.length || out[out.length - 1].header) {
+          out.push({ header: null, children: [], totals: [], sectionTotal: null, isExpense: false });
+        }
+        const last = out[out.length - 1];
+        if (lvl >= 16) last.totals.push(line);
+        else last.children.push(line);
+      }
+    }
+    if (cur) out.push(cur);
+    for (const b of out) {
+      if (b.totals.length) b.sectionTotal = b.totals[b.totals.length - 1];
+    }
+    return out;
   }, [lines]);
 
+  // Default: all sections collapsed.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const yearOptions = useMemo(() => {
@@ -972,18 +1009,154 @@ function BudgetVsActuals({
     } finally { setSaving(null); }
   }
 
-  // Total budget vs total YTD actual to give a roll-up at the top.
+  // Top-line totals across budgetable leaves only (level-3 rows).
   const totals = useMemo(() => {
     let budgetSum = 0;
     let ytdSum = 0;
-    for (const l of budgetableLines) {
-      const li = (l.lineItem || "").trim();
-      const b = budgetByLine.get(li)?.annualBudget || 0;
-      budgetSum += b;
-      ytdSum += l.yearToDate || 0;
+    for (const b of blocks) {
+      for (const c of b.children) {
+        const li = (c.lineItem || "").trim();
+        budgetSum += budgetByLine.get(li)?.annualBudget || 0;
+        ytdSum += c.yearToDate || 0;
+      }
     }
     return { budgetSum, ytdSum };
-  }, [budgetableLines, budgetByLine]);
+  }, [blocks, budgetByLine]);
+
+  // Render a single row. Header rows (level-1) accept onClick to toggle expand
+  // and surface the matched section TOTAL inline when collapsed. Level-3 rows
+  // are the only editable leaves. Level-16/24 rows are subtotals/grand totals
+  // with budget pulled from budgetByLine when present (Yardi syncs subtotals
+  // too) but never editable.
+  function renderRow(
+    line: any,
+    key: string | number,
+    opts: {
+      isHeader?: boolean;
+      isOpen?: boolean;
+      onClick?: () => void;
+      budgetOverride?: number | null;
+      compareBudgetOverride?: number | null;
+      ytdOverride?: number | null;
+      bold?: boolean;
+      topBorder?: boolean;
+    } = {}
+  ) {
+    const li = (line.lineItem || "").trim();
+    const lvl = line.hierarchyLevel;
+    const isLevel24 = lvl === 24;
+    const isLevel16 = lvl === 16;
+    const isLevel3 = lvl === 3;
+    const isLevel1 = lvl === 1;
+
+    const indent = isLevel1 ? 0 : isLevel3 ? 24 : isLevel16 ? 16 : 0;
+
+    const entry = budgetByLine.get(li);
+    const isSynced = !!entry?.isSynced;
+    const budgetRaw = opts.budgetOverride !== undefined && opts.budgetOverride !== null
+      ? opts.budgetOverride
+      : (entry?.annualBudget || 0);
+    const compareBudget = opts.compareBudgetOverride !== undefined && opts.compareBudgetOverride !== null
+      ? opts.compareBudgetOverride
+      : (compareBudgetByLine.get(li) || 0);
+    const ytd = opts.ytdOverride !== undefined && opts.ytdOverride !== null
+      ? opts.ytdOverride
+      : (line.yearToDate || 0);
+
+    const variance = ytd - budgetRaw;
+    const pctUsed = budgetRaw > 0 ? (ytd / budgetRaw) * 100 : 0;
+    const draft = drafts[li];
+    const editing = draft !== undefined;
+
+    // Inline edit only on level-3 leaves and only when not Yardi-synced.
+    const editable = isLevel3 && !isSynced;
+
+    const rowClass = [
+      "grid grid-cols-[1fr_120px_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px] items-center",
+      opts.topBorder ? "border-t-2 border-[#18181b] dark:border-[#fafafa]" : "border-t border-[#f4f4f5] dark:border-[#27272a]",
+      isLevel24 ? "bg-[#f4f4f5] dark:bg-[#27272a] font-bold text-[#18181b] dark:text-[#fafafa]" :
+        isLevel16 ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]" :
+        opts.bold ? "font-semibold text-[#18181b] dark:text-[#fafafa]" :
+        "text-[#18181b] dark:text-[#fafafa]",
+      opts.onClick ? "cursor-pointer hover:bg-[#fafafa]/50 dark:hover:bg-[#27272a]/40" : "",
+    ].filter(Boolean).join(" ");
+
+    const labelClass = [
+      "truncate flex items-center gap-1",
+      isLevel1 ? "uppercase tracking-wide font-semibold text-[#18181b] dark:text-[#fafafa] select-none" : "",
+      isLevel24 ? "uppercase tracking-wide" : "",
+    ].filter(Boolean).join(" ");
+
+    const showBudget = budgetRaw !== 0;
+    const showYtd = ytd !== 0;
+
+    return (
+      <div key={key} className={rowClass} onClick={opts.onClick}>
+        <span style={{ paddingLeft: indent }} className={labelClass}>
+          {opts.isHeader && (
+            <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] inline-block w-3">
+              {opts.isOpen ? "▼" : "▶"}
+            </span>
+          )}
+          {li}
+          {isSynced && isLevel3 && (
+            <span className="text-[9px] font-medium text-[#16a34a] bg-[#dcfce7] dark:bg-[#14532d]/50 dark:text-[#86efac] px-1.5 py-0.5 rounded uppercase tracking-wide">
+              Yardi
+            </span>
+          )}
+        </span>
+        <span className="text-right" onClick={editable ? (e) => e.stopPropagation() : undefined}>
+          {editable ? (
+            <input
+              type="number"
+              value={editing ? draft : (budgetRaw || "")}
+              placeholder="—"
+              onChange={e => setDrafts(d => ({ ...d, [li]: e.target.value }))}
+              className="w-full text-[12px] text-right px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
+            />
+          ) : (
+            <span
+              title={isSynced ? "Synced from Yardi 12-Month Budget — manual entry disabled" : undefined}
+              className="block w-full text-[12px] text-right px-2 py-1 text-[#18181b] dark:text-[#fafafa]"
+            >
+              {showBudget ? formatCurrency(budgetRaw) : "—"}
+            </span>
+          )}
+        </span>
+        <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">
+          {compareBudget > 0 ? formatCurrency(compareBudget) : "—"}
+        </span>
+        <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">
+          {showYtd ? formatCurrency(ytd) : "—"}
+        </span>
+        <span className={`text-right ${budgetRaw > 0 && variance > 0 ? "text-[#dc2626]" : budgetRaw > 0 && variance < 0 ? "text-[#16a34a]" : "text-[#a1a1aa]"}`}>
+          {budgetRaw > 0 ? formatCurrency(variance) : "—"}
+        </span>
+        <span className={`text-right ${budgetRaw > 0 && pctUsed > 100 ? "text-[#dc2626] font-medium" : budgetRaw > 0 && pctUsed > 80 ? "text-[#d97706]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
+          {budgetRaw > 0 ? `${Math.round(pctUsed)}%` : "—"}
+        </span>
+        <span className="text-right" onClick={editable ? (e) => e.stopPropagation() : undefined}>
+          {editable && editing && (
+            <button
+              onClick={() => handleSave(li)}
+              disabled={saving === li}
+              className="text-[10px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] px-2 py-0.5 rounded cursor-pointer disabled:opacity-40"
+            >
+              {saving === li ? "…" : "Save"}
+            </button>
+          )}
+        </span>
+      </div>
+    );
+  }
+
+  if (!lines.length) {
+    return (
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-8 text-center">
+        <p className="text-[13px] text-[#71717a] dark:text-[#a1a1aa]">No income statement data yet. Run a Yardi sync to populate.</p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -1041,75 +1214,59 @@ function BudgetVsActuals({
           <span className="text-right">% Used</span>
           <span></span>
         </div>
-        {budgetableLines.map((line: any, i: number) => {
-          const li = (line.lineItem || "").trim();
-          const indent = Math.max(0, (line.hierarchyLevel - 1)) * 16;
-          const entry = budgetByLine.get(li);
-          const budget = entry?.annualBudget || 0;
-          const compareBudget = compareBudgetByLine.get(li) || 0;
-          const isSynced = !!entry?.isSynced;
-          const ytd = line.yearToDate || 0;
-          const variance = ytd - budget;
-          const pctUsed = budget > 0 ? (ytd / budget) * 100 : 0;
-          const draft = drafts[li];
-          const editing = draft !== undefined;
+
+        {blocks.map((block, bi) => {
+          const headerLi = block.header ? (block.header.lineItem || "").trim() : "";
+          const isOpen = block.header ? !!expanded[headerLi] : true;
+
+          // Bigger visual gap when crossing the income/expense boundary.
+          const prev = bi > 0 ? blocks[bi - 1] : null;
+          const gapClass =
+            bi === 0
+              ? ""
+              : prev && prev.isExpense !== block.isExpense
+                ? "mt-2 border-t-2 border-[#e4e4e7] dark:border-[#3f3f46]"
+                : "";
+
+          // When collapsed, surface the section's matched TOTAL row's values
+          // inline (budget + YTD + compareBudget) so the section reads as a
+          // one-liner without needing to expand.
+          let inlineBudget: number | null = null;
+          let inlineCompareBudget: number | null = null;
+          let inlineYtd: number | null = null;
+          if (block.header && !isOpen && block.sectionTotal) {
+            const totalLi = (block.sectionTotal.lineItem || "").trim();
+            inlineBudget = budgetByLine.get(totalLi)?.annualBudget || 0;
+            inlineCompareBudget = compareBudgetByLine.get(totalLi) || 0;
+            inlineYtd = block.sectionTotal.yearToDate || 0;
+          }
+
           return (
-            <div
-              key={i}
-              className="grid grid-cols-[1fr_120px_120px_120px_110px_80px_70px] px-4 py-1.5 text-[12px] text-[#18181b] dark:text-[#fafafa] border-t border-[#f4f4f5] dark:border-[#27272a] items-center"
-            >
-              <span style={{ paddingLeft: indent }} className="truncate flex items-center gap-1">
-                {li}
-                {isSynced && (
-                  <span className="text-[9px] font-medium text-[#16a34a] bg-[#dcfce7] dark:bg-[#14532d]/50 dark:text-[#86efac] px-1.5 py-0.5 rounded uppercase tracking-wide">
-                    Yardi
-                  </span>
-                )}
-              </span>
-              <span className="text-right">
-                {isSynced ? (
-                  // Read-only — Yardi sync overwrites manual input on each run
-                  <span
-                    title="Synced from Yardi 12-Month Budget — manual entry disabled"
-                    className="block w-full text-[12px] text-right px-2 py-1 text-[#18181b] dark:text-[#fafafa]"
-                  >
-                    {budget > 0 ? formatCurrency(budget) : "—"}
-                  </span>
-                ) : (
-                  <input
-                    type="number"
-                    value={editing ? draft : (budget || "")}
-                    placeholder="—"
-                    onChange={e => setDrafts(d => ({ ...d, [li]: e.target.value }))}
-                    className="w-full text-[12px] text-right px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa]"
-                  />
-                )}
-              </span>
-              <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">{compareBudget > 0 ? formatCurrency(compareBudget) : "—"}</span>
-              <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">{ytd !== 0 ? formatCurrency(ytd) : "—"}</span>
-              <span className={`text-right ${variance > 0 ? "text-[#dc2626]" : variance < 0 ? "text-[#16a34a]" : "text-[#a1a1aa]"}`}>
-                {budget > 0 ? formatCurrency(variance) : "—"}
-              </span>
-              <span className={`text-right ${pctUsed > 100 ? "text-[#dc2626] font-medium" : pctUsed > 80 ? "text-[#d97706]" : "text-[#71717a] dark:text-[#a1a1aa]"}`}>
-                {budget > 0 ? `${Math.round(pctUsed)}%` : "—"}
-              </span>
-              <span className="text-right">
-                {!isSynced && editing && (
-                  <button
-                    onClick={() => handleSave(li)}
-                    disabled={saving === li}
-                    className="text-[10px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] px-2 py-0.5 rounded cursor-pointer disabled:opacity-40"
-                  >
-                    {saving === li ? "…" : "Save"}
-                  </button>
-                )}
-              </span>
+            <div key={bi} className={gapClass}>
+              {block.header && renderRow(block.header, `h-${bi}`, {
+                isHeader: true,
+                isOpen,
+                onClick: () => setExpanded(s => ({ ...s, [headerLi]: !s[headerLi] })),
+                budgetOverride: inlineBudget,
+                compareBudgetOverride: inlineCompareBudget,
+                ytdOverride: inlineYtd,
+              })}
+
+              {isOpen && block.children.map((c, ci) => renderRow(c, `c-${bi}-${ci}`))}
+
+              {isOpen && block.totals.map((t, ti) => {
+                const isGrand = t.hierarchyLevel === 24;
+                return renderRow(t, `t-${bi}-${ti}`, {
+                  bold: isGrand,
+                  topBorder: isGrand,
+                });
+              })}
             </div>
           );
         })}
       </div>
       <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-2">
-        Tip: paste budget figures directly into each row. Variance is YTD actual minus budget — positive means over budget on expense rows, under on income rows.
+        Tip: click a section header to expand. Inline-edit budget on leaf rows; subtotals and grand totals are computed from Yardi.
       </p>
     </div>
   );
