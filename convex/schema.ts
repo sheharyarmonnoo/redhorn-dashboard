@@ -79,6 +79,12 @@ export default defineSchema({
     isRecurring: v.optional(v.boolean()),
     recurFrequency: v.optional(v.string()), // "monthly" | "quarterly" | "biannually" | "annually"
     nextDueDate: v.optional(v.string()),    // ISO date when the next instance is due
+    meetingNotes: v.optional(v.array(v.object({
+      id: v.string(),
+      text: v.string(),
+      author: v.string(),
+      createdAt: v.number(),
+    }))),
   })
     .index("by_unit", ["unitId"])
     .index("by_property", ["propertyId"]),
