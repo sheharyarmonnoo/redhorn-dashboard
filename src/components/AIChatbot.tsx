@@ -126,23 +126,18 @@ export default function AIChatbot() {
 
   return (
     <>
-      {/* Floating button — flips to a close pill when the drawer is open so
-          the bottom-right corner gives a second affordance for dismissing
-          (alongside the backdrop click + the header X). */}
-      <button
-        onClick={() => setOpen(v => !v)}
-        aria-label={open ? "Close AI assistant" : "Open AI assistant"}
-        className={`fixed bottom-5 right-5 z-[60] flex items-center gap-2 rounded-full px-4 py-3 shadow-lg shadow-black/20 hover:opacity-90 transition-all ${
-          open
-            ? "bg-[#dc2626] text-white"
-            : "bg-[#18181b] dark:bg-[#fafafa] text-[#fafafa] dark:text-[#18181b]"
-        }`}
-      >
-        {open ? <X className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
-        <span className="text-[13px] font-medium hidden sm:inline">
-          {open ? "Close" : "Ask AI"}
-        </span>
-      </button>
+      {/* Floating button — only when the drawer is closed. Dismissing the
+          drawer is handled by the header X and the backdrop click. */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Open AI assistant"
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-[#18181b] dark:bg-[#fafafa] text-[#fafafa] dark:text-[#18181b] px-4 py-3 shadow-lg shadow-black/20 hover:opacity-90 transition-all"
+        >
+          <Sparkles className="w-4 h-4" />
+          <span className="text-[13px] font-medium hidden sm:inline">Ask AI</span>
+        </button>
+      )}
 
       {/* Backdrop — click anywhere outside the drawer to close. Lighter on
           desktop so the dashboard stays partially visible behind the panel.
@@ -262,13 +257,14 @@ export default function AIChatbot() {
             </div>
           )}
 
-          {/* Message list — `key` on activeThreadId resets the wrapper on
-              thread switch so React re-mounts and the tailwind fade-in
-              animates each new conversation rather than snapping. */}
+          {/* Message list — `key` on activeThreadId remounts the wrapper on
+              thread switch so each new conversation slides in from the right
+              instead of snapping. We use a slide+fade (24px translate + opacity)
+              for ~220ms so the user sees the panel actually transition. */}
           <div className={`flex-1 overflow-y-auto px-4 py-3 ${showThreadList ? "hidden sm:block" : ""}`}>
             <div
               key={activeThreadId || "empty"}
-              style={{ animation: "rh-fade-in 180ms ease-out" }}
+              style={{ animation: "rh-slide-in-right 220ms cubic-bezier(0.2, 0.8, 0.2, 1)" }}
             >
               {messages.length === 0 ? (
                 <EmptyState propertyName={property?.name} onPick={(s) => setDraft(s)} />
