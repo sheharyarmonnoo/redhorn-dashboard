@@ -219,8 +219,22 @@ export default function AIChatbot() {
         {/* Body */}
         <div className="flex-1 overflow-hidden flex">
           {/* Thread list (collapsible — overlays the conversation on mobile) */}
-          {showThreadList && (
-            <div className="w-full sm:w-44 flex-shrink-0 border-r border-[#e4e4e7] dark:border-[#27272a] overflow-y-auto bg-[#fafafa] dark:bg-[#09090b]">
+          {/* Conversation list — always in the DOM so toggling animates the
+              width (0 → 176px on desktop, 0 → 100% on mobile) instead of
+              snapping into place. The inner content also fades + translates
+              from -8px so it doesn't pop. `overflow-hidden` clips children
+              while the panel collapses so we don't see a flash of content. */}
+          <div
+            aria-hidden={!showThreadList}
+            className={`flex-shrink-0 overflow-hidden border-r border-[#e4e4e7] dark:border-[#27272a] bg-[#fafafa] dark:bg-[#09090b] transition-[width] duration-200 ease-out ${
+              showThreadList ? "w-full sm:w-44" : "w-0"
+            }`}
+          >
+            <div
+              className={`w-full sm:w-44 h-full overflow-y-auto transition-all duration-200 ease-out ${
+                showThreadList ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2 pointer-events-none"
+              }`}
+            >
               <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-[#a1a1aa] font-medium">
                 Conversations
               </div>
@@ -255,7 +269,7 @@ export default function AIChatbot() {
                 ))
               )}
             </div>
-          )}
+          </div>
 
           {/* Message list — `key` on activeThreadId remounts the wrapper on
               thread switch so each new conversation slides in from the right
