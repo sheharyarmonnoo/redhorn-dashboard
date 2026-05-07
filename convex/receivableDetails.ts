@@ -65,6 +65,40 @@ export const bulkInsertByCode = mutation({
   },
 });
 
+/**
+ * Diagnostic: probe ledger coverage for a list of tenant names. Returns the
+ * count of receivable_detail rows per (normalized) name plus the distinct
+ * units that show up under each name. Used to track down "why doesn't this
+ * tenant's ledger render in the drawer".
+ */
+export const probeNamesByCode = query({
+  args: { propertyCode: v.string(), names: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const property = await ctx.db
+      .query("properties")
+      .withIndex("by_code", (q) => q.eq("code", args.propertyCode))
+      .first();
+    if (!property) return { error: "property not found", names: args.names };
+    const all = await ctx.db
+      .query("receivable_details")
+      .withIndex("by_property", (q) => q.eq("propertyId", property._id))
+      .take(5000);
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const result: any[] = [];
+    for (const target of args.names) {
+      const t = norm(target);
+      const matches = all.filter((r) => {
+        const candidate = norm(r.tenantName || "");
+        return candidate === t || candidate.includes(t) || t.includes(candidate.split(" ").slice(0, 2).join(" "));
+      });
+      const units = Array.from(new Set(matches.map((m) => m.unit || "(no unit)"))).sort();
+      const distinctNames = Array.from(new Set(matches.map((m) => m.tenantName))).sort();
+      result.push({ query: target, rows: matches.length, units, distinctNames });
+    }
+    return { propertyCode: args.propertyCode, totalLedgerRows: all.length, hits: result };
+  },
+});
+
 export const listByProperty = query({
   args: {
     propertyId: v.id("properties"),

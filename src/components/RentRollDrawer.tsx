@@ -67,15 +67,32 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   useEffect(() => { setTab("details"); }, [tenant?.unit, tenant?.propertyId]);
 
   // Pull all receivable_details for this property; filter to this tenant.
+  // Match by UNIT instead of name. Names diverge between rent-roll and
+  // ledger (Yardi truncates, adds DBAs, splits lessor/operator names) so
+  // unit is the only stable join key. Multi-unit leases store
+  // comma-separated units identically on both sides — exact match works.
+  // Fallback to name normalization when unit is missing on the tenant row.
   const allRows = useReceivableDetails(tenant?.propertyId);
   const tenantTx = useMemo(() => {
-    if (!tenant?.tenant) return [];
-    const key = normalizeTenantName(tenant.tenant);
+    if (!tenant) return [];
+    const tenantUnit = (tenant.unit || "").trim().toLowerCase();
+    const tenantUnitTokens = tenantUnit.split(",").map((s: string) => s.trim()).filter(Boolean);
+    const nameKey = tenant.tenant ? normalizeTenantName(tenant.tenant) : "";
     return allRows
-      .filter((r: any) => normalizeTenantName(r.tenantName || "") === key)
+      .filter((r: any) => {
+        const rowUnit = (r.unit || "").trim().toLowerCase();
+        if (rowUnit && tenantUnitTokens.length > 0) {
+          // Direct match (multi-unit on both sides) OR any token overlap.
+          if (rowUnit === tenantUnit) return true;
+          const rowTokens = rowUnit.split(",").map((s: string) => s.trim()).filter(Boolean);
+          return rowTokens.some((t: string) => tenantUnitTokens.includes(t));
+        }
+        // Fallback: name match for ledger rows that didn't get a unit.
+        return nameKey && normalizeTenantName(r.tenantName || "") === nameKey;
+      })
       .filter((r: any) => r.transactionDate || r.description || r.charges !== 0 || r.receipts !== 0)
       .sort((a: any, b: any) => (a.transactionDate || "").localeCompare(b.transactionDate || ""));
-  }, [allRows, tenant?.tenant]);
+  }, [allRows, tenant?.tenant, tenant?.unit]);
 
   const electricTx = useMemo(() => tenantTx.filter((r: any) => /electric|electricity|cam-elec/i.test(r.description || "") || /electric|cam-elec/i.test(r.chargeCode || "")), [tenantTx]);
   const recoveriesTx = useMemo(() => tenantTx.filter((r: any) => {

@@ -28,16 +28,29 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
 
   const tenant = tenantProp ?? cached;
 
-  // Per-tenant transaction history from receivable_details
+  // Per-tenant transaction history from receivable_details. Match by UNIT,
+  // not name — Yardi truncates / appends DBAs to ledger names, so unit is
+  // the only stable join key. Fallback to name normalization when a ledger
+  // row is missing its unit.
   const allRows = useReceivableDetails(tenant?.propertyId);
   const tenantTx = useMemo(() => {
-    if (!tenant?.tenant) return [];
-    const key = normalizeTenantName(tenant.tenant);
+    if (!tenant) return [];
+    const tenantUnit = (tenant.unit || "").trim().toLowerCase();
+    const tenantUnitTokens = tenantUnit.split(",").map((s: string) => s.trim()).filter(Boolean);
+    const nameKey = tenant.tenant ? normalizeTenantName(tenant.tenant) : "";
     return allRows
-      .filter((r: any) => normalizeTenantName(r.tenantName || "") === key)
+      .filter((r: any) => {
+        const rowUnit = (r.unit || "").trim().toLowerCase();
+        if (rowUnit && tenantUnitTokens.length > 0) {
+          if (rowUnit === tenantUnit) return true;
+          const rowTokens = rowUnit.split(",").map((s: string) => s.trim()).filter(Boolean);
+          return rowTokens.some((t: string) => tenantUnitTokens.includes(t));
+        }
+        return nameKey && normalizeTenantName(r.tenantName || "") === nameKey;
+      })
       .filter((r: any) => r.transactionDate || r.description || r.charges !== 0 || r.receipts !== 0)
       .sort((a: any, b: any) => (a.transactionDate || "").localeCompare(b.transactionDate || ""));
-  }, [allRows, tenant?.tenant]);
+  }, [allRows, tenant?.tenant, tenant?.unit]);
 
   const electricTx = useMemo(() => tenantTx.filter((r: any) => /electric|electricity|cam-elec/i.test(r.description || "") || /electric|cam-elec/i.test(r.chargeCode || "")), [tenantTx]);
   const recoveriesTx = useMemo(() => tenantTx.filter((r: any) => {
