@@ -270,15 +270,28 @@ export default function RentRollPage() {
             cellRenderer: CurrencyCellRenderer },
         ],
       },
-      // Per-tenant current-month charges from the receivable detail. Visible
-      // by default alongside Rent so the user sees in-place CAM / Electric /
-      // Insurance billbacks at a glance.
-      { field: "camCharge", headerName: "CAM", width: 110,
-        cellRenderer: CurrencyCellRenderer },
-      { field: "electricCharge", headerName: "Electric Chg", width: 120,
-        cellRenderer: CurrencyCellRenderer },
-      { field: "insuranceCharge", headerName: "Insurance", width: 110,
-        cellRenderer: CurrencyCellRenderer },
+      // CAM / Electric / Insurance billbacks group — CAM / SF stays visible;
+      // CAM, Electric, Insurance dollar amounts reveal on expand. Per-SF is
+      // the comparable rate across tenants of different sizes.
+      {
+        headerName: "",
+        marryChildren: true,
+        children: [
+          { field: "camPerSF", headerName: "CAM / SF", width: 110,
+            valueGetter: (p: any) => {
+              const d = p.data || {};
+              if (d.camCharge > 0 && d.sqft > 0) return d.camCharge / d.sqft;
+              return 0;
+            },
+            valueFormatter: (p: any) => p.value > 0 ? `$${p.value.toFixed(2)}/SF` : "—" },
+          { field: "camCharge", headerName: "CAM", width: 110, columnGroupShow: "open",
+            cellRenderer: CurrencyCellRenderer },
+          { field: "electricCharge", headerName: "Electric Chg", width: 120, columnGroupShow: "open",
+            cellRenderer: CurrencyCellRenderer },
+          { field: "insuranceCharge", headerName: "Insurance", width: 110, columnGroupShow: "open",
+            cellRenderer: CurrencyCellRenderer },
+        ],
+      },
       // Current group — Current Balance stays visible; Current Charges
       // reveals on expand.
       {
