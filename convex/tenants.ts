@@ -101,6 +101,28 @@ export const updateNotes = mutation({
   },
 });
 
+/**
+ * One-off cleanup: wipe `notes` on every tenant row across every property.
+ * The drawer no longer surfaces tenant.notes (those values came from Yardi
+ * imports + legacy direct writes and the user wants them gone) so this
+ * just clears stale data so nothing can pop back up if we ever re-enable
+ * that surface. Idempotent.
+ */
+export const clearAllNotes = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("tenants").collect();
+    let cleared = 0;
+    for (const t of all) {
+      if (t.notes) {
+        await ctx.db.patch(t._id, { notes: "" });
+        cleared++;
+      }
+    }
+    return { scanned: all.length, cleared };
+  },
+});
+
 export const updateDelinquency = mutation({
   args: {
     id: v.id("tenants"),

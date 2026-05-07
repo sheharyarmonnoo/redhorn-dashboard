@@ -87,7 +87,10 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   if (!tenant) return null;
 
   // Seed note from tenant data if no log entries exist (matches UnitDetailPanel)
-  const seedNote = !seedDismissed && tenant.notes && notesLog.length === 0 ? tenant.notes : null;
+  // Yardi-imported notes are no longer surfaced — only user-authored notes
+  // (unit_notes table) render. The tenant.notes field stays in the schema
+  // for now but is intentionally hidden across the UI.
+  const seedNote: string | null = null;
 
   async function handleAddNote() {
     if (!notesDraft.trim() || !tenant?.propertyId || !tenant?.unit) return;

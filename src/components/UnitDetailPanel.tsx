@@ -85,7 +85,9 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
   const ledger: any[] = [];
 
   // Seed note from tenant data if no log entries exist
-  const seedNote = !seedDismissed && tenant.notes && notesLog.length === 0 ? tenant.notes : null;
+  // Yardi-imported notes are no longer surfaced — only user-authored notes
+  // (unit_notes table) render across the UI.
+  const seedNote: string | null = null;
 
   async function handleAddNote() {
     if (!notesDraft.trim() || !tenant) return;
