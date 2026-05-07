@@ -167,7 +167,7 @@ export default function RentRollPage() {
       // Tenant group — Tenant + Status + Electric stay visible when collapsed;
       // Lease Type / Lease Start / Lease End reveal on expand.
       {
-        headerName: "Tenant",
+        headerName: "",
         marryChildren: true,
         children: [
           { field: "tenant", headerName: "Tenant", minWidth: 180, flex: isMobile ? 0 : 1, width: isMobile ? 180 : undefined,
@@ -251,7 +251,7 @@ export default function RentRollPage() {
       // Rent group — Rent / SF stays visible; Rent and Security Deposit
       // reveal on expand.
       {
-        headerName: "Rent",
+        headerName: "",
         marryChildren: true,
         children: [
           { field: "monthlyRent", headerName: "Rent", width: 110, columnGroupShow: "open",
@@ -279,7 +279,7 @@ export default function RentRollPage() {
       // Current group — Current Balance stays visible; Current Charges
       // reveals on expand.
       {
-        headerName: "Current",
+        headerName: "",
         marryChildren: true,
         children: [
           { field: "currentMonthCharges", headerName: "Curr Charges", width: 130, columnGroupShow: "open",
@@ -393,7 +393,7 @@ export default function RentRollPage() {
       </div>
 
       {/* AG Grid Table */}
-      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: "calc(100vh - 180px)", minHeight: 500 }}>
+      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: "min(calc(100vh - 220px), 700px)", minHeight: 350 }}>
         <AgGridReact
           ref={gridRef}
           rowData={tenants}
@@ -413,7 +413,7 @@ export default function RentRollPage() {
           animateRows={true}
           pagination={true}
           paginationAutoPageSize={false}
-          paginationPageSize={20}
+          paginationPageSize={50}
           suppressRowHoverHighlight={false}
           rowBuffer={20}
           cacheBlockSize={500}
