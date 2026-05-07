@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { Mail } from "lucide-react";
+import { Mail, Phone, Pencil, Check, X } from "lucide-react";
 import { formatCurrency, normalizeTenantName, useReceivableDetails, useProperties, useUnitNotes, useTenantMutations } from "@/hooks/useConvexData";
 import EmailComposer, { type EmailContext } from "./EmailComposer";
 import ConfirmDialog from "./ConfirmDialog";
@@ -49,13 +49,21 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
     tenant?.propertyId,
     tenant?.unit
   );
-  const { updateNotes: updateTenantNotes } = useTenantMutations();
+  const { updateNotes: updateTenantNotes, setContactOverride } = useTenantMutations();
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactDraft, setContactDraft] = useState<{ tenantContactName: string; tenantEmail: string; tenantPhone: string }>({ tenantContactName: "", tenantEmail: "", tenantPhone: "" });
 
   useEffect(() => {
     setNotesDraft("");
     setEditingNoteId(null);
     setEditDraft("");
-  }, [tenant?.unit, tenant?.propertyId]);
+    setEditingContact(false);
+    setContactDraft({
+      tenantContactName: tenant?.tenantContactName || "",
+      tenantEmail: tenant?.tenantEmail || "",
+      tenantPhone: tenant?.tenantPhone || "",
+    });
+  }, [tenant?.unit, tenant?.propertyId, tenant?.tenantEmail, tenant?.tenantPhone, tenant?.tenantContactName]);
   useEffect(() => { setTab("details"); }, [tenant?.unit, tenant?.propertyId]);
 
   // Pull all receivable_details for this property; filter to this tenant.
@@ -130,6 +138,24 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
     }
   }
 
+  async function handleSaveContact() {
+    if (!tenant?.propertyId || !tenant?.unit) return;
+    try {
+      await setContactOverride({
+        propertyId: tenant.propertyId,
+        unit: tenant.unit,
+        fields: {
+          tenantContactName: contactDraft.tenantContactName.trim() || undefined,
+          tenantEmail: contactDraft.tenantEmail.trim() || undefined,
+          tenantPhone: contactDraft.tenantPhone.trim() || undefined,
+        },
+      });
+      setEditingContact(false);
+    } catch (err: any) {
+      alert(`Couldn't save contact: ${err?.message || err}`);
+    }
+  }
+
   async function confirmPendingDelete() {
     if (!pendingDelete) return;
     if (pendingDelete.kind === "log") {
@@ -167,6 +193,16 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
                 <Mail size={11} />
                 Tenant
               </button>
+            )}
+            {tenant.tenantPhone && (
+              <a
+                href={`tel:${tenant.tenantPhone.replace(/[^\d+]/g, "")}`}
+                className="flex items-center gap-1 text-[10px] font-medium text-[#16a34a] hover:bg-green-50 dark:hover:bg-green-950/30 px-2 py-1 rounded cursor-pointer"
+                title={`Call ${tenant.tenantPhone}`}
+              >
+                <Phone size={11} />
+                Call
+              </a>
             )}
             {property?.pmEmail && (
               <button
@@ -267,6 +303,95 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
             <Field label="Building">
               <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">{tenant.building || "—"}</p>
             </Field>
+          </div>
+
+          {/* Tenant Contact — editable email/phone/contact name override.
+              Persists to tenant_overrides so it survives the next Yardi sync. */}
+          <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Tenant Contact</p>
+              {editingContact ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={handleSaveContact}
+                    className="flex items-center gap-1 text-[10px] font-medium text-[#16a34a] hover:bg-green-50 dark:hover:bg-green-950/30 px-1.5 py-0.5 rounded cursor-pointer"
+                    title="Save"
+                  >
+                    <Check size={11} /> Save
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingContact(false);
+                      setContactDraft({
+                        tenantContactName: tenant?.tenantContactName || "",
+                        tenantEmail: tenant?.tenantEmail || "",
+                        tenantPhone: tenant?.tenantPhone || "",
+                      });
+                    }}
+                    className="flex items-center gap-1 text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#dc2626] px-1.5 py-0.5 rounded cursor-pointer"
+                    title="Cancel"
+                  >
+                    <X size={11} /> Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEditingContact(true)}
+                  className="flex items-center gap-1 text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+                  title="Edit contact"
+                >
+                  <Pencil size={11} /> Edit
+                </button>
+              )}
+            </div>
+            {editingContact ? (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={contactDraft.tenantContactName}
+                  onChange={e => setContactDraft({ ...contactDraft, tenantContactName: e.target.value })}
+                  placeholder="Contact name (e.g. John Smith)"
+                  className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
+                />
+                <input
+                  type="email"
+                  value={contactDraft.tenantEmail}
+                  onChange={e => setContactDraft({ ...contactDraft, tenantEmail: e.target.value })}
+                  placeholder="email@example.com"
+                  className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
+                />
+                <input
+                  type="tel"
+                  value={contactDraft.tenantPhone}
+                  onChange={e => setContactDraft({ ...contactDraft, tenantPhone: e.target.value })}
+                  placeholder="(555) 123-4567"
+                  className="w-full text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5 text-[12px]">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[#71717a] dark:text-[#a1a1aa]">Name</span>
+                  <span className="text-[#18181b] dark:text-[#fafafa]">{tenant.tenantContactName || <span className="text-[#a1a1aa] italic">—</span>}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[#71717a] dark:text-[#a1a1aa]">Email</span>
+                  {tenant.tenantEmail ? (
+                    <a href={`mailto:${tenant.tenantEmail}`} className="text-[#2563eb] dark:text-[#60a5fa] hover:underline truncate max-w-[60%]">{tenant.tenantEmail}</a>
+                  ) : (
+                    <span className="text-[#a1a1aa] italic">—</span>
+                  )}
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[#71717a] dark:text-[#a1a1aa]">Phone</span>
+                  {tenant.tenantPhone ? (
+                    <a href={`tel:${tenant.tenantPhone.replace(/[^\d+]/g, "")}`} className="text-[#2563eb] dark:text-[#60a5fa] hover:underline">{tenant.tenantPhone}</a>
+                  ) : (
+                    <span className="text-[#a1a1aa] italic">—</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Notes — timestamped, stackable (newest first) */}

@@ -306,13 +306,17 @@ export default function RentRollPage() {
           );
         },
       },
-      // Rent group — Rent / SF stays visible; Rent and Security Deposit
-      // reveal on expand.
+      // Rent group — In-Place Rent (monthly) is now always visible (was
+      // hidden behind columnGroupShow before). Annual In-Place Rent + Rent/SF
+      // are also visible; Security Deposit reveals on expand.
       {
         headerName: "",
         marryChildren: true,
         children: [
-          { field: "monthlyRent", headerName: "Rent", width: 110, columnGroupShow: "open",
+          { field: "monthlyRent", headerName: "In-Place Rent", width: 130,
+            cellRenderer: CurrencyCellRenderer },
+          { field: "annualInPlaceRent", headerName: "Annual In-Place", width: 140,
+            valueGetter: (p: any) => (p.data?.monthlyRent || 0) * 12,
             cellRenderer: CurrencyCellRenderer },
           { field: "monthlyRentPerSF", headerName: "Rent / SF", width: 110,
             valueGetter: (p: any) => {

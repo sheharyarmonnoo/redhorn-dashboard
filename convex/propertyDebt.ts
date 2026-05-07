@@ -16,6 +16,7 @@ export const upsert = mutation({
     propertyId: v.id("properties"),
     totalDebt: v.number(),
     monthlyDebtService: v.number(),
+    monthlyPrincipal: v.optional(v.number()),
     interestRate: v.optional(v.number()),
     lender: v.optional(v.string()),
     loanStartDate: v.optional(v.string()),

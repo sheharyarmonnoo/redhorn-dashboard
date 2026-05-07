@@ -426,6 +426,7 @@ export default defineSchema({
     propertyId: v.id("properties"),
     totalDebt: v.number(),                 // outstanding loan balance
     monthlyDebtService: v.number(),        // P&I (or interest-only) per month
+    monthlyPrincipal: v.optional(v.number()), // user-input principal portion of monthly payment
     interestRate: v.optional(v.number()),  // annual %, informational
     lender: v.optional(v.string()),
     loanStartDate: v.optional(v.string()),

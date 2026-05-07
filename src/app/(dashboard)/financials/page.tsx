@@ -755,6 +755,7 @@ function DebtPanel({
   const [form, setForm] = useState<DebtForm>({
     totalDebt: 0,
     monthlyDebtService: 0,
+    monthlyPrincipal: undefined,
     interestRate: undefined,
     lender: undefined,
     loanStartDate: undefined,
@@ -768,6 +769,7 @@ function DebtPanel({
       setForm({
         totalDebt: debt.totalDebt ?? 0,
         monthlyDebtService: debt.monthlyDebtService ?? 0,
+        monthlyPrincipal: debt.monthlyPrincipal,
         interestRate: debt.interestRate,
         lender: debt.lender,
         loanStartDate: debt.loanStartDate,
@@ -795,6 +797,9 @@ function DebtPanel({
           </DebtField>
           <DebtField label="Monthly Debt Service (P&I)">
             <NumInput value={form.monthlyDebtService} onChange={v => setForm({ ...form, monthlyDebtService: v })} prefix="$" />
+          </DebtField>
+          <DebtField label="Monthly Principal">
+            <NumInput value={form.monthlyPrincipal ?? 0} onChange={v => setForm({ ...form, monthlyPrincipal: v })} prefix="$" />
           </DebtField>
           <DebtField label="Interest Rate (%)">
             <NumInput value={form.interestRate ?? 0} onChange={v => setForm({ ...form, interestRate: v })} suffix="%" />
@@ -863,6 +868,13 @@ function DebtPanel({
         <div className="space-y-1.5 text-[12px]">
           <Row label="NOI (current period × 12)" value={formatCurrency(annualNOI)} />
           <Row label="Annual debt service" value={formatCurrency(annualDS)} />
+          {(form.monthlyPrincipal || 0) > 0 && (
+            <>
+              <Row label="Monthly principal repayment" value={formatCurrency(form.monthlyPrincipal || 0)} />
+              <Row label="Annual principal repayment" value={formatCurrency((form.monthlyPrincipal || 0) * 12)} />
+              <Row label="Monthly interest (P&I − Principal)" value={formatCurrency(Math.max(0, form.monthlyDebtService - (form.monthlyPrincipal || 0)))} />
+            </>
+          )}
           <div className="border-t border-[#e4e4e7] dark:border-[#3f3f46] pt-2 mt-2 flex items-center justify-between">
             <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">DSCR (NOI ÷ Debt Service)</p>
             <p className={`text-[18px] font-semibold tracking-tight ${
@@ -915,6 +927,7 @@ function Row({ label, value }: { label: string; value: string }) {
 interface DebtForm {
   totalDebt: number;
   monthlyDebtService: number;
+  monthlyPrincipal?: number;
   interestRate?: number;
   lender?: string;
   loanStartDate?: string;

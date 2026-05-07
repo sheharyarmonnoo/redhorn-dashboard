@@ -435,7 +435,10 @@ export function useTenantMutations() {
   const updateNotes = useMutation(api.tenants.updateNotes);
   const updateDelinquency = useMutation(api.tenants.updateDelinquency);
   const updateElectricPosted = useMutation(api.tenants.updateElectricPosted);
-  return { updateStatus, updateNotes, updateDelinquency, updateElectricPosted };
+  // Manual contact overrides — email / phone / contact name aren't in Yardi
+  // exports, so we layer them on via the tenant_overrides table.
+  const setContactOverride = useMutation(api.tenantOverrides.setOverride);
+  return { updateStatus, updateNotes, updateDelinquency, updateElectricPosted, setContactOverride };
 }
 
 // ===== HELPER: format currency =====
