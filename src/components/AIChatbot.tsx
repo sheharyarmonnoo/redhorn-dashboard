@@ -109,6 +109,8 @@ export default function AIChatbot() {
         threadId: threadId as any,
         userQuestion: text,
         propertyId: property?._id || undefined,
+        userName: user?.fullName || undefined,
+        userEmail: user?.primaryEmailAddress?.emailAddress || undefined,
       });
       if (!result?.ok && result?.error) setErrorMsg(result.error);
     } catch (err: any) {
