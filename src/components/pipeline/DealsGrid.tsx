@@ -80,7 +80,11 @@ export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter
 
   const columnDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
     const base: (ColDef | ColGroupDef)[] = [
-      { field: "name", headerName: "Name", width: 240, pinned: "left",
+      // Name column kept in the model so AG Grid persistence + the deal
+      // detail row.click handler still work, but hidden from view —
+      // pipeline rows are property-keyed and Stage / Address carry the
+      // identification.
+      { field: "name", headerName: "Name", width: 240, hide: true,
         cellRenderer: (p: any) => (
           <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{p.value || "—"}</span>
         ) },
