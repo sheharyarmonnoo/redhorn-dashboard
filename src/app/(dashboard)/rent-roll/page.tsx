@@ -176,7 +176,9 @@ export default function RentRollPage() {
         valueFormatter: (p: { value: string }) => p.value || "—" },
       // Days until lease expires + urgency band — replaces the old separate
       // /leases page. Hidden by default; users enable from column menu.
-      { field: "daysToExpiry", headerName: "Days Left", width: 100, type: "numericColumn",
+      { field: "daysToExpiry", headerName: "Lease Exp.", width: 110,
+        cellStyle: { textAlign: "left" } as any,
+        headerClass: "ag-left-aligned-header",
         valueGetter: (p: any) => {
           const to = p.data?.leaseTo;
           if (!to) return null;
@@ -232,6 +234,7 @@ export default function RentRollPage() {
           );
         },
       },
+      { field: "status", headerName: "Status", width: 130, cellRenderer: StatusCellRenderer, filter: true },
       { field: "monthlyRent", headerName: "Rent", width: 110, type: "numericColumn",
         cellRenderer: CurrencyCellRenderer },
       // Prefer the Show Detail rent roll's monthlyRentPerSF column; fall
@@ -284,7 +287,6 @@ export default function RentRollPage() {
         } },
       // Security Deposit, Monthly Electric ($ amount), and Past Due
       // intentionally hidden from the grid — drawer still surfaces them.
-      { field: "status", headerName: "Status", width: 130, cellRenderer: StatusCellRenderer, filter: true },
     ];
   }, [isMobile]);
 
