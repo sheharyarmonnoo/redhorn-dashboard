@@ -135,7 +135,7 @@ export default function AIChatbot() {
         <button
           onClick={() => setOpen(true)}
           aria-label="Open AI assistant"
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-[#18181b] dark:bg-[#fafafa] text-[#fafafa] dark:text-[#18181b] px-4 py-3 shadow-lg shadow-black/20 hover:opacity-90 transition-all"
+          className="fixed bottom-16 right-5 z-50 flex items-center gap-2 rounded-full bg-[#18181b] dark:bg-[#fafafa] text-[#fafafa] dark:text-[#18181b] px-4 py-3 shadow-lg shadow-black/20 hover:opacity-90 transition-all"
         >
           <Sparkles className="w-4 h-4" />
           <span className="text-[13px] font-medium hidden sm:inline">Ask AI</span>
