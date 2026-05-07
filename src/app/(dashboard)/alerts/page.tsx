@@ -826,23 +826,36 @@ function AlertDrawer({
   );
 }
 
+// Many alert rows carry placeholder values for unit ("—", "-", "n/a", "")
+// because the upstream mapper does `a.unit || "—"`. Treat those as missing
+// so we don't render "Following up on Unit —:" in emails.
+function hasRealUnit(unit: string | undefined | null): boolean {
+  if (!unit) return false;
+  const cleaned = unit.trim().toLowerCase();
+  if (!cleaned) return false;
+  if (/^[—–\-]+$/.test(cleaned)) return false;
+  if (cleaned === "n/a" || cleaned === "na" || cleaned === "none") return false;
+  return true;
+}
+
 function buildAlertEmail(
   alert: AlertRow,
   tenants: any[],
   pm: { name?: string; email?: string; company?: string } | null,
   propertyId?: string
 ): EmailContext {
+  const unitIsReal = hasRealUnit(alert.unit);
   // Prefer the tenant's email if we have it. Otherwise fall back to PM.
-  const t = alert.unit ? tenants.find((x: any) => (x.unit || "").toLowerCase() === alert.unit.toLowerCase()) : null;
+  const t = unitIsReal ? tenants.find((x: any) => (x.unit || "").toLowerCase() === alert.unit.toLowerCase()) : null;
   const tenantEmail = t?.tenantEmail;
   const toEmail = tenantEmail || pm?.email || "";
   const toName = tenantEmail ? (t?.tenantContactName || t?.tenant) : pm?.name;
 
   // Subject: if a title exists, use it (with optional " — Unit N" tail when
-  // we have a unit). Otherwise use the category, again with " — Unit N"
-  // only when a unit is set. Property-level alerts (no unit) don't get a
+  // we have a real unit). Otherwise use the category, again with " — Unit N"
+  // only when a real unit is set. Property-level alerts (no unit) don't get a
   // dangling " — Unit " in either case.
-  const unitTail = alert.unit ? ` — Unit ${alert.unit}` : "";
+  const unitTail = unitIsReal ? ` — Unit ${alert.unit}` : "";
   const subject = alert.title
     ? `${alert.title}${unitTail}`
     : `${alert.category}${unitTail}`;
@@ -860,7 +873,7 @@ function buildAlertEmail(
   let subject_intro: string;
   if (tenantEmail) {
     subject_intro = "I'm reaching out about your unit:";
-  } else if (alert.unit) {
+  } else if (unitIsReal) {
     subject_intro = alert.tenant
       ? `Following up on Unit ${alert.unit} — ${alert.tenant}:`
       : `Following up on Unit ${alert.unit}:`;
