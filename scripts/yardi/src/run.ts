@@ -4,7 +4,9 @@ import { runIncomeStatementForProperty } from "./reports/income-statement.js";
 import { runTotalUnitsForProperty } from "./reports/rent-roll.js";
 import { runReceivableDetailForProperty } from "./reports/receivable-detail.js";
 import { runRentRollFullForProperty } from "./reports/rent-roll-full.js";
-import { runTwelveMonthBudgetForProperty } from "./reports/twelve-month-budget.js";
+// runTwelveMonthBudgetForProperty intentionally not imported — budget is no
+// longer pulled from Yardi on the daily sync. Budget data is loaded once
+// per property from a manually-supplied xlsx (see scripts/import-lwp-budget).
 import { runTenancyScheduleForProperty } from "./reports/tenancy-schedule.js";
 // Held back:
 //   import { runPastDueForProperty } from "./reports/rent-roll.js";
@@ -105,20 +107,10 @@ async function main() {
         results.push({ property: property.name, propertyCode: property.convexCode, reportType: "rent_roll_full", ok: false, error: msg });
       }
 
-      // 12 Month Budget — Yardi's GlRepFinancial.aspx with ReportNum=8.
-      // Pulls a rolling 12-month window ending at `month`, drops it into
-      // line_budgets so the Financials → Budget vs Actuals tab is fed by
-      // real Yardi data instead of manual entry. Soft-fails so a budget
-      // hiccup doesn't break the rest of the sync.
-      try {
-        const periodStart = subtractMonths(month, 11);
-        const path = await runTwelveMonthBudgetForProperty(voyager, property, periodStart, month);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "twelve_month_budget", ok: true, path });
-      } catch (err: any) {
-        const msg = err?.message || String(err);
-        console.error(`   Budget FAILED — ${msg}`);
-        results.push({ property: property.name, propertyCode: property.convexCode, reportType: "twelve_month_budget", ok: false, error: msg });
-      }
+      // 12 Month Budget pull intentionally removed — see import comment at the
+      // top of this file. Budget rows in line_budgets are now seeded from a
+      // hand-supplied xlsx (one-shot scripts/import-lwp-budget) and stay
+      // stationary across syncs.
 
       // Tenancy Schedule — pulls the per-lease rent step rows so we know
       // every lease's NEXT scheduled rent escalation (date + new monthly
@@ -175,13 +167,6 @@ async function main() {
   } finally {
     await close();
   }
-}
-
-/** "2026-05" minus N months → "2025-06" for N=11. */
-function subtractMonths(monthIso: string, n: number): string {
-  const [y, m] = monthIso.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1 - n, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 main().catch(err => {
