@@ -65,7 +65,7 @@ export default function FinancialsPage() {
   const updateProperty = useMutation(api.properties.update);
   const { user } = useUser();
 
-  const [view, setView] = useState<"statement" | "trend" | "budget" | "debt">("statement");
+  const [view, setView] = useState<"statement" | "trend">("statement");
   const [budgetYear, setBudgetYear] = useState<string>(String(new Date().getFullYear()));
   const [budgetCompareYear, setBudgetCompareYear] = useState<string>(String(new Date().getFullYear() - 1));
   const { budgets, upsertBudget } = useLineBudgets(property?._id, budgetYear);
@@ -224,22 +224,16 @@ export default function FinancialsPage() {
       />
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
         <KPIBox label="Total Income" value={formatCurrency(totalIncome)} />
         <KPIBox label="Total Expense" value={formatCurrency(totalExpense)} color="text-[#dc2626]" />
         <KPIBox label="NOI" value={formatCurrency(noi)} color={noi >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"} />
         <KPIBox label="Recoveries" value={formatCurrency(recoveries.total)} />
-        <KPIBox
-          label="DSCR"
-          value={dscr === null ? "—" : `${dscr.toFixed(2)}×`}
-          color={dscr === null ? undefined : dscr >= 1.25 ? "text-[#16a34a]" : dscr >= 1.0 ? "text-[#d97706]" : "text-[#dc2626]"}
-          hint={dscr === null ? "Set debt service" : `NOI ÷ debt service`}
-        />
       </div>
 
       {/* Tab switcher */}
       <div className="flex gap-1 mb-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
-        {(["statement", "trend", "budget", "debt"] as const).map(t => (
+        {(["statement", "trend"] as const).map(t => (
           <button
             key={t}
             onClick={() => setView(t)}
@@ -249,7 +243,7 @@ export default function FinancialsPage() {
                 : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
             }`}
           >
-            {t === "statement" ? "Income Statement" : t === "trend" ? "Monthly Trend" : t === "budget" ? "Budget vs Actuals" : "Debt & DSCR"}
+            {t === "statement" ? "Income Statement" : "Monthly Trend"}
           </button>
         ))}
       </div>
@@ -271,57 +265,6 @@ export default function FinancialsPage() {
         </>
       )}
       {view === "trend" && <TrendTable trend={trend} formatMonth={formatMonth} />}
-      {view === "budget" && (
-        <BudgetVsActuals
-          lines={lines}
-          budgetByLine={budgetByLine}
-          compareBudgetByLine={compareBudgetByLine}
-          compareYear={budgetCompareYear}
-          setCompareYear={setBudgetCompareYear}
-          lastSyncDate={lastSyncDate}
-          year={budgetYear}
-          setYear={setBudgetYear}
-          onSaveBudget={async (lineItem, annualBudget) => {
-            if (!property?._id) return;
-            await upsertBudget({
-              propertyId: property._id as any,
-              year: budgetYear,
-              lineItem,
-              annualBudget,
-              updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
-            });
-          }}
-        />
-      )}
-      {view === "debt" && (
-        <div className="space-y-4">
-          <PmContactPanel
-            property={property}
-            onSave={async (form) => {
-              if (!property?._id) return;
-              await updateProperty({ id: property._id as any, ...form });
-            }}
-          />
-          <DebtPanel
-            debt={debt}
-            noi={noi}
-            dscr={dscr}
-            onSave={async (form) => {
-              if (!property?._id) return;
-              await upsertDebt({
-                propertyId: property._id as any,
-                ...form,
-                updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
-              });
-            }}
-            onClear={async () => {
-              if (!property?._id) return;
-              if (!window.confirm("Remove debt info for this property? DSCR will stop calculating until re-entered.")) return;
-              await clearDebt({ propertyId: property._id as any });
-            }}
-          />
-        </div>
-      )}
     </div>
   );
 }
