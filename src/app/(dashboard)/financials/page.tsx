@@ -1509,54 +1509,19 @@ function BudgetVsActualsHighLevel({
       }
     });
 
-    // Compute TOTAL INCOME, TOTAL OPERATING EXPENSE, NOI, NET INCOME via
-    // a separate walk that tracks income vs expense mode. The earlier walk
-    // didn't roll TOTAL OPERATING EXPENSE correctly because nested
-    // sub-section TOTALs (TOTAL COMMON AREA EXPENSES, etc.) reset the leaf
-    // accumulator before we reached the wrapping TOTAL OPERATING EXPENSE.
-    let mode: "income" | "expense" = "income";
-    const incomeLeaves: string[] = [];
-    const expenseLeaves: string[] = [];
+    // Authoritative override: for any TOTAL/NET row that exists DIRECTLY in
+    // line_budgets (because Yardi exports these subtotals in the 12-month
+    // budget), use that value rather than the leaf-rollup. The Yardi-computed
+    // numbers are correct by construction; rolling up leaves mis-classifies
+    // items under mixed sections like "OTHER INCOME & EXPENSE" that contain
+    // both interest income (added to revenue) and bad debt expense (subtracted).
     for (const l of lines) {
       const li = (l.lineItem || "").trim();
-      if (!li) continue;
-      const lvl = l.hierarchyLevel;
-      const isTotal = /^total\b|^net\b/i.test(li);
-      if (lvl === 1 && !isTotal && /operating\s+expense/i.test(li)) {
-        mode = "expense";
-      }
-      if (lvl === 3) {
-        if (mode === "income") incomeLeaves.push(li);
-        else expenseLeaves.push(li);
-      }
-    }
-    const sumLeaves = (names: string[]) => {
-      let m = 0, y = 0, any = false;
-      for (const n of names) {
-        const lb = leafBudget(n);
-        if (!lb) continue;
-        m += lb.month; y += lb.ytd;
-        if (lb.annual !== 0 || lb.month !== 0) any = true;
-      }
-      return { monthBudget: m, ytdBudget: y, hasBudget: any };
-    };
-    const incomeR = sumLeaves(incomeLeaves);
-    const opExpR = sumLeaves(expenseLeaves);
-    // Override the walk's values for the canonical 4 grand totals
-    for (const l of lines) {
-      const li = (l.lineItem || "").trim();
-      if (/^total\s+income\s*$/i.test(li)) {
-        result.set(li, incomeR);
-      }
-      if (/^total\s+(operating\s+)?expense/i.test(li)) {
-        result.set(li, opExpR);
-      }
-      if (/net\s+operating\s+income/i.test(li) || /^net\s+income\s*\(loss\)/i.test(li)) {
-        result.set(li, {
-          monthBudget: incomeR.monthBudget - opExpR.monthBudget,
-          ytdBudget: incomeR.ytdBudget - opExpR.ytdBudget,
-          hasBudget: incomeR.hasBudget || opExpR.hasBudget,
-        });
+      const isSubtotal = /^total\b|^net\b/i.test(li);
+      if (!isSubtotal) continue;
+      const direct = leafBudget(li);
+      if (direct && (direct.month !== 0 || direct.ytd !== 0 || direct.annual !== 0)) {
+        result.set(li, { monthBudget: direct.month, ytdBudget: direct.ytd, hasBudget: true });
       }
     }
 

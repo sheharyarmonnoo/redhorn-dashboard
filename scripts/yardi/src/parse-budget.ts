@@ -73,14 +73,14 @@ export function parseBudget(filePath: string): ParsedBudget {
 
     const trimmedLabel = rawLabel.trim();
 
-    // Skip subtotals/totals — Yardi adds these as leading-space-padded TOTAL rows
-    if (/^total\b|^net\s+income|^net\s+operating/i.test(trimmedLabel)) {
-      // Still register as ancestor at its indent level so child lookup works
-      const indent = rawLabel.length - rawLabel.trimStart().length;
-      const lvl = Math.max(0, Math.floor(indent / 1));
-      ancestors[lvl] = trimmedLabel;
-      continue;
-    }
+    // Subtotals/totals are kept (TOTAL INCOME, TOTAL OPERATING EXPENSE,
+    // NET OPERATING INCOME (LOSS), NET INCOME (LOSS)) so the Budget vs
+    // Actuals UI can read these structural values directly from the budget
+    // table — they're authoritative in Yardi's export and avoid having the
+    // UI try to roll up leaves itself (which mis-classifies items under
+    // sections like OTHER INCOME & EXPENSE that mix both kinds).
+    // We still register as ancestor at this indent level so child rows
+    // parented under the closest ancestor still resolve.
 
     const indent = rawLabel.length - rawLabel.trimStart().length;
     // Yardi's report uses 1-space indent per level. Leading-space-padded TOTAL
