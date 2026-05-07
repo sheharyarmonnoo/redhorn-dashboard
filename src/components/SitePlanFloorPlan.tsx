@@ -12,8 +12,11 @@ interface Props {
 }
 
 // Pure-SVG floor plan for Hollister A-building (executive suites). Coordinates
-// in a 1200x800 viewBox roughly trace the source map. Tweak any room's box if
-// the proportions drift from the printed layout.
+// in a 1200x800 viewBox were traced from the printed reference map by sampling
+// wall pixel positions and projecting them through:
+//   x = 90 + (image_x -  14) * 2.410   (image is 461 wide, walls span 14..429)
+//   y = 90 + (image_y -  19) * 1.910   (image is 400 tall, walls span 19..375)
+// so room boxes match the source proportions to within ~1 viewBox px.
 type Room = {
   unit?: string;     // Interactive — click opens UnitDetailPanel
   label?: string;    // Static label only (Common Area, restrooms, EXIT)
@@ -26,56 +29,70 @@ type Room = {
 };
 
 const ROOMS: Room[] = [
-  // Top row of executive suites
-  { unit: "A-107", x: 290, y: 100, w: 90, h: 110, type: "unit" },
-  { unit: "A-111", x: 380, y: 100, w: 90, h: 110, type: "unit" },
-  { unit: "A-106", x: 470, y: 100, w: 90, h: 110, type: "unit" },
-  { unit: "A-106A", x: 560, y: 100, w: 120, h: 110, type: "unit" },
-  { unit: "A-103", x: 680, y: 100, w: 220, h: 170, type: "unit" },
+  // ── Top strip (image y 19 → 107) ─────────────────────────────────────────
+  // Break Room/Kitchen 14→126, A-107 126→174, A-111 174→222,
+  // A-106 222→270, A-106A 270→345, A-103 345→429 (A-103 extends down to 141)
+  { label: "Break Room / Kitchen", x: 90,  y: 90, w: 270, h: 168, type: "common" },
+  { unit:  "A-107",                 x: 360, y: 90, w: 116, h: 168, type: "unit" },
+  { unit:  "A-111",                 x: 476, y: 90, w: 115, h: 168, type: "unit" },
+  { unit:  "A-106",                 x: 591, y: 90, w: 116, h: 168, type: "unit" },
+  { unit:  "A-106A",                x: 707, y: 90, w: 181, h: 168, type: "unit" },
+  // A-103: x 345→429 (888→1090), y 19→141 (90→323) — taller than rest of top row
+  { unit:  "A-103",                 x: 888, y: 90, w: 202, h: 233, type: "unit" },
 
-  // Top-left: Break Room/Kitchen with EXIT marker beside it (no box)
-  { label: "Break Room / Kitchen", x: 100, y: 100, w: 190, h: 110, type: "common" },
+  // EXIT door above Break Room (image x ~80, y ~10)
   { label: "EXIT", x: 200, y: 70, w: 50, h: 16, type: "exit" },
 
-  // Restrooms cluster
-  { label: "Womans", x: 100, y: 230, w: 70, h: 70, type: "common", fontSize: 12 },
-  { label: "Mens", x: 170, y: 230, w: 70, h: 70, type: "common", fontSize: 12 },
+  // Restroom cluster + A-108 sit at image y 107→138 (mapped 258→323)
+  { label: "Womans", x: 90,  y: 258, w: 76,  h: 65, type: "common", fontSize: 12 },
+  { label: "Mens",   x: 166, y: 258, w: 78,  h: 65, type: "common", fontSize: 12 },
+  { unit:  "A-108",  x: 244, y: 258, w: 244, h: 65, type: "unit" },
 
-  // A-108 (small upper-middle)
-  { unit: "A-108", x: 240, y: 230, w: 110, h: 70, type: "unit" },
+  // ── Inner cluster (image y 138 → 263 for A-120) ─────────────────────────
+  // A-120: x 14→111 (90→324), y 138→263 (235→558)  — left column, tall
+  // A-113: x 111→179 (324→488), y 138→263 (235→558)
+  // A-110: x 179→229 (488→608), y 138→212 (235→459)
+  // A-85:  x 179→229 (488→608), y 212→263 (459→558)
+  { unit: "A-120", x: 90,  y: 235, w: 234, h: 323, type: "unit" },
+  { unit: "A-113", x: 324, y: 235, w: 164, h: 323, type: "unit" },
+  { unit: "A-110", x: 488, y: 235, w: 120, h: 224, type: "unit" },
+  { unit: "A-85",  x: 488, y: 459, w: 120, h:  99, type: "unit" },
 
-  // Inner column / cluster
-  { unit: "A-120", x: 100, y: 310, w: 140, h: 230, type: "unit" },
-  { unit: "A-113", x: 250, y: 310, w: 100, h: 200, type: "unit" },
-  { unit: "A-110", x: 360, y: 310, w: 110, h: 160, type: "unit" },
-  { unit: "A-85",  x: 380, y: 480, w: 90,  h: 70,  type: "unit" },
+  // ── Common Area (center): image x 229→345, y 141→283 (608→888, 323→594) ─
+  { label: "Common Area", x: 608, y: 323, w: 280, h: 271, type: "common" },
 
-  // Tiny W/M (between A-120 and the rest of inner cluster — moved down to
-  // a less crowded spot)
-  { label: "W", x: 100, y: 555, w: 35, h: 35, type: "common", fontSize: 13 },
-  { label: "M", x: 100, y: 595, w: 35, h: 35, type: "common", fontSize: 13 },
+  // ── Right-side suites (image x 345→429) ──────────────────────────────────
+  // A-101: y 141→199 (323→434) right of A-103
+  // A-102: x 295→345 (767→888), y 199→283 (434→594)  — narrow corridor box
+  // A-100: y 199→283 (434→594) right column
+  { unit: "A-101", x: 888, y: 323, w: 202, h: 111, type: "unit" },
+  { unit: "A-102", x: 767, y: 434, w: 121, h: 160, type: "unit" },
+  { unit: "A-100", x: 888, y: 434, w: 202, h: 160, type: "unit" },
 
-  // Right column suites — start below A-103 to avoid edge collision
-  { unit: "A-101", x: 920, y: 290, w: 140, h: 150, type: "unit" },
-  { unit: "A-102", x: 820, y: 350, w: 90,  h: 200, type: "unit" },
-  { unit: "A-100", x: 920, y: 490, w: 140, h: 150, type: "unit" },
+  // EXIT marker on the right side (image x ~295, y ~283)
+  { label: "EXIT", x: 760, y: 600, w: 60, h: 16, type: "exit" },
 
-  // Common Area (center) — y starts BELOW A-103's bottom edge (y=270)
-  // and right edge stays clear of the A-102 corridor (x=820)
-  { label: "Common Area", x: 480, y: 290, w: 330, h: 240, type: "common" },
+  // ── W/M small restrooms left side (image x 14→50, y 211→263) ────────────
+  // Two stacked tiny rooms inside the building, between A-120 and A-114.
+  { label: "W", x: 90,  y: 489, w: 58, h: 35, type: "common", fontSize: 14 },
+  { label: "M", x: 90,  y: 524, w: 58, h: 34, type: "common", fontSize: 14 },
 
-  // Bottom row
-  { unit: "A-114", x: 150, y: 555, w: 170, h: 130, type: "unit" },
-  { unit: "A-112", x: 320, y: 555, w: 150, h: 130, type: "unit" },
-  { label: "Conference Room", x: 480, y: 555, w: 180, h: 130, type: "common" },
-  { unit: "A-85A", x: 660, y: 555, w: 90, h: 130, type: "unit" },
-  { unit: "A-90",  x: 750, y: 555, w: 60, h: 130, type: "unit" },
+  // ── Bottom rows ──────────────────────────────────────────────────────────
+  // A-114 is tall: x 14→84 (90→259), y 264→374 (558→768) — full bottom-left strip
+  { unit:  "A-114", x: 90, y: 558, w: 169, h: 210, type: "unit" },
 
-  // EXIT (right side, between A-90 and A-100 — outside the building wall)
-  { label: "EXIT", x: 815, y: 690, w: 50, h: 16, type: "exit" },
+  // Middle-bottom row (image y 264→307, mapped 558→640):
+  // A-112: x  84→167 (259→459)
+  // Conf:  x 167→247 (459→652)
+  // A-85A: x 247→292 (652→760)
+  // A-90:  x 292→333 (760→859)
+  { unit:  "A-112",            x: 259, y: 558, w: 200, h:  82, type: "unit" },
+  { label: "Conference Room", x: 459, y: 558, w: 193, h:  82, type: "common" },
+  { unit:  "A-85A",            x: 652, y: 558, w: 108, h:  82, type: "unit" },
+  { unit:  "A-90",             x: 760, y: 558, w:  99, h:  82, type: "unit" },
 
-  // Bottom-spanning suite
-  { unit: "A-130", x: 200, y: 695, w: 520, h: 75, type: "unit" },
+  // A-130: wide bottom strip (image x 84→333, y 307→374) → 259→859, 640→768
+  { unit: "A-130", x: 259, y: 640, w: 600, h: 128, type: "unit" },
 ];
 
 const NORM = (s: string) => (s || "").trim().toLowerCase();
@@ -160,14 +177,23 @@ export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSele
         className="block w-full h-auto"
         style={{ maxHeight: "70vh" }}
       >
-        {/* Building outline */}
-        <rect x={90} y={90} width={1000} height={680} fill="none" stroke="#1f2937" strokeWidth={4} className="dark:[stroke:#e5e7eb]" />
+        {/* Building outline traced from the source map. The right side
+            steps in at the bottom (the gray exterior on the source) — modeled
+            as a polygon rather than a plain rect. */}
+        <polygon
+          points="90,90 1090,90 1090,594 859,594 859,768 90,768"
+          fill="none"
+          stroke="#1f2937"
+          strokeWidth={4}
+          className="dark:[stroke:#e5e7eb]"
+          strokeLinejoin="miter"
+        />
+        {/* Subtle gray fill for the cut-out (exterior pavement) so the
+            shape reads correctly */}
+        <rect x={859} y={594} width={231} height={174} fill="#f4f4f5" stroke="none" className="dark:[fill:#27272a]" opacity={0.6} />
 
         {ROOMS.map((r, i) => {
           if (r.type === "exit") {
-            // Subtle door marker — no box, no dashed border. Just a small
-            // red triangle pointing outward + tiny "EXIT" label so the
-            // floor plan doesn't shout fire-drill chrome at the user.
             return (
               <g key={`exit-${i}`}>
                 <text x={r.x + r.w / 2} y={r.y + 11} textAnchor="middle" fontSize={9} fontWeight={600} fill="#dc2626" letterSpacing="0.08em" style={{ opacity: 0.7 }}>
@@ -223,7 +249,6 @@ export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSele
                 className={!isSelected ? "dark:[stroke:#e5e7eb]" : ""}
                 style={{ transition: "fill 140ms ease, stroke 140ms ease, stroke-width 140ms ease" }}
               />
-              {/* Status dot in top-right corner if not vacant */}
               {dec.status !== "vacant" && (
                 <circle cx={r.x + r.w - 10} cy={r.y + 10} r={4} fill={STATUS_STROKE[dec.status]} />
               )}
@@ -257,9 +282,6 @@ export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSele
           );
         })}
       </svg>
-
-      {/* Hover info pill removed — the in-cell color shift is the cue;
-          full unit details surface in the drawer on click. */}
 
       {/* Legend */}
       <div className="absolute top-3 right-3 bg-white/90 dark:bg-[#18181b]/90 backdrop-blur border border-[#e4e4e7] dark:border-[#3f3f46] rounded-md px-2.5 py-1.5 flex items-center gap-3 text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
