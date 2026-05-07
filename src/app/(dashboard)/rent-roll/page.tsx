@@ -192,7 +192,9 @@ export default function RentRollPage() {
         valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
       // Days until lease expires + urgency band — replaces the old separate
       // /leases page. Always visible standalone.
-      { field: "daysToExpiry", headerName: "Lease Exp.", width: 110,
+      { field: "daysToExpiry", headerName: "Lease Exp.", width: 130,
+        cellStyle: { display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" } as any,
+        headerClass: "ag-center-aligned-header",
         valueGetter: (p: any) => {
           const to = p.data?.leaseTo;
           if (!to) return null;
@@ -208,9 +210,9 @@ export default function RentRollPage() {
             // Cap stale-expired display: within a year show "EXPIRED Nd ago";
             // beyond a year drop the number — it gets meaningless visually.
             if (d <= -365) {
-              return <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white">EXPIRED</span>;
+              return <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white whitespace-nowrap">EXPIRED</span>;
             }
-            return <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white">EXPIRED {-d}d ago</span>;
+            return <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white whitespace-nowrap">EXPIRED {-d}d</span>;
           }
           // Cap very long-future leases (>5 years) so the column stays narrow.
           if (d > 1825) {
