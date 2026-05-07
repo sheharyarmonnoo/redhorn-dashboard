@@ -58,10 +58,23 @@ export async function uploadRunToConvex(
   files: Array<{ filePath: string; propertyCode: string; reportType: string }>,
   opts: { source?: string; historical?: boolean; month?: string } = {}
 ): Promise<SyncBundle> {
-  const convexUrl = config.NEXT_PUBLIC_CONVEX_URL;
+  // Target deployment resolution order:
+  //   1. CONVEX_DEPLOYMENT=prod:<slug>  → https://<slug>.convex.cloud
+  //      (lets a prod sync override the .env.local dev URL without editing
+  //      the file)
+  //   2. NEXT_PUBLIC_CONVEX_URL from .env.local (the default; usually dev)
+  // Without #1, the script always writes to whichever deployment .env.local
+  // points at — which made it look like prod was broken when really we were
+  // hitting an older dev deployment.
+  const deploymentEnv = process.env.CONVEX_DEPLOYMENT || "";
+  const deploymentMatch = deploymentEnv.match(/^(?:prod|dev):([a-z0-9-]+)$/);
+  const convexUrl = deploymentMatch
+    ? `https://${deploymentMatch[1]}.convex.cloud`
+    : config.NEXT_PUBLIC_CONVEX_URL;
   if (!convexUrl) {
-    throw new Error("NEXT_PUBLIC_CONVEX_URL not set in .env.local — required to upload to Convex.");
+    throw new Error("Convex deployment URL not resolved — set CONVEX_DEPLOYMENT or NEXT_PUBLIC_CONVEX_URL.");
   }
+  console.log(`   convex target: ${convexUrl}${deploymentMatch ? "  (from CONVEX_DEPLOYMENT)" : "  (from .env.local)"}`);
 
   const client = new ConvexHttpClient(convexUrl);
   const uploaded: UploadedFile[] = [];

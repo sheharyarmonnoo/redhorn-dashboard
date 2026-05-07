@@ -23,10 +23,13 @@ export default function AIChatbot() {
   const property = useActiveProperty() as any;
 
   const [open, setOpen] = useState(false);
-  // "full" = right-edge full-height drawer (default).
-  // "half" = compact bottom-right window, ~50vh tall, doesn't cover the
+  // "half" = compact bottom-right window, ~55vh tall, doesn't cover the
   // dashboard so the user can keep referencing it while the chat sits docked.
-  const [size, setSize] = useState<"full" | "half">("full");
+  // "full" = right-edge full-height drawer.
+  // We default to "half" so the dashboard stays visible and the user can ask
+  // about whatever they're looking at without a context switch. The maximize
+  // button in the header swaps to full when they want a bigger reading area.
+  const [size, setSize] = useState<"full" | "half">("half");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [showThreadList, setShowThreadList] = useState(false);
   const [draft, setDraft] = useState("");
@@ -440,12 +443,23 @@ function MarkdownLite({ text }: { text: string }) {
   const lines = text.split("\n");
   const blocks: Array<
     | { kind: "text"; lines: string[] }
+    | { kind: "heading"; level: 1 | 2 | 3; content: string }
     | { kind: "table"; header: string[]; rows: string[][] }
   > = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const next = lines[i + 1];
+    // Heading: ^#{1,3}\s
+    const headingMatch = /^(#{1,3})\s+(.+)$/.exec(line);
+    if (headingMatch) {
+      blocks.push({
+        kind: "heading",
+        level: headingMatch[1].length as 1 | 2 | 3,
+        content: headingMatch[2].trim(),
+      });
+      continue;
+    }
     // Table = a "|...|" header row followed by a "|---|---|" separator row,
     // followed by zero or more "|...|" data rows.
     if (line && /\|/.test(line) && next && isTableSeparator(next)) {
@@ -468,6 +482,18 @@ function MarkdownLite({ text }: { text: string }) {
   return (
     <>
       {blocks.map((block, bi) => {
+        if (block.kind === "heading") {
+          const sizes = {
+            1: "text-[15px] font-semibold mt-2 mb-1",
+            2: "text-[13px] font-semibold mt-2 mb-1",
+            3: "text-[12px] font-semibold mt-1.5 mb-0.5 uppercase tracking-wider text-[#52525b] dark:text-[#a1a1aa]",
+          } as const;
+          return (
+            <div key={bi} className={sizes[block.level]}>
+              <InlineMd text={block.content} />
+            </div>
+          );
+        }
         if (block.kind === "table") {
           return (
             <div key={bi} className="my-2 -mx-1 overflow-x-auto">
