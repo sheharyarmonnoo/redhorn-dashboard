@@ -306,16 +306,16 @@ export default function RentRollPage() {
           );
         },
       },
-      // Rent group — all five cols always visible:
-      // In-Place Rent (monthly $) → Annual In-Place ($/yr) → Rent/SF (monthly)
-      // → Annual In-Place/SF ($/yr per SF) → Security Deposit.
+      // Rent group — only Rent/SF stays visible by default. The other cols
+      // (In-Place Rent, Annual In-Place, Annual In-Place/SF, Security Deposit)
+      // reveal on column-group expand.
       {
         headerName: "",
         marryChildren: true,
         children: [
-          { field: "monthlyRent", headerName: "In-Place Rent", width: 130,
+          { field: "monthlyRent", headerName: "In-Place Rent", width: 130, columnGroupShow: "open",
             cellRenderer: CurrencyCellRenderer },
-          { field: "annualInPlaceRent", headerName: "Annual In-Place", width: 140,
+          { field: "annualInPlaceRent", headerName: "Annual In-Place", width: 140, columnGroupShow: "open",
             valueGetter: (p: any) => (p.data?.monthlyRent || 0) * 12,
             cellRenderer: CurrencyCellRenderer },
           { field: "monthlyRentPerSF", headerName: "Rent / SF", width: 110,
@@ -326,7 +326,7 @@ export default function RentRollPage() {
               return 0;
             },
             valueFormatter: (p: any) => p.value > 0 ? `$${p.value.toFixed(2)}/SF` : "—" },
-          { field: "annualInPlacePerSF", headerName: "Annual In-Place / SF", width: 160,
+          { field: "annualInPlacePerSF", headerName: "Annual In-Place / SF", width: 160, columnGroupShow: "open",
             valueGetter: (p: any) => {
               const d = p.data || {};
               const monthlyPerSF = (typeof d.monthlyRentPerSF === "number" && d.monthlyRentPerSF > 0)
@@ -335,7 +335,7 @@ export default function RentRollPage() {
               return monthlyPerSF * 12;
             },
             valueFormatter: (p: any) => p.value > 0 ? `$${p.value.toFixed(2)}/SF` : "—" },
-          { field: "securityDeposit", headerName: "Security Deposit", width: 140,
+          { field: "securityDeposit", headerName: "Security Deposit", width: 140, columnGroupShow: "open",
             cellRenderer: CurrencyCellRenderer },
         ],
       },
