@@ -72,30 +72,37 @@ export async function runRentRollFullForProperty(
   await dateField.press("Tab");
   console.log(`   FromDate = ${mmddyyyy}`);
 
-  // 4. Force Show Detail = checked deterministically. Without this the export
-  //    collapses to a property-summary layout (10 cols, 1 row per property)
-  //    instead of the per-lease detail (16 cols). Yardi's UI sometimes ignores
-  //    Playwright's .check() — particularly on properties scraped after others
-  //    in the same session — so we set the DOM state directly and verify.
-  await frame.evaluate(() => {
-    const cb = document.getElementById("chkIsDetail_CheckBox") as HTMLInputElement | null;
-    if (cb) {
-      cb.checked = true;
-      cb.dispatchEvent(new Event("click", { bubbles: true }));
-      cb.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  });
-  const detailChecked = await frame
-    .locator("#chkIsDetail_CheckBox")
-    .isChecked()
-    .catch(() => false);
+  // 4. Force Show Detail = checked. The form's default is already checked,
+  //    but Yardi/ASP.NET sometimes serves the page with it cleared (esp. on
+  //    repeat property loads in the same session). We:
+  //      - read the current state via the DOM
+  //      - if unchecked, set checked=true and fire ONLY a `change` event
+  //        (NOT `click` — click would re-toggle the checkbox OFF and trigger
+  //        a postback that resets other fields)
+  //      - re-verify and refuse to submit if it's still off
+  //    Without detail = checked, Yardi exports a 10-column property-summary
+  //    layout (1 row per property) which the parser correctly rejects, but
+  //    that means an unrecoverable failure. Better to set it deterministically.
+  const showDetailLoc = frame.locator("#chkIsDetail_CheckBox");
+  await showDetailLoc.waitFor({ timeout: 10_000 }).catch(() => {});
+  const initiallyChecked = await showDetailLoc.isChecked().catch(() => false);
+  if (!initiallyChecked) {
+    await frame.evaluate(() => {
+      const cb = document.getElementById("chkIsDetail_CheckBox") as HTMLInputElement | null;
+      if (cb && !cb.checked) {
+        cb.checked = true;
+        cb.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+  }
+  const detailChecked = await showDetailLoc.isChecked().catch(() => false);
   if (!detailChecked) {
     throw new Error(
       `Show Detail checkbox failed to enable for ${property.code}; refusing to ` +
       `submit (would produce summary-only export and wipe lease data on ingest).`
     );
   }
-  console.log(`   Show Detail = on`);
+  console.log(`   Show Detail = on (was ${initiallyChecked ? "already" : "set"})`);
 
   // 5. Click Excel and capture the download
   const outPath = resolve(
