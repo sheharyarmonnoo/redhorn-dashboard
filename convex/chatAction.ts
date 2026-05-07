@@ -24,6 +24,11 @@ import { api, internal } from "./_generated/api";
 // back to Haiku 3.5 (older, slightly cheaper) if 4.5 is briefly unavailable.
 const PRIMARY_MODEL = "claude-haiku-4-5";
 const FALLBACK_MODEL = "claude-3-5-haiku-latest";
+
+// Per-user cap: 10 user-role messages per rolling 24 hours. Stops a runaway
+// loop or a chatty user from racking up surprise Anthropic bills. Counted
+// across every thread the user owns, not per-thread.
+const DAILY_MESSAGE_LIMIT = 10;
 const ANTHROPIC_VERSION = "2023-06-01";
 
 type AnthMessage = { role: "user" | "assistant"; content: string };
@@ -188,6 +193,30 @@ export const ask = action({
       return { ok: false, error };
     }
 
+    // Daily rate limit — count is rolling 24h, scoped to the thread owner so
+    // each Clerk user has their own bucket. The user-question itself was
+    // written by the client via addUserMessage BEFORE this action fires, so
+    // a count == DAILY_MESSAGE_LIMIT means this very message just pushed
+    // them to the cap (still allow it through), > LIMIT means they already
+    // burned the budget on prior turns and this one is blocked.
+    const ownerId: string | null = await ctx.runQuery(api.chat.getThreadOwner, {
+      id: args.threadId,
+    });
+    if (ownerId) {
+      const count: number = await ctx.runQuery(api.chat.dailyUserMessageCount, {
+        userId: ownerId,
+      });
+      if (count > DAILY_MESSAGE_LIMIT) {
+        const error = `Daily limit reached — ${DAILY_MESSAGE_LIMIT} messages per 24 hours. Try again tomorrow.`;
+        await ctx.runMutation(internal.chat.appendMessage, {
+          threadId: args.threadId,
+          role: "assistant",
+          content: error,
+        });
+        return { ok: false, error };
+      }
+    }
+
     // 1) Load Convex context for the active property.
     const { contextText, propertyName, raw } = await buildContext(ctx, args.propertyId);
 
@@ -215,7 +244,13 @@ ${contextText}
 </data>
 
 Format guidance:
-- Plain text with bullets ("- ") where helpful.
+- When listing 3+ items with comparable fields (tenants with units + amounts, leases with dates, alerts with severity, etc.), prefer a GitHub-flavored markdown table:
+  | Tenant | Unit(s) | Amount |
+  |---|---|---:|
+  | Trophy Windows, LLC | C-218, D-150 | $8,013 |
+  Right-align numeric columns with \`---:\` in the separator row.
+- For 1–2 items or short answers, plain text with "- " bullets is fine.
+- Bold key totals with **…**.
 - All dollar figures with a "$" prefix and comma separators.
 - Be specific: cite tenant names, units, and amounts from the data.
 - If the user asks something the data doesn't cover, say "I don't have that in the current snapshot" and suggest where to look.`;

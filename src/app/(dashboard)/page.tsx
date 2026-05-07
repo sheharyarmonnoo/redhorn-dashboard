@@ -196,7 +196,9 @@ export default function DashboardPage() {
           <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mb-3">Last {monthlyRevenue.length} months by category</p>
           {monthlyRevenue.length > 0 && <Chart options={revenueChartOptions} series={revenueSeries} type="bar" height={260} />}
         </div>
-        <TenantTrendChart propertyId={property._id} tenants={tenants} isDark={isDark} chartFont={chartFont} axisColor={axisColor} gridColor={gridColor} />
+        {/* Tenant Charges & Payments — hidden for now while we iterate on
+            the underlying receivable_details rollup. Re-enable when ready:
+            <TenantTrendChart propertyId={property._id} tenants={tenants} isDark={isDark} chartFont={chartFont} axisColor={axisColor} gridColor={gridColor} /> */}
       </div>
 
       <LatestInsights propertyId={property._id} />
@@ -860,27 +862,34 @@ function TenantTrendChart({ propertyId, tenants, isDark, chartFont, axisColor, g
       .sort((a, b) => a.display.localeCompare(b.display));
   }, [rows, tenants]);
 
-  const [selectedTenant, setSelectedTenant] = useState<string | null>(null);
+  // Multi-select. `null` means "All tenants" — sums across every receivable
+  // row regardless of tenant. The picker modal lets the user check/uncheck
+  // a subset; we save just the selected keys.
+  const [selectedKeys, setSelectedKeys] = useState<Set<string> | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-  // Default to the first tenant once options load. Reset if the active tenant
-  // disappears (property switch, sync wiped them, etc.).
+  // If the property switches and the previously selected keys no longer
+  // exist in the new option list, drop back to "All".
   useEffect(() => {
-    if (tenantOptions.length === 0) {
-      if (selectedTenant !== null) setSelectedTenant(null);
-      return;
+    if (!selectedKeys) return;
+    const validKeys = new Set(tenantOptions.map(o => o.key));
+    const trimmed = new Set(Array.from(selectedKeys).filter(k => validKeys.has(k)));
+    if (trimmed.size !== selectedKeys.size) {
+      setSelectedKeys(trimmed.size === 0 ? null : trimmed);
     }
-    if (!selectedTenant || !tenantOptions.some(o => o.key === selectedTenant)) {
-      setSelectedTenant(tenantOptions[0].key);
-    }
-  }, [tenantOptions, selectedTenant]);
+  }, [tenantOptions, selectedKeys]);
 
-  // Group rows for the active tenant by postMonth, summing charges and receipts.
+  // Group rows for the active selection by postMonth, summing charges and
+  // receipts across every included tenant. `selectedKeys === null` means
+  // "include everyone" — the default state.
   const { months, charges, payments } = useMemo(() => {
-    if (!selectedTenant) return { months: [] as string[], charges: [] as number[], payments: [] as number[] };
     const byMonth = new Map<string, { charges: number; receipts: number }>();
     for (const r of rows) {
       if (!r.postMonth) continue;
-      if (normalizeTenantName(r.tenantName || "") !== selectedTenant) continue;
+      if (selectedKeys) {
+        const k = normalizeTenantName(r.tenantName || "");
+        if (!selectedKeys.has(k)) continue;
+      }
       const entry = byMonth.get(r.postMonth) || { charges: 0, receipts: 0 };
       entry.charges += r.charges || 0;
       entry.receipts += r.receipts || 0;
@@ -892,7 +901,14 @@ function TenantTrendChart({ propertyId, tenants, isDark, chartFont, axisColor, g
       charges: sortedMonths.map(m => Math.round(byMonth.get(m)!.charges)),
       payments: sortedMonths.map(m => Math.round(byMonth.get(m)!.receipts)),
     };
-  }, [rows, selectedTenant]);
+  }, [rows, selectedKeys]);
+
+  const filterLabel =
+    !selectedKeys
+      ? "All tenants"
+      : selectedKeys.size === 1
+      ? (tenantOptions.find(o => o.key === Array.from(selectedKeys)[0])?.display || "1 tenant")
+      : `${selectedKeys.size} tenants`;
 
   const chartOptions: ApexCharts.ApexOptions = {
     chart: { type: "line", toolbar: { show: false }, fontFamily: chartFont, background: "transparent" },
@@ -920,29 +936,167 @@ function TenantTrendChart({ propertyId, tenants, isDark, chartFont, axisColor, g
       <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
         <div>
           <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-1">Tenant Charges & Payments</p>
-          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">Monthly trend per tenant from receivable details</p>
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">Monthly trend · {filterLabel}</p>
         </div>
-        <select
-          value={selectedTenant || ""}
-          onChange={e => setSelectedTenant(e.target.value || null)}
+        <button
+          onClick={() => setPickerOpen(true)}
           disabled={tenantOptions.length === 0}
-          className="text-[12px] px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] disabled:opacity-40 max-w-[280px]"
+          className="inline-flex items-center gap-1.5 text-[12px] px-3 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] hover:bg-[#fafafa] dark:hover:bg-[#1f1f22] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
         >
-          {tenantOptions.length === 0 && <option value="">No tenants</option>}
-          {tenantOptions.map(o => (
-            <option key={o.key} value={o.key}>{o.display}</option>
-          ))}
-        </select>
+          <Filter className="w-3 h-3" />
+          {filterLabel}
+        </button>
       </div>
+      {pickerOpen && (
+        <TenantPickerModal
+          options={tenantOptions}
+          selectedKeys={selectedKeys}
+          onApply={(next) => { setSelectedKeys(next); setPickerOpen(false); }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
       {months.length > 0 ? (
         <Chart options={chartOptions} series={chartSeries} type="line" height={260} />
       ) : (
         <div className="h-[260px] flex items-center justify-center">
           <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] italic">
-            {tenantOptions.length === 0 ? "No receivable data yet for this property." : "No transactions for this tenant."}
+            {tenantOptions.length === 0 ? "No receivable data yet for this property." : "No transactions for the selected tenants."}
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Modal that lets the user pick which tenants are included in the trend
+ * chart. Local draft state so unchecking + clicking Cancel reverts. "Select
+ * all / clear" buttons make it cheap to reset to the default ("All", which
+ * is represented as `null` upstream — empty selection in this UI).
+ */
+function TenantPickerModal({
+  options,
+  selectedKeys,
+  onApply,
+  onClose,
+}: {
+  options: { key: string; display: string }[];
+  selectedKeys: Set<string> | null;
+  onApply: (next: Set<string> | null) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<Set<string>>(
+    () => new Set(selectedKeys ? Array.from(selectedKeys) : options.map(o => o.key))
+  );
+  const [search, setSearch] = useState("");
+
+  // Esc closes; click backdrop closes.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter(o => o.display.toLowerCase().includes(q));
+  }, [options, search]);
+
+  const toggle = (key: string) => {
+    setDraft(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const allChecked = draft.size === options.length;
+
+  function handleApply() {
+    // "Everyone selected" collapses back to the default `null` so the chart
+    // shows "All tenants" rather than dragging a stale full-list set around.
+    if (draft.size === options.length || draft.size === 0) onApply(null);
+    else onApply(new Set(draft));
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-4 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex items-center justify-between">
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Select tenants</p>
+          <button
+            onClick={onClose}
+            className="text-[16px] text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer leading-none"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div className="px-4 py-2 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex items-center gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search tenants…"
+            className="flex-1 text-[12px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#09090b] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
+          />
+          <button
+            onClick={() => setDraft(allChecked ? new Set() : new Set(options.map(o => o.key)))}
+            className="text-[11px] font-medium text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer whitespace-nowrap"
+          >
+            {allChecked ? "Clear all" : "Select all"}
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="px-4 py-6 text-[12px] text-[#a1a1aa] italic text-center">No tenants match that search.</p>
+          ) : (
+            filtered.map(o => {
+              const checked = draft.has(o.key);
+              return (
+                <label
+                  key={o.key}
+                  className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-[#fafafa] dark:hover:bg-[#1f1f22] border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(o.key)}
+                    className="w-4 h-4 cursor-pointer accent-[#18181b] dark:accent-[#fafafa]"
+                  />
+                  <span className="text-[12px] text-[#18181b] dark:text-[#fafafa] truncate">{o.display}</span>
+                </label>
+              );
+            })
+          )}
+        </div>
+        <div className="px-4 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46] flex items-center justify-between">
+          <p className="text-[11px] text-[#71717a]">
+            {draft.size === options.length ? "All selected" : `${draft.size} of ${options.length} selected`}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="text-[12px] px-3 py-1.5 rounded text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleApply}
+              className="text-[12px] px-3 py-1.5 rounded bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:opacity-90 cursor-pointer"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

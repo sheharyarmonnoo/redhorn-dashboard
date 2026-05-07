@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useQuery, useMutation, useAction } from "convex/react";
-import { Sparkles, X, Send, Plus, Trash2, MessageSquare, ChevronLeft } from "lucide-react";
+import { Sparkles, X, Send, Trash2, MessageSquare, ChevronLeft, Minimize2, Maximize2 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { useActiveProperty } from "@/hooks/useConvexData";
 
@@ -23,6 +23,10 @@ export default function AIChatbot() {
   const property = useActiveProperty() as any;
 
   const [open, setOpen] = useState(false);
+  // "full" = right-edge full-height drawer (default).
+  // "half" = compact bottom-right window, ~50vh tall, doesn't cover the
+  // dashboard so the user can keep referencing it while the chat sits docked.
+  const [size, setSize] = useState<"full" | "half">("full");
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [showThreadList, setShowThreadList] = useState(false);
   const [draft, setDraft] = useState("");
@@ -101,49 +105,63 @@ export default function AIChatbot() {
     }
   }
 
-  function handleNewThread() {
-    setActiveThreadId(null);
-    setShowThreadList(false);
-    setDraft("");
-    setErrorMsg(null);
-  }
-
   async function handleDelete(id: string) {
     if (!confirm("Delete this conversation?")) return;
     await removeThread({ id: id as any });
     if (activeThreadId === id) setActiveThreadId(null);
   }
 
+  // "Clear chat" — wipes the active thread (and its messages) and drops back
+  // to the empty state. Next send creates a fresh thread automatically.
+  async function handleClearChat() {
+    if (!activeThreadId) return;
+    if (!confirm("Clear this chat? All messages in this conversation will be deleted.")) return;
+    await removeThread({ id: activeThreadId as any });
+    setActiveThreadId(null);
+    setDraft("");
+    setErrorMsg(null);
+  }
+
   const messages = threadDoc?.messages || [];
 
   return (
     <>
-      {/* Floating button — always rendered so the user can re-open after closing */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          aria-label="Open AI assistant"
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-[#18181b] dark:bg-[#fafafa] text-[#fafafa] dark:text-[#18181b] px-4 py-3 shadow-lg shadow-black/20 hover:opacity-90 transition-all"
-        >
-          <Sparkles className="w-4 h-4" />
-          <span className="text-[13px] font-medium hidden sm:inline">Ask AI</span>
-        </button>
-      )}
+      {/* Floating button — flips to a close pill when the drawer is open so
+          the bottom-right corner gives a second affordance for dismissing
+          (alongside the backdrop click + the header X). */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        aria-label={open ? "Close AI assistant" : "Open AI assistant"}
+        className={`fixed bottom-5 right-5 z-[60] flex items-center gap-2 rounded-full px-4 py-3 shadow-lg shadow-black/20 hover:opacity-90 transition-all ${
+          open
+            ? "bg-[#dc2626] text-white"
+            : "bg-[#18181b] dark:bg-[#fafafa] text-[#fafafa] dark:text-[#18181b]"
+        }`}
+      >
+        {open ? <X className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+        <span className="text-[13px] font-medium hidden sm:inline">
+          {open ? "Close" : "Ask AI"}
+        </span>
+      </button>
 
-      {/* Backdrop — only on mobile so desktop users can keep working with
-          the panel open. Click to dismiss. */}
-      {open && (
+      {/* Backdrop — click anywhere outside the drawer to close. Lighter on
+          desktop so the dashboard stays partially visible behind the panel.
+          Suppressed entirely in half-screen "minimized" mode so the user can
+          keep clicking the dashboard while the chat docks at the corner. */}
+      {open && size === "full" && (
         <div
-          className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+          className="fixed inset-0 z-40 bg-black/30 sm:bg-black/15"
           onClick={() => setOpen(false)}
         />
       )}
 
-      {/* Drawer */}
+      {/* Drawer — full-height right-edge OR half-height bottom-right docked. */}
       <aside
-        className={`fixed top-0 right-0 z-50 h-full w-full sm:w-[480px] bg-white dark:bg-[#0c0c0d] border-l border-[#e4e4e7] dark:border-[#27272a] shadow-2xl transition-transform duration-200 flex flex-col ${
-          open ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`fixed z-50 bg-white dark:bg-[#0c0c0d] border border-[#e4e4e7] dark:border-[#27272a] shadow-2xl transition-all duration-200 flex flex-col ${
+          size === "half"
+            ? "bottom-0 right-0 h-[55vh] w-full sm:w-[420px] sm:bottom-3 sm:right-3 sm:rounded-lg"
+            : "top-0 right-0 h-full w-full sm:w-[480px] border-l"
+        } ${open ? "translate-x-0 translate-y-0" : (size === "half" ? "translate-y-full" : "translate-x-full")}`}
         aria-hidden={!open}
       >
         {/* Header */}
@@ -171,13 +189,27 @@ export default function AIChatbot() {
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
+            {activeThreadId && messages.length > 0 && (
+              <button
+                onClick={handleClearChat}
+                className="p-1.5 rounded hover:bg-[#f4f4f5] dark:hover:bg-[#1f1f22]"
+                aria-label="Clear chat"
+                title="Clear chat"
+              >
+                <Trash2 className="w-4 h-4 text-[#71717a] hover:text-[#dc2626]" />
+              </button>
+            )}
             <button
-              onClick={handleNewThread}
+              onClick={() => setSize(s => (s === "full" ? "half" : "full"))}
               className="p-1.5 rounded hover:bg-[#f4f4f5] dark:hover:bg-[#1f1f22]"
-              aria-label="New conversation"
-              title="New conversation"
+              aria-label={size === "full" ? "Minimize" : "Maximize"}
+              title={size === "full" ? "Minimize to bottom" : "Expand to full"}
             >
-              <Plus className="w-4 h-4 text-[#71717a]" />
+              {size === "full" ? (
+                <Minimize2 className="w-4 h-4 text-[#71717a]" />
+              ) : (
+                <Maximize2 className="w-4 h-4 text-[#71717a]" />
+              )}
             </button>
             <button
               onClick={() => setOpen(false)}
@@ -230,20 +262,27 @@ export default function AIChatbot() {
             </div>
           )}
 
-          {/* Message list */}
+          {/* Message list — `key` on activeThreadId resets the wrapper on
+              thread switch so React re-mounts and the tailwind fade-in
+              animates each new conversation rather than snapping. */}
           <div className={`flex-1 overflow-y-auto px-4 py-3 ${showThreadList ? "hidden sm:block" : ""}`}>
-            {messages.length === 0 ? (
-              <EmptyState propertyName={property?.name} />
-            ) : (
-              <ul className="space-y-3">
-                {messages.map((m) => (
-                  <Bubble key={m._id} role={m.role} content={m.content} />
-                ))}
-                {sending && (
-                  <Bubble role="assistant" content="Thinking…" pending />
-                )}
-              </ul>
-            )}
+            <div
+              key={activeThreadId || "empty"}
+              style={{ animation: "rh-fade-in 180ms ease-out" }}
+            >
+              {messages.length === 0 ? (
+                <EmptyState propertyName={property?.name} onPick={(s) => setDraft(s)} />
+              ) : (
+                <ul className="space-y-3">
+                  {messages.map((m) => (
+                    <Bubble key={m._id} role={m.role} content={m.content} />
+                  ))}
+                  {sending && (
+                    <Bubble role="assistant" content="Thinking…" pending />
+                  )}
+                </ul>
+              )}
+            </div>
             {errorMsg && (
               <div className="mt-3 text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded px-3 py-2">
                 {errorMsg}
@@ -298,7 +337,7 @@ export default function AIChatbot() {
   );
 }
 
-function EmptyState({ propertyName }: { propertyName?: string }) {
+function EmptyState({ propertyName, onPick }: { propertyName?: string; onPick: (s: string) => void }) {
   const suggestions = useMemo(
     () => [
       "Who is past due and how much?",
@@ -317,18 +356,16 @@ function EmptyState({ propertyName }: { propertyName?: string }) {
       <p className="text-[14px] font-medium text-[#18181b] dark:text-[#fafafa]">
         Ask about {propertyName || "your portfolio"}
       </p>
-      <p className="text-[12px] text-[#71717a] mt-1 max-w-[280px]">
-        I can answer questions using your live Convex data — past-due tenants, NOI,
-        budgets, lease expirations, sync status, and alerts.
-      </p>
       <div className="mt-4 w-full space-y-1.5">
         {suggestions.map((s) => (
-          <div
+          <button
             key={s}
-            className="text-[12px] text-left px-3 py-2 rounded border border-[#e4e4e7] dark:border-[#27272a] text-[#52525b] dark:text-[#a1a1aa]"
+            type="button"
+            onClick={() => onPick(s)}
+            className="block w-full text-[12px] text-left px-3 py-2 rounded border border-[#e4e4e7] dark:border-[#27272a] text-[#52525b] dark:text-[#a1a1aa] hover:bg-[#f4f4f5] dark:hover:bg-[#1f1f22] hover:text-[#18181b] dark:hover:text-[#fafafa] hover:border-[#d4d4d8] dark:hover:border-[#3f3f46] cursor-pointer transition-colors"
           >
             {s}
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -345,10 +382,16 @@ function Bubble({
   pending?: boolean;
 }) {
   const isUser = role === "user";
+  // The assistant's bubble may render a <table> block which can't sit inside
+  // a `whitespace-pre-wrap` container without breaking layout. Drop the
+  // pre-wrap class on the assistant side and let MarkdownLite render line
+  // breaks itself; user messages keep pre-wrap so multi-line questions look right.
   return (
     <li className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[88%] rounded-lg px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap break-words ${
+        className={`max-w-[88%] rounded-lg px-3 py-2 text-[13px] leading-relaxed break-words ${
+          isUser ? "whitespace-pre-wrap" : ""
+        } ${
           isUser
             ? "bg-[#18181b] dark:bg-[#fafafa] text-[#fafafa] dark:text-[#18181b]"
             : "bg-[#f4f4f5] dark:bg-[#1f1f22] text-[#18181b] dark:text-[#fafafa]"
@@ -360,32 +403,140 @@ function Bubble({
   );
 }
 
+// One row's worth of pipe-separated cells. "| a | b | c |" → ["a","b","c"].
+// Trims leading/trailing pipes + each cell's whitespace.
+function parseTableRow(line: string): string[] {
+  return line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(c => c.trim());
+}
+
+// True when a line looks like the alignment row that follows a table header
+// (e.g. "|---|:--|---:|"). Each cell is just dashes, colons, and whitespace.
+function isTableSeparator(line: string): boolean {
+  if (!/\|/.test(line)) return false;
+  return parseTableRow(line).every(c => /^:?-+:?$/.test(c));
+}
+
 /**
- * Tiny markdown renderer: bold via **…**, line breaks preserved, leading
- * "- " becomes a bullet glyph. We don't pull in a real markdown lib because
- * the model is constrained by the system prompt to keep formatting simple.
+ * Renders Claude's output. Handles:
+ *   - GitHub-flavored markdown tables ( |...| header / |---| separator )
+ *   - Bullet lists (lines starting with "- ")
+ *   - Bold via **…**, inline code via `…`
+ *   - Plain newlines preserved as line breaks
+ *
+ * No external markdown lib — keeps the bundle lean and gives us tight control
+ * over table styling so it matches the rest of the dashboard.
  */
 function MarkdownLite({ text }: { text: string }) {
   const lines = text.split("\n");
+  const blocks: Array<
+    | { kind: "text"; lines: string[] }
+    | { kind: "table"; header: string[]; rows: string[][] }
+  > = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const next = lines[i + 1];
+    // Table = a "|...|" header row followed by a "|---|---|" separator row,
+    // followed by zero or more "|...|" data rows.
+    if (line && /\|/.test(line) && next && isTableSeparator(next)) {
+      const header = parseTableRow(line);
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== "") {
+        rows.push(parseTableRow(lines[i]));
+        i++;
+      }
+      i--; // Step back so the outer for-loop's `i++` lands on the next line.
+      blocks.push({ kind: "table", header, rows });
+      continue;
+    }
+    const last = blocks[blocks.length - 1];
+    if (last && last.kind === "text") last.lines.push(line);
+    else blocks.push({ kind: "text", lines: [line] });
+  }
+
   return (
     <>
-      {lines.map((line, i) => {
-        const isBullet = /^\s*-\s/.test(line);
-        const stripped = isBullet ? line.replace(/^\s*-\s/, "") : line;
-        const parts = stripped.split(/(\*\*[^*]+\*\*)/g);
+      {blocks.map((block, bi) => {
+        if (block.kind === "table") {
+          return (
+            <div key={bi} className="my-2 -mx-1 overflow-x-auto">
+              <table className="text-[12px] border-collapse w-full">
+                <thead>
+                  <tr>
+                    {block.header.map((h, hi) => (
+                      <th
+                        key={hi}
+                        className="px-2 py-1.5 text-left font-semibold bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] text-[#18181b] dark:text-[#fafafa]"
+                      >
+                        <InlineMd text={h} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, ri) => (
+                    <tr key={ri}>
+                      {row.map((cell, ci) => (
+                        <td
+                          key={ci}
+                          className="px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] align-top"
+                        >
+                          <InlineMd text={cell} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        // Trim trailing empty lines from a text block so tables don't get an
+        // awkward extra <br> above them.
+        const tl = [...block.lines];
+        while (tl.length && tl[tl.length - 1].trim() === "") tl.pop();
         return (
-          <Fragment key={i}>
-            {isBullet && <span className="select-none text-[#71717a]">• </span>}
-            {parts.map((p, j) =>
-              p.startsWith("**") && p.endsWith("**") ? (
-                <strong key={j}>{p.slice(2, -2)}</strong>
-              ) : (
-                <Fragment key={j}>{p}</Fragment>
-              )
-            )}
-            {i < lines.length - 1 && <br />}
+          <Fragment key={bi}>
+            {tl.map((line, i) => {
+              const isBullet = /^\s*-\s/.test(line);
+              const stripped = isBullet ? line.replace(/^\s*-\s/, "") : line;
+              return (
+                <Fragment key={i}>
+                  {isBullet && <span className="select-none text-[#71717a]">• </span>}
+                  <InlineMd text={stripped} />
+                  {i < tl.length - 1 && <br />}
+                </Fragment>
+              );
+            })}
           </Fragment>
         );
+      })}
+    </>
+  );
+}
+
+// Inline-only formatting (bold, code) — used inside both regular paragraphs
+// and table cells. Splits on the markdown delimiters, walks the chunks.
+function InlineMd({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return (
+    <>
+      {parts.map((p, j) => {
+        if (p.startsWith("**") && p.endsWith("**")) {
+          return <strong key={j}>{p.slice(2, -2)}</strong>;
+        }
+        if (p.startsWith("`") && p.endsWith("`") && p.length > 1) {
+          return (
+            <code
+              key={j}
+              className="px-1 py-0.5 rounded bg-[#e4e4e7] dark:bg-[#27272a] text-[12px] font-mono"
+            >
+              {p.slice(1, -1)}
+            </code>
+          );
+        }
+        return <Fragment key={j}>{p}</Fragment>;
       })}
     </>
   );
