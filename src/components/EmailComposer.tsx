@@ -68,7 +68,9 @@ export default function EmailComposer({ open, context, onClose, onSent }: Props)
   if (!open || !context) return null;
 
   async function handleOpenInProvider() {
-    if (!toEmail.trim() || !subject.trim() || !body.trim()) return;
+    // No required-field gate — let the user open the provider compose
+    // window even with blank fields; they can finish composing in the
+    // webmail UI (often easier for replies / template-driven outreach).
     setOpening(true);
     setResult(null);
     const ccList = cc.split(",").map(s => s.trim()).filter(Boolean);
@@ -195,7 +197,7 @@ export default function EmailComposer({ open, context, onClose, onSent }: Props)
           </button>
           <button
             onClick={handleOpenInProvider}
-            disabled={opening || !toEmail.trim() || !subject.trim() || !body.trim()}
+            disabled={opening}
             className="flex items-center gap-1.5 text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] px-4 py-1.5 rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ExternalLink size={13} />

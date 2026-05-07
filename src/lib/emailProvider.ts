@@ -19,10 +19,10 @@ export const EMAIL_PROVIDER_LABELS: Record<EmailProvider, string> = {
 const STORAGE_KEY = "redhorn_email_provider";
 
 export function getEmailProvider(): EmailProvider {
-  if (typeof window === "undefined") return "gmail";
+  if (typeof window === "undefined") return "outlook";
   const stored = window.localStorage.getItem(STORAGE_KEY) as EmailProvider | null;
   if (stored === "gmail" || stored === "outlook") return stored;
-  return "gmail";
+  return "outlook";
 }
 
 export function setEmailProvider(provider: EmailProvider) {
