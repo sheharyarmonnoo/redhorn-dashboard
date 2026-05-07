@@ -647,20 +647,33 @@ function IncomeStatement({
                 cmpOverride: inlineCmp,
               })}
 
-              {/* Children render only when the section is expanded. */}
-              {isOpen && block.children.map((c, ci) => renderRow(c, `c-${bi}-${ci}`))}
+              {/* Animated reveal: grid-rows 0fr↔1fr trick smoothly
+                  expands children + non-grand-total subtotals without
+                  needing JS height measurement. */}
+              <div
+                className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+                  isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                }`}
+              >
+                <div className="overflow-hidden min-h-0">
+                  {block.children.map((c, ci) => renderRow(c, `c-${bi}-${ci}`))}
+                  {block.totals.map((t, ti) => {
+                    const isGrand = t.hierarchyLevel === 24;
+                    if (isGrand) return null;
+                    return renderRow(t, `t-${bi}-${ti}`, { bold: false, topBorder: false });
+                  })}
+                </div>
+              </div>
 
-              {/* Subtotals render when expanded. When collapsed they're
-                  hidden when section collapsed — the inline header value
-                  already shows that subtotal. Level-24 grand totals (TOTAL
-                  INCOME, TOTAL OPERATING EXPENSE, NOI, NET INCOME) ALWAYS
-                  render so the user sees the bottom line without expanding. */}
+              {/* Level-24 grand totals (TOTAL INCOME, TOTAL OPERATING EXPENSE,
+                  NOI, NET INCOME) ALWAYS render so the user sees the bottom
+                  line without expanding. */}
               {block.totals.map((t, ti) => {
                 const isGrand = t.hierarchyLevel === 24;
-                if (!isOpen && !isGrand) return null;
-                return renderRow(t, `t-${bi}-${ti}`, {
-                  bold: isGrand,
-                  topBorder: isGrand,
+                if (!isGrand) return null;
+                return renderRow(t, `tg-${bi}-${ti}`, {
+                  bold: true,
+                  topBorder: true,
                 });
               })}
             </div>
@@ -1365,15 +1378,22 @@ function BudgetVsActuals({
                 ytdOverride: inlineYtd,
               })}
 
-              {isOpen && block.children.map((c, ci) => renderRow(c, `c-${bi}-${ci}`))}
-
-              {isOpen && block.totals.map((t, ti) => {
-                const isGrand = t.hierarchyLevel === 24;
-                return renderRow(t, `t-${bi}-${ti}`, {
-                  bold: isGrand,
-                  topBorder: isGrand,
-                });
-              })}
+              <div
+                className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+                  isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                }`}
+              >
+                <div className="overflow-hidden min-h-0">
+                  {block.children.map((c, ci) => renderRow(c, `c-${bi}-${ci}`))}
+                  {block.totals.map((t, ti) => {
+                    const isGrand = t.hierarchyLevel === 24;
+                    return renderRow(t, `t-${bi}-${ti}`, {
+                      bold: isGrand,
+                      topBorder: isGrand,
+                    });
+                  })}
+                </div>
+              </div>
             </div>
           );
         })}
