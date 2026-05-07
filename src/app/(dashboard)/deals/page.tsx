@@ -77,16 +77,9 @@ export default function DealsPage() {
       <PageHeader
         title="Deal Pipeline"
         subtitle={`${deals.length} ${deals.length === 1 ? "deal" : "deals"} across the acquisition funnel`}
-      >
-        <button
-          onClick={() => setCreating(true)}
-          className="flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded-lg hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors cursor-pointer"
-        >
-          <Plus size={14} /> New Deal
-        </button>
-      </PageHeader>
+      />
 
-      {/* Stage-count strip */}
+      {/* Stage-count strip — New Deal sits at the end of the strip */}
       <div className="flex flex-wrap items-center gap-2 mb-4 text-[12px]">
         {STAGE_STRIP.map((s) => (
           <span
@@ -100,6 +93,12 @@ export default function DealsPage() {
             <span className="text-[#1e1e2d] dark:text-[#fafafa] font-semibold">{counts[s] || 0}</span>
           </span>
         ))}
+        <button
+          onClick={() => setCreating(true)}
+          className="flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded-lg hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] transition-colors cursor-pointer"
+        >
+          <Plus size={14} /> New Deal
+        </button>
       </div>
 
       {/* Kanban board — horizontal scroll for the 8 columns */}
