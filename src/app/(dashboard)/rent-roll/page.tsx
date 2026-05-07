@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, RowClickedEvent } from "ag-grid-community";
 import { useTenants, useUnits, useActiveProperty, formatCurrency, leasedUnitKeys, useChargeSummary, normalizeTenantName } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import RentRollDrawer from "@/components/RentRollDrawer";
@@ -159,23 +159,39 @@ export default function RentRollPage() {
     return tenants.find((t: any) => `${activeProperty?.code || "x"}-${t.unit}` === selectedKey) || null;
   }, [tenants, selectedKey]);
 
-  const columnDefs = useMemo<ColDef[]>(() => {
+  const columnDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
     const unitWidth = isMobile ? 90 : 120;
     return [
       { field: "building", headerName: "Bldg", rowGroup: true, hide: true, filter: true },
       { field: "unit", headerName: "Unit", width: unitWidth, pinned: "left", sort: "asc" },
-      { field: "tenant", headerName: "Tenant", minWidth: 180, flex: isMobile ? 0 : 1, width: isMobile ? 180 : undefined,
-        valueFormatter: (p: { value: string }) => p.value || "— Vacant —" },
-      { field: "leaseType", headerName: "Lease Type", width: 130,
-        valueFormatter: (p: { value: string }) => p.value?.replace("Office ", "") || "" },
+      // Tenant group — Tenant + Status + Electric stay visible when collapsed;
+      // Lease Type / Lease Start / Lease End reveal on expand.
+      {
+        headerName: "Tenant",
+        marryChildren: true,
+        children: [
+          { field: "tenant", headerName: "Tenant", minWidth: 180, flex: isMobile ? 0 : 1, width: isMobile ? 180 : undefined,
+            valueFormatter: (p: { value: string }) => p.value || "— Vacant —" },
+          { field: "leaseType", headerName: "Lease Type", width: 130, columnGroupShow: "open",
+            valueFormatter: (p: { value: string }) => p.value?.replace("Office ", "") || "" },
+          { field: "leaseFrom", headerName: "Lease Start", width: 110, columnGroupShow: "open",
+            valueFormatter: (p: { value: string }) => p.value || "—" },
+          { field: "leaseTo", headerName: "Lease End", width: 110, columnGroupShow: "open",
+            valueFormatter: (p: { value: string }) => p.value || "—" },
+          { field: "status", headerName: "Status", width: 130, cellRenderer: StatusCellRenderer, filter: true },
+          { field: "electricPosted", headerName: "Electric", width: 130, cellRenderer: ElectricPostedCellRenderer, filter: true,
+            valueGetter: (p: any) => {
+              const d = p.data || {};
+              if (d.status === "vacant") return "n/a";
+              if (typeof d.leaseType === "string" && !/net\s*lease/i.test(d.leaseType)) return "n/a";
+              return d.electricPosted ? "Posted" : "Not Posted";
+            } },
+        ],
+      },
       { field: "sqft", headerName: "Sq Ft", width: 90,
         valueFormatter: (p: { value: number }) => p.value?.toLocaleString() || "" },
-      { field: "leaseFrom", headerName: "Lease Start", width: 110,
-        valueFormatter: (p: { value: string }) => p.value || "—" },
-      { field: "leaseTo", headerName: "Lease End", width: 110,
-        valueFormatter: (p: { value: string }) => p.value || "—" },
       // Days until lease expires + urgency band — replaces the old separate
-      // /leases page. Hidden by default; users enable from column menu.
+      // /leases page. Always visible standalone.
       { field: "daysToExpiry", headerName: "Lease Exp.", width: 110,
         valueGetter: (p: any) => {
           const to = p.data?.leaseTo;
@@ -232,22 +248,26 @@ export default function RentRollPage() {
           );
         },
       },
-      { field: "status", headerName: "Status", width: 130, cellRenderer: StatusCellRenderer, filter: true },
-      { field: "monthlyRent", headerName: "Rent", width: 110,
-        cellRenderer: CurrencyCellRenderer },
-      // Prefer the Show Detail rent roll's monthlyRentPerSF column; fall
-      // back to monthlyRent / sqft for properties not yet on the full
-      // export. Display as $X.XX/SF.
-      { field: "monthlyRentPerSF", headerName: "Rent / SF", width: 110,
-        valueGetter: (p: any) => {
-          const d = p.data || {};
-          if (typeof d.monthlyRentPerSF === "number" && d.monthlyRentPerSF > 0) return d.monthlyRentPerSF;
-          if (d.monthlyRent > 0 && d.sqft > 0) return d.monthlyRent / d.sqft;
-          return 0;
-        },
-        valueFormatter: (p: any) => p.value > 0 ? `$${p.value.toFixed(2)}/SF` : "—" },
-      { field: "securityDeposit", headerName: "Security Deposit", width: 140,
-        cellRenderer: CurrencyCellRenderer },
+      // Rent group — Rent / SF stays visible; Rent and Security Deposit
+      // reveal on expand.
+      {
+        headerName: "Rent",
+        marryChildren: true,
+        children: [
+          { field: "monthlyRent", headerName: "Rent", width: 110, columnGroupShow: "open",
+            cellRenderer: CurrencyCellRenderer },
+          { field: "monthlyRentPerSF", headerName: "Rent / SF", width: 110,
+            valueGetter: (p: any) => {
+              const d = p.data || {};
+              if (typeof d.monthlyRentPerSF === "number" && d.monthlyRentPerSF > 0) return d.monthlyRentPerSF;
+              if (d.monthlyRent > 0 && d.sqft > 0) return d.monthlyRent / d.sqft;
+              return 0;
+            },
+            valueFormatter: (p: any) => p.value > 0 ? `$${p.value.toFixed(2)}/SF` : "—" },
+          { field: "securityDeposit", headerName: "Security Deposit", width: 140, columnGroupShow: "open",
+            cellRenderer: CurrencyCellRenderer },
+        ],
+      },
       // Per-tenant current-month charges from the receivable detail. Hidden
       // by default — user enables via the column menu when they need them.
       { field: "camCharge", headerName: "CAM", width: 110,
@@ -256,15 +276,22 @@ export default function RentRollPage() {
         hide: true, cellRenderer: CurrencyCellRenderer },
       { field: "insuranceCharge", headerName: "Insurance", width: 110,
         hide: true, cellRenderer: CurrencyCellRenderer },
-      { field: "currentMonthCharges", headerName: "Curr Charges", width: 130,
-        hide: false, cellRenderer: CurrencyCellRenderer },
-      { field: "currentBalance", headerName: "Curr Balance", width: 130,
-        hide: false,
-        cellRenderer: (p: { value: number }) => {
-          const v = p.value || 0;
-          if (v === 0) return <span className="text-[#a1a1aa]">—</span>;
-          return <span className={v > 0 ? "text-[#dc2626] font-medium" : "text-[#16a34a]"}>{formatCurrency(Math.abs(v))}{v < 0 ? " CR" : ""}</span>;
-        },
+      // Current group — Current Balance stays visible; Current Charges
+      // reveals on expand.
+      {
+        headerName: "Current",
+        marryChildren: true,
+        children: [
+          { field: "currentMonthCharges", headerName: "Curr Charges", width: 130, columnGroupShow: "open",
+            cellRenderer: CurrencyCellRenderer },
+          { field: "currentBalance", headerName: "Curr Balance", width: 130,
+            cellRenderer: (p: { value: number }) => {
+              const v = p.value || 0;
+              if (v === 0) return <span className="text-[#a1a1aa]">—</span>;
+              return <span className={v > 0 ? "text-[#dc2626] font-medium" : "text-[#16a34a]"}>{formatCurrency(Math.abs(v))}{v < 0 ? " CR" : ""}</span>;
+            },
+          },
+        ],
       },
       // Manual entry until the Tenancy Schedule scraper lands. Hidden by
       // default; user can toggle visibility via the column menu.
@@ -274,17 +301,8 @@ export default function RentRollPage() {
       { field: "nextRentIncreaseAmount", headerName: "New Rent", width: 110, hide: true,
         cellRenderer: CurrencyCellRenderer,
       },
-      // Net-lease electric posting status. Filterable so the user can
-      // pull up "Not Posted" rows for the close.
-      { field: "electricPosted", headerName: "Electric", width: 130, cellRenderer: ElectricPostedCellRenderer, filter: true,
-        valueGetter: (p: any) => {
-          const d = p.data || {};
-          if (d.status === "vacant") return "n/a";
-          if (typeof d.leaseType === "string" && !/net\s*lease/i.test(d.leaseType)) return "n/a";
-          return d.electricPosted ? "Posted" : "Not Posted";
-        } },
-      // Security Deposit, Monthly Electric ($ amount), and Past Due
-      // intentionally hidden from the grid — drawer still surfaces them.
+      // Monthly Electric ($ amount) and Past Due intentionally hidden from
+      // the grid — drawer still surfaces them.
     ];
   }, [isMobile]);
 
@@ -375,7 +393,7 @@ export default function RentRollPage() {
       </div>
 
       {/* AG Grid Table */}
-      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: "min(calc(100vh - 220px), 700px)", minHeight: 350 }}>
+      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: "calc(100vh - 180px)", minHeight: 500 }}>
         <AgGridReact
           ref={gridRef}
           rowData={tenants}
@@ -395,7 +413,7 @@ export default function RentRollPage() {
           animateRows={true}
           pagination={true}
           paginationAutoPageSize={false}
-          paginationPageSize={500}
+          paginationPageSize={20}
           suppressRowHoverHighlight={false}
           rowBuffer={20}
           cacheBlockSize={500}
