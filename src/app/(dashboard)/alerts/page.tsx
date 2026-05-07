@@ -878,18 +878,35 @@ function buildAlertEmail(
   const toEmail = tenantEmail || pm?.email || "";
   const toName = tenantEmail ? (t?.tenantContactName || t?.tenant) : pm?.name;
 
+  // Subject: if a title exists, use it (with optional " — Unit N" tail when
+  // we have a unit). Otherwise use the category, again with " — Unit N"
+  // only when a unit is set. Property-level alerts (no unit) don't get a
+  // dangling " — Unit " in either case.
+  const unitTail = alert.unit ? ` — Unit ${alert.unit}` : "";
   const subject = alert.title
-    ? `${alert.title}${alert.unit ? ` — Unit ${alert.unit}` : ""}`
-    : `${alert.category} — Unit ${alert.unit || ""}`;
+    ? `${alert.title}${unitTail}`
+    : `${alert.category}${unitTail}`;
 
   const cleanDetail = (alert.detail || "").replace(/\*\*/g, "").replace(/^- /gm, "• ");
   const greeting = tenantEmail
     ? (t?.tenantContactName ? `Hi ${t.tenantContactName},` : "Hello,")
     : (pm?.name ? `Hi ${pm.name},` : "Hi team,");
 
-  const subject_intro = tenantEmail
-    ? `I'm reaching out about your unit:`
-    : `Following up on Unit ${alert.unit} — ${alert.tenant || ""}:`;
+  // Body intro varies based on what we know:
+  //   - tenant email available → speak to the tenant
+  //   - have a unit + tenant name → "Following up on Unit X — Tenant:"
+  //   - have a unit but no tenant name → "Following up on Unit X:"
+  //   - no unit (property-level alert) → "Following up on the alert below:"
+  let subject_intro: string;
+  if (tenantEmail) {
+    subject_intro = "I'm reaching out about your unit:";
+  } else if (alert.unit) {
+    subject_intro = alert.tenant
+      ? `Following up on Unit ${alert.unit} — ${alert.tenant}:`
+      : `Following up on Unit ${alert.unit}:`;
+  } else {
+    subject_intro = "Following up on the alert below:";
+  }
 
   const body =
 `${greeting}
