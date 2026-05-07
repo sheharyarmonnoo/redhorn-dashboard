@@ -49,6 +49,9 @@ interface Props {
   stageFilter?: DealStage | null;
   /** Deal id to visually highlight (e.g. recently stage-changed). */
   recentlyMovedId?: string | null;
+  /** Page passes a setter so it can wire its own Export-to-CSV button to
+   *  the AG Grid instance owned by this component. */
+  onExportReady?: (exportCsv: () => void) => void;
 }
 
 /**
@@ -58,10 +61,22 @@ interface Props {
  * column the user adds in the Manage Fields modal automatically gets a slot
  * here too.
  */
-export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter, recentlyMovedId }: Props) {
+export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter, recentlyMovedId, onExportReady }: Props) {
   const gridRef = useRef<AgGridReact>(null);
   const { defs } = useDealFieldDefinitions();
   const persistence = useAgGridPersistence({ storageKey: "redhorn_grid_deals" });
+
+  // Expose CSV export to the parent page so the Export button can live in
+  // the page toolbar instead of cluttering the grid frame.
+  useEffect(() => {
+    if (!onExportReady) return;
+    onExportReady(() => {
+      const api = gridRef.current?.api;
+      if (!api) return;
+      const fileName = `redhorn-deals-${new Date().toISOString().slice(0, 10)}.csv`;
+      api.exportDataAsCsv({ fileName, allColumns: true });
+    });
+  }, [onExportReady]);
 
   const columnDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
     const base: (ColDef | ColGroupDef)[] = [

@@ -66,7 +66,7 @@ export default function FinancialsPage() {
   const updateProperty = useMutation(api.properties.update);
   const { user } = useUser();
 
-  const [view, setView] = useState<"statement" | "budget">("statement");
+  const [view, setView] = useState<"statement" | "budget" | "debt">("statement");
   const [budgetYear, setBudgetYear] = useState<string>(String(new Date().getFullYear()));
   const [budgetCompareYear, setBudgetCompareYear] = useState<string>(String(new Date().getFullYear() - 1));
   const { budgets, upsertBudget } = useLineBudgets(property?._id, budgetYear);
@@ -306,17 +306,21 @@ export default function FinancialsPage() {
 
       {/* Tab switcher */}
       <div className="flex gap-1 mb-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
-        {(["statement", "budget"] as const).map(t => (
+        {([
+          { key: "statement", label: "Income Statement" },
+          { key: "budget", label: "Budget vs Actuals" },
+          { key: "debt", label: "Debt & DSCR" },
+        ] as const).map(t => (
           <button
-            key={t}
-            onClick={() => setView(t)}
-            className={`text-[12px] font-medium px-3 py-1.5 rounded cursor-pointer transition-colors capitalize ${
-              view === t
+            key={t.key}
+            onClick={() => setView(t.key)}
+            className={`text-[12px] font-medium px-3 py-1.5 rounded cursor-pointer transition-colors ${
+              view === t.key
                 ? "bg-white dark:bg-[#18181b] text-[#18181b] dark:text-[#fafafa] shadow-sm"
                 : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
             }`}
           >
-            {t === "statement" ? "Income Statement" : "Budget vs Actuals"}
+            {t.label}
           </button>
         ))}
       </div>
@@ -345,6 +349,31 @@ export default function FinancialsPage() {
           period={period}
           allHistoricLines={(allHistoricLines as any[]) || []}
           availablePeriods={availablePeriods}
+        />
+      )}
+      {view === "debt" && (
+        <DebtPanel
+          debt={debt}
+          noi={noi}
+          dscr={dscr}
+          onSave={async (form) => {
+            if (!property?._id) return;
+            await upsertDebt({
+              propertyId: property._id as any,
+              totalDebt: form.totalDebt,
+              monthlyDebtService: form.monthlyDebtService,
+              monthlyPrincipal: form.monthlyPrincipal,
+              interestRate: form.interestRate,
+              lender: form.lender,
+              loanStartDate: form.loanStartDate,
+              loanMaturityDate: form.loanMaturityDate,
+              notes: form.notes,
+            });
+          }}
+          onClear={async () => {
+            if (!property?._id) return;
+            await clearDebt({ propertyId: property._id as any });
+          }}
         />
       )}
     </div>

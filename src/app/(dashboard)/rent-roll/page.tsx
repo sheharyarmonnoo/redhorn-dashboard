@@ -3,7 +3,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, RowClickedEvent } from "ag-grid-community";
-import { useTenantsWithLoading, useUnits, useActiveProperty, formatCurrency, leasedUnitKeys, useChargeSummary, normalizeTenantName } from "@/hooks/useConvexData";
+import { useTenantsWithLoading, useUnits, useActiveProperty, formatCurrency, leasedUnitKeys, useChargeSummary, normalizeTenantName, showsElectricIndicator } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
@@ -45,14 +45,13 @@ function CurrencyCellRenderer(props: { value: number }) {
   return <span>{props.value > 0 ? formatCurrency(props.value) : "—"}</span>;
 }
 
-// Electric posting only applies to net-lease tenants — gross leases include
-// utilities in base rent. Renders one of: "—" for vacant or non-net-lease,
-// green "Posted" or red "Not Posted" otherwise.
-function ElectricPostedCellRenderer(props: { data: any }) {
+// Electric posting indicator. Visibility is now an allowlist per property +
+// per unit (see showsElectricIndicator). Hollister: a specific set of units;
+// Belgold: never; everything else: never.
+function ElectricPostedCellRenderer(props: { data: any; context: any }) {
   const t = props.data || {};
-  const isVacant = t.status === "vacant";
-  const isNet = typeof t.leaseType === "string" && /net\s*lease/i.test(t.leaseType);
-  if (isVacant || !isNet) {
+  const propertyCode = props.context?.propertyCode;
+  if (!showsElectricIndicator(t, propertyCode)) {
     return <span className="text-[11px] text-[#d4d4d8] dark:text-[#52525b]">—</span>;
   }
   const posted = !!t.electricPosted;
@@ -238,8 +237,8 @@ export default function RentRollPage() {
           { field: "electricPosted", headerName: "Electric", width: 130, cellRenderer: ElectricPostedCellRenderer, filter: true,
             valueGetter: (p: any) => {
               const d = p.data || {};
-              if (d.status === "vacant") return "n/a";
-              if (typeof d.leaseType === "string" && !/net\s*lease/i.test(d.leaseType)) return "n/a";
+              const code = p.context?.propertyCode;
+              if (!showsElectricIndicator(d, code)) return "n/a";
               return d.electricPosted ? "Posted" : "Not Posted";
             } },
         ],
@@ -535,6 +534,10 @@ export default function RentRollPage() {
           defaultColDef={defaultColDef}
           autoGroupColumnDef={autoGroupColumnDef}
           quickFilterText={quickSearch}
+          // Context flows to every cell renderer + valueGetter so the
+          // electric-posting indicator can read the active property code
+          // and apply the per-property allowlist.
+          context={{ propertyCode: activeProperty?.code }}
           groupDisplayType="groupRows"
           groupDefaultExpanded={1}
           onGridReady={persistence.onGridReady}

@@ -153,6 +153,40 @@ export function isExpiringWithin(leaseTo: string | undefined, days = 90): boolea
   return lease >= today && lease <= cutoff;
 }
 
+// Whether the electric-posting indicator should render for a given tenant.
+// Default rule was "any net lease". The user wants per-property + per-unit
+// control: Belgold gets nothing; Hollister only the units below.
+const ELECTRIC_INDICATOR_UNITS: Record<string, Set<string>> = {
+  hollister: new Set([
+    "abd",
+    "c-100",
+    "c-194",
+    "c-200",
+    "c-202",
+    "c-204",
+    "c-210",
+    "d-150",
+    "d-160",
+  ]),
+};
+export function showsElectricIndicator(
+  tenant: { unit?: string; status?: string } | null | undefined,
+  propertyCode: string | undefined,
+): boolean {
+  if (!tenant || tenant.status === "vacant") return false;
+  const code = (propertyCode || "").toLowerCase();
+  const allow = ELECTRIC_INDICATOR_UNITS[code];
+  if (!allow) return false;
+  const raw = (tenant.unit || "").trim().toLowerCase();
+  if (!raw) return false;
+  // Multi-unit leases store comma-separated units. If ANY of the leased
+  // units is in the allowlist, show the indicator for the lease.
+  for (const part of raw.split(",")) {
+    if (allow.has(part.trim())) return true;
+  }
+  return false;
+}
+
 // Lease end already passed but the tenant is still occupying the unit
 // (holdover). Used to surface the "Expired Leases" KPI separately from
 // the 90-day Expiring window.

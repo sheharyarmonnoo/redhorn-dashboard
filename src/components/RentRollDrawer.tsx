@@ -308,8 +308,11 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
           {/* Tenant Contact — editable email/phone/contact name override.
               Persists to tenant_overrides so it survives the next Yardi sync. */}
           <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Tenant Contact</p>
+            <div className="flex items-start justify-between mb-2 gap-3">
+              <div>
+                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium">Tenant Contact</p>
+                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5 leading-snug">Manual entry — Yardi exports don't include tenant emails or phones.</p>
+              </div>
               {editingContact ? (
                 <div className="flex items-center gap-1">
                   <button

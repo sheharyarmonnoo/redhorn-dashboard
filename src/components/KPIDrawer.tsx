@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, formatCurrency, isExpiringWithin, isExpired, leasedUnitKeys } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, formatCurrency, isExpiringWithin, isExpired, leasedUnitKeys, showsElectricIndicator } from "@/hooks/useConvexData";
 
 function useKpiData() {
   const property = useActiveProperty();
   const tenants = useTenants(property?._id) as any[];
   const units = useUnits(property?._id) as any[];
   const monthlyRevenue = useMonthlyRevenue(property?._id) as any[];
-  return { tenants, units, monthlyRevenue };
+  return { tenants, units, monthlyRevenue, propertyCode: property?.code };
 }
 
 // Derive vacant units from the diff: units in the Total Units listing that
@@ -211,15 +211,17 @@ function VacantDetail() {
 }
 
 function ElectricDetail() {
-  const { tenants } = useKpiData();
-  const netLease = tenants.filter((t: any) => t.leaseType === "Office Net Lease" && t.tenant && !t.tenant.includes("Owner"));
-  const missing = netLease.filter((t: any) => !t.electricPosted);
-  const posted = netLease.filter((t: any) => t.electricPosted);
+  const { tenants, propertyCode } = useKpiData();
+  // Switched from "any net lease" to the per-property + per-unit allowlist
+  // so this drawer matches the rent-roll grid's electric column.
+  const tracked = tenants.filter((t: any) => showsElectricIndicator(t, propertyCode));
+  const missing = tracked.filter((t: any) => !t.electricPosted);
+  const posted = tracked.filter((t: any) => t.electricPosted);
   return (
     <div className="space-y-5">
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Electric Posting Status</p>
-        <Field label="Net Lease Tenants" value={`${netLease.length}`} />
+        <Field label="Tracked Units" value={`${tracked.length}`} />
         <Field label="Posted" value={`${posted.length}`} color="text-[#16a34a]" />
         <Field label="Missing" value={`${missing.length}`} color={missing.length > 0 ? "text-[#dc2626]" : "text-[#16a34a]"} />
       </div>
@@ -232,10 +234,10 @@ function ElectricDetail() {
         </div>
       )}
       <div>
-        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">All Net Lease</p>
-        {netLease.length === 0 ? (
-          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No net-lease tenants.</p>
-        ) : netLease.map((t: any) => (
+        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">All Tracked</p>
+        {tracked.length === 0 ? (
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a]">No units tracked for this property.</p>
+        ) : tracked.map((t: any) => (
           <Field key={t.unit} label={`${t.unit} — ${t.tenant}`} value={t.electricPosted ? "Posted" : "NOT POSTED"} color={t.electricPosted ? "text-[#16a34a]" : "text-[#dc2626]"} />
         ))}
       </div>

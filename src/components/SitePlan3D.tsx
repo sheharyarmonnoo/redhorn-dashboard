@@ -1,5 +1,5 @@
 "use client";
-import { useActiveProperty, useTenants, useUnits } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenants, useUnits, showsElectricIndicator } from "@/hooks/useConvexData";
 
 type TenantStatus = "current" | "past_due" | "locked_out" | "vacant" | "expiring_soon";
 type Tenant = any;
@@ -23,10 +23,11 @@ function compactUnit(unit: string): string {
   return `${parts[0]} +${parts.length - 1}`;
 }
 
-function UnitBlock({ tenant, onSelect, isSelected }: {
+function UnitBlock({ tenant, onSelect, isSelected, propertyCode }: {
   tenant: Tenant;
   onSelect: (t: Tenant) => void;
   isSelected: boolean;
+  propertyCode?: string;
 }) {
   const c = statusColor(tenant.status);
   const label = compactUnit(tenant.unit || "");
@@ -55,7 +56,7 @@ function UnitBlock({ tenant, onSelect, isSelected }: {
       {tenant.pastDueAmount > 0 && (
         <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#dc2626] rounded-full border-2 border-white dark:border-[#18181b]" />
       )}
-      {!tenant.electricPosted && tenant.leaseType === "Office Net Lease" && tenant.tenant && !tenant.tenant.includes("Owner") && (
+      {!tenant.electricPosted && showsElectricIndicator(tenant, propertyCode) && tenant.tenant && !tenant.tenant.includes("Owner") && (
         <span className="absolute -top-1 -left-1 w-3 h-3 bg-[#d97706] rounded-full border-2 border-white dark:border-[#18181b]" />
       )}
     </button>
@@ -154,7 +155,7 @@ export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: T
               )}
               <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-1.5">
                 {units.map(t => (
-                  <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} />
+                  <UnitBlock key={t.unit} tenant={t} onSelect={onSelect} isSelected={selectedUnit === t.unit} propertyCode={property?.code} />
                 ))}
               </div>
             </div>

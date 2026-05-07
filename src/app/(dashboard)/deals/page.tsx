@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Plus, LayoutGrid, List, Search, X } from "lucide-react";
+import { Plus, LayoutGrid, List, Search, X, Download } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
 import { useDeals } from "@/hooks/useConvexData";
@@ -112,6 +112,8 @@ export default function DealsPage() {
       if (recentMoveTimerRef.current) clearTimeout(recentMoveTimerRef.current);
     };
   }, []);
+  // CSV export — DealsGrid hands us a callback once the AG Grid is ready.
+  const exportCsvRef = useRef<(() => void) | null>(null);
 
   const selectedDeal = useMemo(
     () => (selectedId ? deals.find((d: any) => d._id === selectedId) || null : null),
@@ -272,6 +274,15 @@ export default function DealsPage() {
             {view === "kanban" ? `${filteredDeals.length} of ${deals.length}` : "filtering table"}
           </span>
         )}
+        {view === "table" && (
+          <button
+            onClick={() => exportCsvRef.current?.()}
+            className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] hover:border-[#71717a] cursor-pointer whitespace-nowrap"
+            title="Export current table view to CSV"
+          >
+            <Download size={12} /> Export
+          </button>
+        )}
       </div>
 
       {/* View body */}
@@ -293,6 +304,7 @@ export default function DealsPage() {
             onDealClick={(deal) => setSelectedId(deal._id)}
             stageFilter={stageFilter}
             recentlyMovedId={recentlyMovedId}
+            onExportReady={(fn) => { exportCsvRef.current = fn; }}
           />
         </div>
       )}

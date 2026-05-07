@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { X } from "lucide-react";
-import { useUnitNotes, useReceivableDetails, normalizeTenantName, formatCurrency, useTenantMutations } from "@/hooks/useConvexData";
+import { useUnitNotes, useReceivableDetails, normalizeTenantName, formatCurrency, useTenantMutations, useActiveProperty, showsElectricIndicator } from "@/hooks/useConvexData";
 import ConfirmDialog from "./ConfirmDialog";
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
 type TabValue = "details" | "ledger" | "electric" | "recoveries" | "payments";
 
 export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated }: Props) {
+  const activeProperty = useActiveProperty();
   const [cached, setCached] = useState<any>(tenantProp);
   const [closing, setClosing] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
@@ -279,8 +280,10 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
 
 
 
-              {/* Posting Status — auto-derived from receivable detail charges during sync */}
-              {tenant.leaseType === "Office Net Lease" && (
+              {/* Posting Status — auto-derived from receivable detail charges during sync.
+                  Visibility now follows the per-property + per-unit allowlist
+                  (showsElectricIndicator) instead of just lease type. */}
+              {showsElectricIndicator(tenant, activeProperty?.code) && (
                 <div>
                   <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">
                     Electric Posting ({new Date().toLocaleString("en-US", { month: "long", year: "numeric" })})
