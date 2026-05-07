@@ -1,10 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { useMutation } from "convex/react";
-import { useUser } from "@clerk/nextjs";
 import { Mail } from "lucide-react";
-import { api } from "../../convex/_generated/api";
-import { formatCurrency, normalizeTenantName, useReceivableDetails, useProperties } from "@/hooks/useConvexData";
+import { formatCurrency, normalizeTenantName, useReceivableDetails, useProperties, useUnitNotes } from "@/hooks/useConvexData";
 import EmailComposer, { type EmailContext } from "./EmailComposer";
 
 type Tenant = any;
@@ -23,16 +20,24 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function RentRollDrawer({ tenant, onClose }: Props) {
-  const setOverride = useMutation(api.tenantOverrides.setOverride);
-  const { user } = useUser();
-  const [notesDraft, setNotesDraft] = useState<string>(tenant?.notes || "");
-  const [savingNotes, setSavingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState<string>("");
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<string>("");
   const [tab, setTab] = useState<"details" | "ledger" | "electric" | "payments">("details");
   const [emailCtx, setEmailCtx] = useState<EmailContext | null>(null);
   const { properties } = useProperties();
   const property = useMemo(() => properties.find((p: any) => p._id === tenant?.propertyId) || null, [properties, tenant?.propertyId]);
 
-  useEffect(() => { setNotesDraft(tenant?.notes || ""); }, [tenant?.unit, tenant?.propertyId, tenant?.notes]);
+  const { notes: notesLog, createNote, updateNote, removeNote } = useUnitNotes(
+    tenant?.propertyId,
+    tenant?.unit
+  );
+
+  useEffect(() => {
+    setNotesDraft("");
+    setEditingNoteId(null);
+    setEditDraft("");
+  }, [tenant?.unit, tenant?.propertyId]);
   useEffect(() => { setTab("details"); }, [tenant?.unit, tenant?.propertyId]);
 
   // Pull all receivable_details for this property; filter to this tenant.
@@ -51,20 +56,30 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
 
   if (!tenant) return null;
 
-  const notesDirty = (notesDraft || "") !== (tenant.notes || "");
+  // Seed note from tenant data if no log entries exist (matches UnitDetailPanel)
+  const seedNote = tenant.notes && notesLog.length === 0 ? tenant.notes : null;
 
-  async function handleSaveNotes() {
-    if (!tenant.propertyId || !tenant.unit) return;
-    if (!notesDirty) return;
-    setSavingNotes(true);
-    try {
-      await setOverride({
-        propertyId: tenant.propertyId as any,
-        unit: tenant.unit,
-        fields: { notes: strOrUndef(notesDraft) },
-        updatedBy: user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User",
-      });
-    } finally { setSavingNotes(false); }
+  async function handleAddNote() {
+    if (!notesDraft.trim() || !tenant?.propertyId || !tenant?.unit) return;
+    await createNote({ propertyId: tenant.propertyId, unit: tenant.unit, text: notesDraft.trim() });
+    setNotesDraft("");
+  }
+
+  async function handleEditNote(id: string) {
+    if (!editDraft.trim()) return;
+    await updateNote({ id: id as any, text: editDraft.trim() });
+    setEditingNoteId(null);
+    setEditDraft("");
+  }
+
+  async function handleDeleteNote(id: string) {
+    await removeNote({ id: id as any });
+  }
+
+  function formatTimestamp(iso: string) {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+      " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   }
 
   return (
@@ -135,7 +150,7 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
           <LedgerTable rows={electricTx} emptyLabel="No electric charges or payments for this tenant." />
         )}
         {tab === "payments" && (
-          <LedgerTable rows={paymentsTx} emptyLabel="No payments recorded for this tenant." />
+          <LedgerTable rows={paymentsTx} emptyLabel="No payments recorded for this tenant." hideCharges />
         )}
         {tab === "details" && (
         <div className="p-5 space-y-4">
@@ -187,25 +202,84 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
             </Field>
           </div>
 
-          <Field label="Notes" overridden={tenant.overrideFields?.includes("notes")}>
-            <textarea
-              value={notesDraft}
-              onChange={(e) => setNotesDraft(e.target.value)}
-              onBlur={handleSaveNotes}
-              rows={4}
-              placeholder="Anything the team should know about this lease — payment history, issues, off-system arrangements."
-              className="w-full text-[12px] bg-white dark:bg-[#09090b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2 text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#18181b] dark:focus:border-[#fafafa] resize-none"
-            />
-            {savingNotes && (
-              <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1">Saving…</p>
-            )}
-          </Field>
-
-          {tenant.hasOverride && tenant.overrideUpdatedAt && (
-            <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] leading-relaxed">
-              Last edited {new Date(tenant.overrideUpdatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}{tenant.overrideUpdatedBy ? ` by ${tenant.overrideUpdatedBy}` : ""}.
+          {/* Notes — timestamped, stackable (newest first) */}
+          <div>
+            <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">
+              Notes {notesLog.length > 0 && `(${notesLog.length})`}
             </p>
-          )}
+
+            {/* Add new note */}
+            <div className="flex gap-2 mb-3">
+              <textarea
+                value={notesDraft}
+                onChange={e => setNotesDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAddNote(); } }}
+                placeholder="Add a note..."
+                rows={2}
+                className="flex-1 text-[12px] text-[#18181b] dark:text-[#fafafa] bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2.5 leading-relaxed focus:outline-none focus:border-[#71717a] resize-none"
+              />
+              <button
+                onClick={handleAddNote}
+                disabled={!notesDraft.trim()}
+                className="self-end text-[10px] font-medium px-3 py-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded hover:bg-[#27272a] dark:hover:bg-[#e4e4e7] disabled:bg-[#e4e4e7] dark:disabled:bg-[#3f3f46] disabled:text-[#a1a1aa] dark:disabled:text-[#71717a] cursor-pointer transition-colors"
+              >
+                Add
+              </button>
+            </div>
+
+            {/* Notes log — newest first */}
+            {notesLog.length > 0 ? (
+              <div className="space-y-2 max-h-[240px] overflow-y-auto">
+                {notesLog.map(entry => (
+                  <div key={entry._id} className="group bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2.5">
+                    {editingNoteId === entry._id ? (
+                      <div className="space-y-1.5">
+                        <textarea value={editDraft} onChange={e => setEditDraft(e.target.value)}
+                          className="w-full text-[12px] text-[#18181b] dark:text-[#fafafa] bg-[#fafafa] dark:bg-[#27272a] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-2 leading-relaxed focus:outline-none focus:border-[#71717a] resize-none min-h-[40px]"
+                          autoFocus />
+                        <div className="flex gap-1.5">
+                          <button onClick={() => handleEditNote(entry._id)}
+                            className="text-[10px] font-medium px-2 py-0.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] rounded cursor-pointer">Save</button>
+                          <button onClick={() => setEditingNoteId(null)}
+                            className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] cursor-pointer">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] leading-relaxed whitespace-pre-wrap">{entry.text}</p>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <div className="text-[9px] text-[#a1a1aa] dark:text-[#71717a]">
+                            <span>{formatTimestamp(entry.createdAt)}</span>
+                            {entry.updatedAt && (
+                              <span className="ml-1.5 text-[#d4d4d8] dark:text-[#52525b]">· edited {formatTimestamp(entry.updatedAt)}</span>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setEditingNoteId(entry._id); setEditDraft(entry.text); }}
+                              className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer">Edit</button>
+                            <button onClick={() => {
+                              if (window.confirm("Delete this note? This cannot be undone.")) handleDeleteNote(entry._id);
+                            }}
+                              className="text-[10px] font-medium text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer">Delete</button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : !seedNote && (
+              <p className="text-[12px] text-[#d4d4d8] dark:text-[#52525b] italic bg-[#fafafa] dark:bg-[#27272a] p-3 rounded">No notes yet</p>
+            )}
+
+            {/* Seed note (from original Yardi data) — shown at bottom if no log entries */}
+            {seedNote && (
+              <div className="bg-[#fafafa] dark:bg-[#27272a] rounded p-2.5 mt-2 border border-[#f4f4f5] dark:border-[#3f3f46]">
+                <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] leading-relaxed whitespace-pre-wrap">{seedNote}</p>
+                <p className="text-[9px] text-[#d4d4d8] dark:text-[#52525b] mt-1.5">From Yardi import</p>
+              </div>
+            )}
+          </div>
         </div>
         )}
       </div>
@@ -263,7 +337,7 @@ Best regards,`;
   };
 }
 
-function LedgerTable({ rows, emptyLabel }: { rows: any[]; emptyLabel: string }) {
+function LedgerTable({ rows, emptyLabel, hideCharges }: { rows: any[]; emptyLabel: string; hideCharges?: boolean }) {
   if (rows.length === 0) {
     return (
       <div className="p-8 text-center">
@@ -289,8 +363,12 @@ function LedgerTable({ rows, emptyLabel }: { rows: any[]; emptyLabel: string }) 
             <div className="flex items-center justify-between px-3 py-2 bg-[#fafafa] dark:bg-[#27272a] border-b border-[#e4e4e7] dark:border-[#3f3f46]">
               <p className="text-[11px] font-semibold text-[#18181b] dark:text-[#fafafa]">{formatMonth(mk)}</p>
               <p className="text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
-                Charged <span className="font-medium text-[#dc2626]">{formatCurrency(monthCharges)}</span>
-                <span className="mx-1.5">·</span>
+                {!hideCharges && (
+                  <>
+                    Charged <span className="font-medium text-[#dc2626]">{formatCurrency(monthCharges)}</span>
+                    <span className="mx-1.5">·</span>
+                  </>
+                )}
                 Paid <span className="font-medium text-[#16a34a]">{formatCurrency(monthReceipts)}</span>
               </p>
             </div>
@@ -353,9 +431,4 @@ function Field({ label, overridden, children }: { label: string; overridden?: bo
       {children}
     </div>
   );
-}
-
-function strOrUndef(v: any): string | undefined {
-  const s = (v || "").toString().trim();
-  return s.length > 0 ? s : undefined;
 }
