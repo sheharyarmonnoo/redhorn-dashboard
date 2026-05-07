@@ -2,6 +2,95 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 /**
+ * One-shot maintenance: copy `snapshotDate.slice(0,7)` into the `period`
+ * field for rows where `period` is blank. Historical backfills run before
+ * the period-from-IS-header logic landed wrote snapshotDate but no period,
+ * which made those rows invisible to the Financials page period switcher.
+ */
+export const backfillPeriodFromSnapshotDate = mutation({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const cap = args.limit ?? 2000;
+    const rows = await ctx.db.query("income_lines").take(cap);
+    let patched = 0;
+    let skippedHasPeriod = 0;
+    let skippedNoSnap = 0;
+    for (const r of rows) {
+      if (r.period && r.period.length > 0) { skippedHasPeriod++; continue; }
+      const stamp = (r.snapshotDate || "").slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(stamp)) { skippedNoSnap++; continue; }
+      await ctx.db.patch(r._id, { period: stamp });
+      patched++;
+    }
+    return { scanned: rows.length, patched, skippedHasPeriod, skippedNoSnap, more: rows.length === cap };
+  },
+});
+
+/**
+ * One-shot maintenance: drop income_lines rows with a specific (period,
+ * isLatest) combination — used for clearing phantom in-progress-month
+ * snapshots that older syncs wrote when the IS header parsing was off.
+ * E.g. clearByExactPeriod({period: "2026-05"}) drops every 2026-05 row
+ * across both isLatest=true and isLatest=false.
+ */
+export const clearByExactPeriod = mutation({
+  args: { period: v.string() },
+  handler: async (ctx, args) => {
+    const all = await ctx.db.query("income_lines").collect();
+    let removed = 0;
+    for (const r of all) {
+      if (r.period === args.period) {
+        await ctx.db.delete(r._id);
+        removed++;
+      }
+    }
+    return { scanned: all.length, removed };
+  },
+});
+
+/**
+ * One-shot: drop income_lines rows where period is blank/null AND the
+ * snapshotDate falls in the given month (e.g. "2026-05"). Used to clear
+ * phantom rows from runs that didn't parse the IS period header.
+ */
+export const clearBlankPeriodInSnapMonth = mutation({
+  args: { snapMonth: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const cap = args.limit ?? 2000;
+    const rows = await ctx.db.query("income_lines").take(cap);
+    let removed = 0;
+    for (const r of rows) {
+      if (r.period && r.period.length > 0) continue;
+      const stamp = (r.snapshotDate || "").slice(0, 7);
+      if (stamp !== args.snapMonth) continue;
+      await ctx.db.delete(r._id);
+      removed++;
+    }
+    return { scanned: rows.length, removed, more: rows.length === cap };
+  },
+});
+
+/**
+ * Diagnostic: list distinct (propertyId, period, snapshotDate-month) and
+ * count rows. Helps audit whether historical backfills actually wrote
+ * the `period` field or only `snapshotDate`.
+ */
+export const periodInventory = query({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("income_lines").collect();
+    const buckets = new Map<string, number>();
+    for (const r of all) {
+      const period = r.period || "";
+      const snapMonth = (r.snapshotDate || "").slice(0, 7);
+      const key = `${r.propertyId}|period=${period}|snap=${snapMonth}|isLatest=${r.isLatest}`;
+      buckets.set(key, (buckets.get(key) || 0) + 1);
+    }
+    return Array.from(buckets.entries()).map(([key, count]) => ({ key, count })).sort((a, b) => a.key.localeCompare(b.key));
+  },
+});
+
+/**
  * One-shot cleanup: nuke all income_lines rows whose `period` (or fallback
  * `snapshotDate`) is older than `keepFromMonth`. Used to drop prior-year
  * historical backfills the dashboard no longer surfaces.
