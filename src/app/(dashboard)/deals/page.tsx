@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { Plus, LayoutGrid, List, Search, X } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
 import { useDeals } from "@/hooks/useConvexData";
 import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
 import { DealDetail } from "@/components/pipeline/DealDetail";
+import DealsGrid from "@/components/pipeline/DealsGrid";
 import { DealStage, getStageLabel } from "@/data/_seed_deals";
+
+type DealsView = "kanban" | "table";
+const VIEW_STORAGE_KEY = "redhorn_deals_view";
 
 // Stage strip is the same set the board renders, minus the terminal
 // "closed"/"dead" buckets — those would dominate the count visually for
@@ -53,6 +57,24 @@ export default function DealsPage() {
   // detail panel on the click-time copy and miss inline edits / new notes.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // View toggle — kanban (default) vs table. Persisted in localStorage so the
+  // user lands on whichever view they last used. AG-Grid table is heavier for
+  // large pipelines (1700+ deals from the Monday import) where kanban becomes
+  // unwieldy.
+  const [view, setView] = useState<DealsView>("kanban");
+  useEffect(() => {
+    const stored = (typeof window !== "undefined" ? localStorage.getItem(VIEW_STORAGE_KEY) : null) as DealsView | null;
+    if (stored === "kanban" || stored === "table") setView(stored);
+  }, []);
+  const switchView = (next: DealsView) => {
+    setView(next);
+    if (typeof window !== "undefined") localStorage.setItem(VIEW_STORAGE_KEY, next);
+  };
+
+  // Quick search — filters across name / address / city / source / assignedTo
+  // / mondayItemId / contact emails / notes for kanban; AG Grid uses its own
+  // built-in quickFilterText for the table view.
+  const [quickSearch, setQuickSearch] = useState("");
 
   const selectedDeal = useMemo(
     () => (selectedId ? deals.find((d: any) => d._id === selectedId) || null : null),
@@ -68,6 +90,33 @@ export default function DealsPage() {
     return map;
   }, [deals]);
 
+  // Filter deals by quickSearch for the kanban view (AG Grid handles its own
+  // filtering via quickFilterText on the table view).
+  const filteredDeals = useMemo(() => {
+    const q = quickSearch.trim().toLowerCase();
+    if (!q) return deals;
+    return deals.filter((d: any) => {
+      const haystack: string[] = [
+        d.name || "",
+        d.address || "",
+        d.city || "",
+        d.state || "",
+        d.source || "",
+        d.assignedTo || "",
+        d.mondayItemId || "",
+        d.propertyType || "",
+        ...(d.contacts || []).flatMap((c: any) => [c.name || "", c.email || "", c.phone || ""]),
+      ];
+      // Sweep custom-field string values too so a search for "Medium" or
+      // "Marcus Millichap" matches Monday-imported metadata.
+      const cf = d.customFields || {};
+      for (const v of Object.values(cf)) {
+        if (typeof v === "string" || typeof v === "number") haystack.push(String(v));
+      }
+      return haystack.some((s) => s.toLowerCase().includes(q));
+    });
+  }, [deals, quickSearch]);
+
   function handleStageChange(dealId: string, newStage: DealStage) {
     updateStage({ id: dealId as any, stage: newStage, user: "Ori" });
   }
@@ -80,7 +129,7 @@ export default function DealsPage() {
       />
 
       {/* Stage-count strip — New Deal sits at the end of the strip */}
-      <div className="flex flex-wrap items-center gap-2 mb-4 text-[12px]">
+      <div className="flex flex-wrap items-center gap-2 mb-3 text-[12px]">
         {STAGE_STRIP.map((s) => (
           <span
             key={s}
@@ -101,14 +150,76 @@ export default function DealsPage() {
         </button>
       </div>
 
-      {/* Kanban board — horizontal scroll for the 8 columns */}
-      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden -mx-2 px-2 pb-2">
-        <KanbanBoard
-          deals={deals}
-          onDealClick={(deal) => setSelectedId(deal._id)}
-          onStageChange={handleStageChange}
-        />
+      {/* View toggle + search */}
+      <div className="flex flex-wrap items-center gap-2 mb-3 text-[12px]">
+        <div className="inline-flex items-center bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-0.5">
+          <button
+            onClick={() => switchView("kanban")}
+            className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
+              view === "kanban"
+                ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]"
+                : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
+            }`}
+            title="Kanban view"
+          >
+            <LayoutGrid size={12} /> Kanban
+          </button>
+          <button
+            onClick={() => switchView("table")}
+            className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors ${
+              view === "table"
+                ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]"
+                : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
+            }`}
+            title="Table view"
+          >
+            <List size={12} /> Table
+          </button>
+        </div>
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#a1a1aa]" />
+          <input
+            type="text"
+            value={quickSearch}
+            onChange={(e) => setQuickSearch(e.target.value)}
+            placeholder="Search name, address, source, contact, custom fields…"
+            className="w-full pl-7 pr-7 py-1.5 text-[12px] bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg text-[#18181b] dark:text-[#fafafa] placeholder-[#a1a1aa] focus:outline-none focus:border-[#71717a]"
+          />
+          {quickSearch && (
+            <button
+              onClick={() => setQuickSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+              title="Clear search"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        {quickSearch && (
+          <span className="text-[11px] text-[#71717a] dark:text-[#a1a1aa]">
+            {view === "kanban" ? `${filteredDeals.length} of ${deals.length}` : "filtering table"}
+          </span>
+        )}
       </div>
+
+      {/* View body */}
+      {view === "kanban" ? (
+        <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden -mx-2 px-2 pb-2">
+          <KanbanBoard
+            deals={filteredDeals}
+            onDealClick={(deal) => setSelectedId(deal._id)}
+            onStageChange={handleStageChange}
+          />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col">
+          <DealsGrid
+            deals={deals}
+            quickSearch={quickSearch}
+            onDealClick={(deal) => setSelectedId(deal._id)}
+          />
+        </div>
+      )}
 
       {/* Detail drawer — only mounted when a card is selected so its
           internal Convex queries (e.g. file URLs in DocRow) don't fire
