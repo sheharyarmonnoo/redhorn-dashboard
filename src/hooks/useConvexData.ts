@@ -57,6 +57,15 @@ export function useTenants(propertyId: string | undefined) {
   return tenants ?? [];
 }
 
+// Same query, exposes loading state for skeleton rendering during navigation.
+export function useTenantsWithLoading(propertyId: string | undefined) {
+  const tenants = useQuery(
+    api.tenants.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip"
+  );
+  return { tenants: tenants ?? [], loading: !!propertyId && tenants === undefined };
+}
+
 export function useAllTenants() {
   const tenants = useQuery(api.tenants.listAll);
   return tenants ?? [];

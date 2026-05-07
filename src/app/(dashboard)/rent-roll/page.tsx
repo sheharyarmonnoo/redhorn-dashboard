@@ -3,7 +3,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, RowClickedEvent } from "ag-grid-community";
-import { useTenants, useUnits, useActiveProperty, formatCurrency, leasedUnitKeys, useChargeSummary, normalizeTenantName } from "@/hooks/useConvexData";
+import { useTenantsWithLoading, useUnits, useActiveProperty, formatCurrency, leasedUnitKeys, useChargeSummary, normalizeTenantName } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
@@ -80,7 +80,7 @@ export default function RentRollPage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const activeProperty = useActiveProperty();
-  const tenantsLeased = useTenants(activeProperty?._id);
+  const { tenants: tenantsLeased, loading: tenantsLoading } = useTenantsWithLoading(activeProperty?._id);
   const unitsAll = useUnits(activeProperty?._id);
   const { byTenant: chargeSummary, latestMonth: chargeMonth } = useChargeSummary(activeProperty?._id);
 
@@ -431,6 +431,38 @@ export default function RentRollPage() {
     api.setFilterModel(null);
     api.setGridOption("quickFilterText", "");
     setQuickSearch("");
+  }
+
+  // Loading skeleton for the initial query stream — especially important when
+  // navigating in via the dashboard deep link, otherwise the user sees a flash
+  // of empty grid before the rows populate.
+  if (tenantsLoading) {
+    return (
+      <div>
+        <PageHeader title="Rent Roll" subtitle="Loading…" />
+        <div className="flex items-center gap-2 mb-4">
+          {[1,2,3].map(i => (
+            <div key={i} className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 h-8 w-28 animate-pulse" />
+          ))}
+        </div>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6">
+          <div className="grid grid-cols-6 gap-3 mb-4">
+            {[1,2,3,4,5,6].map(i => (
+              <div key={i} className="h-3 bg-[#f4f4f5] dark:bg-[#27272a] rounded animate-pulse" />
+            ))}
+          </div>
+          <div className="space-y-2.5 animate-pulse">
+            {[1,2,3,4,5,6,7,8,9,10].map(i => (
+              <div key={i} className="grid grid-cols-6 gap-3">
+                {[1,2,3,4,5,6].map(j => (
+                  <div key={j} className="h-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded" style={{ opacity: 0.6 + (i + j) % 5 * 0.08 }} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
