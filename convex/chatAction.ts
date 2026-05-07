@@ -59,13 +59,17 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
   }
 
   // Run queries in parallel for latency.
-  const [properties, tenants, monthlyRevenue, incomeLines, alerts, syncJobs] = await Promise.all([
+  // deals are a portfolio-wide pipeline, not per-property — we still pull them
+  // so questions like "what deals are in outreach" can be answered regardless
+  // of which property the user has selected.
+  const [properties, tenants, monthlyRevenue, incomeLines, alerts, syncJobs, deals] = await Promise.all([
     ctx.runQuery(api.properties.list, {}),
     ctx.runQuery(api.tenants.listByProperty, { propertyId: propertyId as any }),
     ctx.runQuery(api.monthlyRevenue.listByProperty, { propertyId: propertyId as any }),
     ctx.runQuery(api.incomeLines.listByProperty, { propertyId: propertyId as any }),
     ctx.runQuery(api.alerts.listForProperty, { propertyId: propertyId as any, limit: 12 }),
     ctx.runQuery(api.syncJobs.list, {}),
+    ctx.runQuery(api.deals.list, {}),
   ]);
 
   const property = (properties || []).find((p: any) => p._id === propertyId);
@@ -172,6 +176,50 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
 
   sections.push(`Active alerts (${openAlerts.length}):`);
   sections.push(alertLines.length ? alertLines.join("\n") : "- (none)");
+  sections.push("");
+
+  // ---- Acquisitions deal pipeline (portfolio-wide, not per-property) ----
+  // Group by stage and emit a count + sample of deals so the assistant can
+  // answer "what deals are in outreach", "how many in LOI", etc.
+  const dealsArr = (deals || []) as any[];
+  const stageOrder = ["lead", "outreach", "underwriting", "loi", "due_diligence", "closing", "closed", "dead"];
+  const stageLabels: Record<string, string> = {
+    lead: "Lead",
+    outreach: "Outreach",
+    underwriting: "Underwriting",
+    loi: "LOI",
+    due_diligence: "Due Diligence",
+    closing: "Closing",
+    closed: "Closed",
+    dead: "Dead",
+  };
+  const dealsByStage: Record<string, any[]> = {};
+  for (const d of dealsArr) {
+    const s = (d.stage || "lead") as string;
+    (dealsByStage[s] = dealsByStage[s] || []).push(d);
+  }
+  sections.push(`Deal pipeline (${dealsArr.length} total deals across all stages):`);
+  for (const stage of stageOrder) {
+    const list = dealsByStage[stage] || [];
+    if (list.length === 0) continue;
+    sections.push(`${stageLabels[stage]} (${list.length}):`);
+    // Sort by updatedAt desc, sample top 12 per stage so big buckets don't
+    // blow the context but the user can still ask for specifics.
+    const sample = [...list]
+      .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))
+      .slice(0, 12);
+    for (const d of sample) {
+      const name = d.name || d.address || "(unnamed)";
+      const loc = [d.city, d.state].filter(Boolean).join(", ");
+      const price = d.askingPrice ? ` | ask ${fmt$(d.askingPrice)}` : "";
+      const sf = d.sqft ? ` | ${d.sqft.toLocaleString()} SF` : "";
+      const assignee = d.assignedTo ? ` | ${d.assignedTo}` : "";
+      sections.push(`- ${name}${loc ? ` (${loc})` : ""}${sf}${price}${assignee}`);
+    }
+    if (list.length > sample.length) {
+      sections.push(`  …and ${list.length - sample.length} more in ${stageLabels[stage]}.`);
+    }
+  }
 
   return {
     contextText: sections.join("\n"),
@@ -183,6 +231,8 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
         tenants: totalTenants,
         pastDue: pastDue.length,
         expiringSoon: expiringSoon.length,
+        dealsTotal: dealsArr.length,
+        dealsByStage: Object.fromEntries(stageOrder.map(s => [s, (dealsByStage[s] || []).length])),
         expired: expired.length,
         openAlerts: openAlerts.length,
       },
@@ -262,7 +312,7 @@ export const ask = action({
 
     const systemPrompt = `You are a real-estate analytics assistant for Redhorn Capital. The user manages commercial properties in Yardi.
 
-Answer questions about internal property data (tenants, rent rolls, NOI, alerts, lease expirations) using ONLY the data provided in <data> tags below. Never invent numbers, tenants, or dates — if a fact isn't in the data, say so.
+Answer questions about internal property data (tenants, rent rolls, NOI, alerts, lease expirations) AND the acquisitions deal pipeline (sourcing, outreach, underwriting, LOI, due diligence, closing) using ONLY the data provided in <data> tags below. The deal pipeline section is portfolio-wide, not scoped to the active property — questions like "what deals are in outreach" or "how many LOIs do we have" should be answered from there. Never invent numbers, tenants, dates, or deal names — if a fact isn't in the data, say so.
 
 For external research questions (market trends, news on a tenant, demographics, competitor activity, cap-rate benchmarks, comp pricing in a submarket, etc.) you MAY use the web_search tool to look it up online. Always cite sources, and clearly distinguish external research from the internal snapshot.
 

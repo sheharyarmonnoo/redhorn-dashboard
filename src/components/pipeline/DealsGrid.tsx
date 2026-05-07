@@ -196,11 +196,20 @@ export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter
   }), [recentlyMovedId]);
 
   // Re-tag rows when recentlyMovedId changes so the highlight applies/clears
-  // without waiting for the next AG Grid render pass.
+  // without waiting for the next AG Grid render pass. Also scroll the moved
+  // row into view — without this, a stage change made via the drawer can
+  // re-sort the row to the top of the list and the user thinks the highlight
+  // didn't apply when really the row just moved off-screen.
   useEffect(() => {
     const api = gridRef.current?.api;
     if (!api) return;
     api.redrawRows();
+    if (recentlyMovedId) {
+      const node = api.getRowNode?.(String(recentlyMovedId));
+      if (node && typeof node.rowIndex === "number") {
+        api.ensureIndexVisible(node.rowIndex, "middle");
+      }
+    }
   }, [recentlyMovedId]);
 
   return (
@@ -224,6 +233,11 @@ export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter
         // every row when Convex pushes a new deals[] array. Without this the
         // table flickers on every mutation (e.g. a single stage change).
         getRowId={(p: any) => String(p.data?._id ?? "")}
+        // Smooth-slide rows when sort order changes after a mutation. Without
+        // this, a row that re-sorts to the top after stage change appears to
+        // "jump" — combined with auto-scroll-into-view this makes the
+        // recently-moved highlight obvious instead of confusing.
+        animateRows={true}
         columnDefs={columnDefs}
         defaultColDef={defaultColDef}
         quickFilterText={quickSearch}

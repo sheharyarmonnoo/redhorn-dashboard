@@ -14,7 +14,7 @@ type DealsView = "kanban" | "table";
 const VIEW_STORAGE_KEY = "redhorn_deals_view";
 const STAGE_FILTER_STORAGE_KEY = "redhorn_deals_stage_filter";
 // How long the moved-deal highlight stays on after a stage change.
-const RECENT_MOVE_HIGHLIGHT_MS = 3000;
+const RECENT_MOVE_HIGHLIGHT_MS = 6000;
 
 // Stage strip is the same set the board renders, minus the terminal
 // "closed"/"dead" buckets — those would dominate the count visually for
