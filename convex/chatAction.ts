@@ -176,6 +176,8 @@ export const ask = action({
     threadId: v.id("chat_threads"),
     userQuestion: v.string(),
     propertyId: v.optional(v.string()),
+    userName: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -235,9 +237,18 @@ export const ask = action({
     }
 
     const today = new Date().toISOString().slice(0, 10);
-    const systemPrompt = `You are a real-estate analytics assistant for Redhorn Capital. The user manages commercial properties in Yardi. Answer questions concisely using ONLY the data provided in <data> tags below. If a fact isn't in the data, say so plainly — never make up numbers, tenants, or dates.
+    const userIdentity = args.userName
+      ? `The user's name is ${args.userName}${args.userEmail ? ` (${args.userEmail})` : ""}. If they ask "who am I" or refer to themselves by pronoun, you can answer directly.`
+      : `(No signed-in user name was passed.)`;
+
+    const systemPrompt = `You are a real-estate analytics assistant for Redhorn Capital. The user manages commercial properties in Yardi.
+
+Answer questions about internal property data (tenants, rent rolls, NOI, alerts, lease expirations) using ONLY the data provided in <data> tags below. Never invent numbers, tenants, or dates — if a fact isn't in the data, say so.
+
+For external research questions (market trends, news on a tenant, demographics, competitor activity, cap-rate benchmarks, comp pricing in a submarket, etc.) you MAY use the web_search tool to look it up online. Always cite sources, and clearly distinguish external research from the internal snapshot.
 
 Today is ${today}. The user's active property is ${propertyName}.
+${userIdentity}
 
 <data>
 ${contextText}
@@ -250,12 +261,12 @@ Format guidance:
   | Trophy Windows, LLC | C-218, D-150 | $8,013 |
   Right-align numeric columns with \`---:\` in the separator row.
 - For 1–2 items or short answers, plain text with "- " bullets is fine.
+- Use markdown headings (#, ##) sparingly for multi-section answers.
 - Bold key totals with **…**.
 - All dollar figures with a "$" prefix and comma separators.
-- Be specific: cite tenant names, units, and amounts from the data.
-- If the user asks something the data doesn't cover, say "I don't have that in the current snapshot" and suggest where to look.`;
+- Be specific: cite tenant names, units, and amounts from the data.`;
 
-    // 3) Call the Anthropic API. Fall back to sonnet on a model-unknown error.
+    // 3) Call the Anthropic API. Fall back to haiku 3.5 on a model-unknown error.
     async function callClaude(model: string): Promise<string> {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -266,9 +277,16 @@ Format guidance:
         },
         body: JSON.stringify({
           model,
-          max_tokens: 1500,
+          max_tokens: 2000,
           system: systemPrompt,
           messages: priorMessages,
+          tools: [
+            {
+              type: "web_search_20250305",
+              name: "web_search",
+              max_uses: 3,
+            },
+          ],
         }),
       });
       if (!res.ok) {
@@ -276,7 +294,9 @@ Format guidance:
         throw new Error(`Anthropic ${res.status}: ${text.slice(0, 400)}`);
       }
       const json: any = await res.json();
-      const block = (json?.content || []).find((b: any) => b.type === "text");
+      // Multiple text blocks (e.g. before + after web_search tool use). Concatenate all.
+      const textBlocks = (json?.content || []).filter((b: any) => b.type === "text");
+      const block = { text: textBlocks.map((b: any) => b.text || "").join("\n") };
       return (block?.text || "").trim() || "(empty response)";
     }
 
