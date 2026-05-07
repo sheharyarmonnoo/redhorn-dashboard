@@ -27,7 +27,7 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   const { user } = useUser();
   const [notesDraft, setNotesDraft] = useState<string>(tenant?.notes || "");
   const [savingNotes, setSavingNotes] = useState(false);
-  const [tab, setTab] = useState<"details" | "ledger" | "electric">("details");
+  const [tab, setTab] = useState<"details" | "ledger" | "electric" | "payments">("details");
   const [emailCtx, setEmailCtx] = useState<EmailContext | null>(null);
   const { properties } = useProperties();
   const property = useMemo(() => properties.find((p: any) => p._id === tenant?.propertyId) || null, [properties, tenant?.propertyId]);
@@ -47,6 +47,7 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
   }, [allRows, tenant?.tenant]);
 
   const electricTx = useMemo(() => tenantTx.filter((r: any) => /electric|electricity|cam-elec/i.test(r.description || "") || /electric|cam-elec/i.test(r.chargeCode || "")), [tenantTx]);
+  const paymentsTx = useMemo(() => tenantTx.filter((r: any) => (r.receipts || 0) > 0), [tenantTx]);
 
   if (!tenant) return null;
 
@@ -111,6 +112,7 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
             { value: "details", label: "Details" },
             { value: "ledger", label: `Ledger${tenantTx.length ? ` (${tenantTx.length})` : ""}` },
             { value: "electric", label: `Electric${electricTx.length ? ` (${electricTx.length})` : ""}` },
+            { value: "payments", label: `Payments${paymentsTx.length ? ` (${paymentsTx.length})` : ""}` },
           ] as const).map(t => (
             <button
               key={t.value}
@@ -131,6 +133,9 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
         )}
         {tab === "electric" && (
           <LedgerTable rows={electricTx} emptyLabel="No electric charges or payments for this tenant." />
+        )}
+        {tab === "payments" && (
+          <LedgerTable rows={paymentsTx} emptyLabel="No payments recorded for this tenant." />
         )}
         {tab === "details" && (
         <div className="p-5 space-y-4">

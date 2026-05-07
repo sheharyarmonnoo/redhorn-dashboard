@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
 import { useDeals } from "@/hooks/useConvexData";
 import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
@@ -167,7 +168,8 @@ function NewDealModal({
   const [units, setUnits] = useState("");
   const [askingPrice, setAskingPrice] = useState("");
   const [source, setSource] = useState("Broker");
-  const [assignedTo, setAssignedTo] = useState("Ori");
+  const { user } = useUser();
+  const assignedTo = user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User";
   const [contactName, setContactName] = useState("");
   const [contactRole, setContactRole] = useState("Broker");
   const [contactEmail, setContactEmail] = useState("");
@@ -308,14 +310,7 @@ function NewDealModal({
               />
             </ModalField>
             <ModalField label="Assigned To">
-              <select
-                value={assignedTo}
-                onChange={(e) => setAssignedTo(e.target.value)}
-                className="w-full text-[12px] px-3 py-2 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#27272a] text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
-              >
-                <option value="Ori">Ori</option>
-                <option value="Max">Max</option>
-              </select>
+              <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] py-2">{assignedTo}</p>
             </ModalField>
           </div>
 

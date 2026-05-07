@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useUser } from "@clerk/nextjs";
 import { api } from "../../../convex/_generated/api";
 import {
   X,
@@ -90,7 +91,8 @@ export function DealDetail({
   removeDeal,
 }: DealDetailProps) {
   const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "docs" | "notes">("overview");
-  const [currentUser, setCurrentUser] = useState("Ori");
+  const { user } = useUser();
+  const currentUser = user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User";
   const [newNote, setNewNote] = useState("");
   const [newTaskText, setNewTaskText] = useState("");
   const [newTaskAssignee, setNewTaskAssignee] = useState("");
@@ -181,16 +183,8 @@ export function DealDetail({
               <span>{deal.address}, {deal.city}, {deal.state}</span>
             </div>
           </div>
-          <div className="flex items-center gap-1 ml-3">
-            <select
-              value={currentUser}
-              onChange={(e) => setCurrentUser(e.target.value)}
-              className="text-[10px] px-2 py-1 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#27272a] text-[#71717a] dark:text-[#a1a1aa] cursor-pointer"
-              title="Acting as"
-            >
-              <option value="Ori">as Ori</option>
-              <option value="Max">as Max</option>
-            </select>
+          <div className="flex items-center gap-2 ml-3">
+            <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa]" title="Acting as the logged-in user">as {currentUser}</span>
             <button
               onClick={handleDelete}
               className="text-[#a1a1aa] dark:text-[#71717a] hover:text-[#dc2626] cursor-pointer p-1 rounded transition-colors"
@@ -308,9 +302,8 @@ export function DealDetail({
                 <div className="grid grid-cols-2 gap-3">
                   <EditableField
                     label="Assigned To"
-                    value={deal.assignedTo}
+                    value={deal.assignedTo || currentUser}
                     icon={<User size={11} />}
-                    options={["Ori", "Max"]}
                     onSave={(v) => saveField("assignedTo", v)}
                   />
                   <EditableField
@@ -372,8 +365,7 @@ export function DealDetail({
                     className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] flex-1"
                   >
                     <option value="">Unassigned</option>
-                    <option value="Ori">Ori</option>
-                    <option value="Max">Max</option>
+                    <option value={currentUser}>{currentUser}</option>
                   </select>
                   <input
                     type="date"
@@ -543,8 +535,7 @@ function TaskRow({
             className="text-[11px] px-2 py-1.5 border border-[#e4e4e7] dark:border-[#3f3f46] rounded bg-white dark:bg-[#18181b] text-[#71717a] dark:text-[#a1a1aa] flex-1"
           >
             <option value="">Unassigned</option>
-            <option value="Ori">Ori</option>
-            <option value="Max">Max</option>
+            <option value={currentUser}>{currentUser}</option>
           </select>
           <input
             type="date"

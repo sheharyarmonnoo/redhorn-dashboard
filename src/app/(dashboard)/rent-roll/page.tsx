@@ -268,14 +268,15 @@ export default function RentRollPage() {
             cellRenderer: CurrencyCellRenderer },
         ],
       },
-      // Per-tenant current-month charges from the receivable detail. Hidden
-      // by default — user enables via the column menu when they need them.
+      // Per-tenant current-month charges from the receivable detail. Visible
+      // by default alongside Rent so the user sees in-place CAM / Electric /
+      // Insurance billbacks at a glance.
       { field: "camCharge", headerName: "CAM", width: 110,
-        hide: true, cellRenderer: CurrencyCellRenderer },
+        cellRenderer: CurrencyCellRenderer },
       { field: "electricCharge", headerName: "Electric Chg", width: 120,
-        hide: true, cellRenderer: CurrencyCellRenderer },
+        cellRenderer: CurrencyCellRenderer },
       { field: "insuranceCharge", headerName: "Insurance", width: 110,
-        hide: true, cellRenderer: CurrencyCellRenderer },
+        cellRenderer: CurrencyCellRenderer },
       // Current group — Current Balance stays visible; Current Charges
       // reveals on expand.
       {
@@ -393,7 +394,7 @@ export default function RentRollPage() {
       </div>
 
       {/* AG Grid Table */}
-      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: "min(calc(100vh - 220px), 700px)", minHeight: 350 }}>
+      <div className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46]" style={{ height: "calc(100vh - 180px)", minHeight: 500 }}>
         <AgGridReact
           ref={gridRef}
           rowData={tenants}
