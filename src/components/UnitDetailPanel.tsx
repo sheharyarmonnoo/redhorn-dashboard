@@ -1,7 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X } from "lucide-react";
-import { useUnitNotes, formatCurrency } from "@/hooks/useConvexData";
+import { useUnitNotes, useReceivableDetails, normalizeTenantName, formatCurrency } from "@/hooks/useConvexData";
 
 interface Props {
   tenant: any | null;
@@ -9,14 +9,41 @@ interface Props {
   onUpdated?: () => void;
 }
 
+type TabValue = "details" | "ledger" | "electric" | "recoveries" | "payments";
+
 export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated }: Props) {
   const [cached, setCached] = useState<any>(tenantProp);
   const [closing, setClosing] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [tab, setTab] = useState<TabValue>("details");
 
   const tenant = tenantProp ?? cached;
+
+  // Per-tenant transaction history from receivable_details
+  const allRows = useReceivableDetails(tenant?.propertyId);
+  const tenantTx = useMemo(() => {
+    if (!tenant?.tenant) return [];
+    const key = normalizeTenantName(tenant.tenant);
+    return allRows
+      .filter((r: any) => normalizeTenantName(r.tenantName || "") === key)
+      .filter((r: any) => r.transactionDate || r.description || r.charges !== 0 || r.receipts !== 0)
+      .sort((a: any, b: any) => (a.transactionDate || "").localeCompare(b.transactionDate || ""));
+  }, [allRows, tenant?.tenant]);
+
+  const electricTx = useMemo(() => tenantTx.filter((r: any) => /electric|electricity|cam-elec/i.test(r.description || "") || /electric|cam-elec/i.test(r.chargeCode || "")), [tenantTx]);
+  const recoveriesTx = useMemo(() => tenantTx.filter((r: any) => {
+    const d = (r.description || "").toLowerCase();
+    const c = (r.chargeCode || "").toLowerCase();
+    if (/electric|electricity|cam-elec/.test(d) || /electric|cam-elec/.test(c)) return true;
+    if (/cam-ins|insurance/.test(d) || /cam-ins|insurance/.test(c)) return true;
+    if (/^cam\b|cam-cy|cam-py|common\s*area/.test(d) || /^cam/.test(c)) return true;
+    if (/late\s*fee/.test(d) || /late/.test(c)) return true;
+    if (/escalation/.test(d)) return true;
+    return false;
+  }), [tenantTx]);
+  const paymentsTx = useMemo(() => tenantTx.filter((r: any) => (r.receipts || 0) > 0), [tenantTx]);
 
   const { notes: notesLog, createNote, updateNote, removeNote } = useUnitNotes(
     tenant?.propertyId,
@@ -41,6 +68,7 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
     if (tenantProp) {
       setNotesDraft("");
       setEditingNoteId(null);
+      setTab("details");
     }
   }, [tenantProp?._id]);
 
@@ -79,7 +107,7 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
   return (
     <div className="fixed inset-0 z-[60] flex justify-end">
       <div className={`absolute inset-0 bg-black/20 dark:bg-black/60 rh-backdrop${closing ? " is-closing" : ""}`} onClick={onClose} />
-      <div className={`relative w-full sm:w-[520px] bg-white dark:bg-[#18181b] h-full overflow-y-auto border-l border-[#e4e4e7] dark:border-[#3f3f46] rh-drawer${closing ? " is-closing" : ""}`}>
+      <div className={`relative bg-white dark:bg-[#18181b] h-full overflow-y-auto border-l border-[#e4e4e7] dark:border-[#3f3f46] rh-drawer transition-[width] duration-200 ${tab === "details" ? "w-full sm:w-[520px]" : "w-full sm:w-[760px]"}${closing ? " is-closing" : ""}`}>
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-[#18181b] border-b border-[#e4e4e7] dark:border-[#3f3f46] px-5 py-4 flex items-start justify-between gap-3 z-10">
           <div className="min-w-0">
@@ -115,6 +143,45 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
           </button>
         </div>
 
+        {/* Tab switcher — only show when there's tenant data to filter against */}
+        {tenant.status !== "vacant" && tenant.tenant && (
+          <div className="px-5 pt-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex items-center gap-4 sticky top-[73px] bg-white dark:bg-[#18181b] z-10 overflow-x-auto">
+            {([
+              { value: "details", label: "Details" },
+              { value: "ledger", label: `Ledger${tenantTx.length ? ` (${tenantTx.length})` : ""}` },
+              { value: "electric", label: `Electric${electricTx.length ? ` (${electricTx.length})` : ""}` },
+              { value: "recoveries", label: `Recoveries${recoveriesTx.length ? ` (${recoveriesTx.length})` : ""}` },
+              { value: "payments", label: `Payments${paymentsTx.length ? ` (${paymentsTx.length})` : ""}` },
+            ] as const).map(t => (
+              <button
+                key={t.value}
+                onClick={() => setTab(t.value as TabValue)}
+                className={`text-[12px] font-medium pb-2 -mb-px border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                  tab === t.value
+                    ? "border-[#18181b] dark:border-[#fafafa] text-[#18181b] dark:text-[#fafafa]"
+                    : "border-transparent text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab === "ledger" && (
+          <LedgerTable rows={tenantTx} emptyLabel={tenant.tenant ? "No transactions in receivable detail." : "Vacant unit."} />
+        )}
+        {tab === "electric" && (
+          <LedgerTable rows={electricTx} emptyLabel="No electric charges or payments for this tenant." />
+        )}
+        {tab === "recoveries" && (
+          <LedgerTable rows={recoveriesTx} emptyLabel="No recovery charges or payments for this tenant." />
+        )}
+        {tab === "payments" && (
+          <LedgerTable rows={paymentsTx} emptyLabel="No payments recorded for this tenant." hideCharges />
+        )}
+
+        {tab === "details" && (
         <div className="px-5 py-5 space-y-5">
 
           {tenant.status === "vacant" ? (
@@ -286,9 +353,83 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
           </div>
 
         </div>
+        )}
       </div>
     </div>
   );
+}
+
+function LedgerTable({ rows, emptyLabel, hideCharges }: { rows: any[]; emptyLabel: string; hideCharges?: boolean }) {
+  if (rows.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-[12px] text-[#a1a1aa] dark:text-[#71717a]">{emptyLabel}</p>
+      </div>
+    );
+  }
+  const grouped: Record<string, any[]> = {};
+  for (const r of rows) {
+    const k = r.postMonth || (r.transactionDate ? r.transactionDate.slice(0, 7) : "—");
+    (grouped[k] = grouped[k] || []).push(r);
+  }
+  const monthKeys = Object.keys(grouped).sort().reverse();
+  return (
+    <div className="px-5 py-4 space-y-4">
+      {monthKeys.map(mk => {
+        const items = grouped[mk];
+        const monthCharges = items.reduce((s, r) => s + (r.charges || 0), 0);
+        const monthReceipts = items.reduce((s, r) => s + (r.receipts || 0), 0);
+        return (
+          <div key={mk} className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-[#fafafa] dark:bg-[#27272a] border-b border-[#e4e4e7] dark:border-[#3f3f46]">
+              <p className="text-[11px] font-semibold text-[#18181b] dark:text-[#fafafa]">{formatMonth(mk)}</p>
+              <p className="text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
+                {!hideCharges && (
+                  <>
+                    Charged <span className="font-medium text-[#dc2626]">{formatCurrency(monthCharges)}</span>
+                    <span className="mx-1.5">·</span>
+                  </>
+                )}
+                Paid <span className="font-medium text-[#16a34a]">{formatCurrency(monthReceipts)}</span>
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px] min-w-[640px]">
+                <thead>
+                  <tr className="text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider text-[9px] border-b border-[#e4e4e7] dark:border-[#3f3f46]">
+                    <th className="text-left px-3 py-1.5 whitespace-nowrap">Date</th>
+                    <th className="text-left px-3 py-1.5">Description</th>
+                    <th className="text-right px-3 py-1.5 whitespace-nowrap">Charge</th>
+                    <th className="text-right px-3 py-1.5 whitespace-nowrap">Payment</th>
+                    <th className="text-right px-3 py-1.5 whitespace-nowrap">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((r, i) => (
+                    <tr key={i} className="border-t border-[#f4f4f5] dark:border-[#27272a]">
+                      <td className="px-3 py-1.5 text-[#71717a] dark:text-[#a1a1aa] whitespace-nowrap">{r.transactionDate || "—"}</td>
+                      <td className="px-3 py-1.5 text-[#18181b] dark:text-[#fafafa]">{r.description || ""}</td>
+                      <td className="px-3 py-1.5 text-right text-[#dc2626] font-medium whitespace-nowrap">{r.charges > 0 ? formatCurrency(r.charges) : ""}</td>
+                      <td className="px-3 py-1.5 text-right text-[#16a34a] font-medium whitespace-nowrap">{r.receipts > 0 ? formatCurrency(r.receipts) : ""}</td>
+                      <td className="px-3 py-1.5 text-right text-[#71717a] dark:text-[#a1a1aa] whitespace-nowrap">{formatCurrency(r.balance || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatMonth(m: string): string {
+  if (!m || m === "—") return "Undated";
+  const [y, mo] = m.split("-");
+  if (!y || !mo) return m;
+  const date = new Date(Number(y), Number(mo) - 1);
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
 function StatusBadge({ status }: { status: string }) {
