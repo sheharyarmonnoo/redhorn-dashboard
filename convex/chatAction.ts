@@ -62,7 +62,7 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
   // deals are a portfolio-wide pipeline, not per-property — we still pull them
   // so questions like "what deals are in outreach" can be answered regardless
   // of which property the user has selected.
-  const [properties, tenants, monthlyRevenue, incomeLines, alerts, syncJobs, deals] = await Promise.all([
+  const [properties, tenants, monthlyRevenue, incomeLines, alerts, syncJobs, deals, aging] = await Promise.all([
     ctx.runQuery(api.properties.list, {}),
     ctx.runQuery(api.tenants.listByProperty, { propertyId: propertyId as any }),
     ctx.runQuery(api.monthlyRevenue.listByProperty, { propertyId: propertyId as any }),
@@ -70,18 +70,58 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
     ctx.runQuery(api.alerts.listForProperty, { propertyId: propertyId as any, limit: 12 }),
     ctx.runQuery(api.syncJobs.list, {}),
     ctx.runQuery(api.deals.list, {}),
+    ctx.runQuery(api.agingRecords.listByProperty, { propertyId: propertyId as any }),
   ]);
 
   const property = (properties || []).find((p: any) => p._id === propertyId);
   const propertyName = property?.name || property?.code || "(unknown property)";
 
   // ---- Past-due tenants ----
+  // Join the rent-roll past-due list with the aging snapshot so each row
+  // carries the bucket breakdown (0-30 / 31-60 / 61-90 / 90+) and the
+  // dominant bucket label. Without aging we couldn't answer "how long
+  // are they past due" — only "how much".
   const pastDue = (tenants || [])
     .filter((t: any) => (t.pastDueAmount || 0) > 0)
     .sort((a: any, b: any) => (b.pastDueAmount || 0) - (a.pastDueAmount || 0));
-  const pastDueLines = trimList(pastDue, 25).map(
-    (t: any) => `- ${t.unit || "?"} | ${t.tenant || "?"} | ${fmt$(t.pastDueAmount)}`
-  );
+  const agingByName = new Map<string, any>();
+  const normName = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  for (const a of (aging || []) as any[]) {
+    agingByName.set(normName(a.tenantName || ""), a);
+  }
+  function agingForTenant(tenantName: string) {
+    const k = normName(tenantName);
+    if (agingByName.has(k)) return agingByName.get(k);
+    // Fuzzy: try matching on the first 2 word tokens (handles things like
+    // "Beacon Restoration and Cleaning of Houston" vs "Beacon Restoration")
+    const tokens = k.split(" ");
+    if (tokens.length >= 2) {
+      const prefix = tokens.slice(0, 2).join(" ");
+      const entries = Array.from(agingByName.entries());
+      for (const [n, a] of entries) {
+        if (n.startsWith(prefix)) return a;
+      }
+    }
+    return null;
+  }
+  function dominantBucket(a: any): string {
+    if (!a) return "unknown age";
+    const buckets = [
+      { label: "90+ days", v: a.over90 || 0 },
+      { label: "61-90 days", v: a.days61_90 || 0 },
+      { label: "31-60 days", v: a.days31_60 || 0 },
+      { label: "0-30 days", v: a.days0_30 || 0 },
+    ];
+    const top = buckets.reduce((m, b) => (b.v > m.v ? b : m), buckets[0]);
+    return top.v > 0 ? top.label : "current";
+  }
+  const pastDueLines = trimList(pastDue, 25).map((t: any) => {
+    const a = agingForTenant(t.tenant || "");
+    const total = fmt$(t.pastDueAmount);
+    if (!a) return `- ${t.unit || "?"} | ${t.tenant || "?"} | ${total} | aging: unknown`;
+    const breakdown = `0-30 ${fmt$(a.days0_30)} · 31-60 ${fmt$(a.days31_60)} · 61-90 ${fmt$(a.days61_90)} · 90+ ${fmt$(a.over90)}`;
+    return `- ${t.unit || "?"} | ${t.tenant || "?"} | ${total} | dominant bucket: ${dominantBucket(a)} | breakdown: ${breakdown}`;
+  });
 
   // ---- Income statement: top-level totals ----
   const findLine = (re: RegExp) =>
@@ -184,6 +224,8 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
   sections.push("");
 
   sections.push(`Past-due tenants (${pastDue.length}):`);
+  sections.push("Each row: unit | tenant | total past due | dominant aging bucket | bucket breakdown");
+  sections.push("Aging buckets = days since charge posted (0-30 / 31-60 / 61-90 / 90+). Use the dominant bucket to answer 'how long is X past due'.");
   sections.push(pastDueLines.length ? pastDueLines.join("\n") : "- (none)");
   sections.push("");
 
