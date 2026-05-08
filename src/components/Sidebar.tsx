@@ -99,7 +99,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
 
   return (
     <>
-      <div className="px-5 pt-5 pb-3 border-b border-white/[0.06]">
+      <div className="px-5 pt-5 pb-3 border-b border-white/[0.06] flex justify-center">
         <img src="/redhorn-logo.png" alt="Redhorn Capital Partners" className="h-9 w-auto brightness-0 invert opacity-90" />
       </div>
 
