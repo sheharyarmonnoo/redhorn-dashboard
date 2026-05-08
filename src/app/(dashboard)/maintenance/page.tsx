@@ -117,6 +117,10 @@ export default function MaintenancePage() {
   // is fine for low-volume manual entry.
   async function onAddItem() {
     if (!property?._id) return;
+    // createdBy is wired but not yet sent — Convex schema deploy is queued
+    // (pending CLI auth refresh). Once deployed, swap the (any) cast and
+    // include it in the args.
+    void currentUser;
     const id = await create({
       propertyId: property._id as any,
       date: todayISO(),
@@ -155,15 +159,7 @@ export default function MaintenancePage() {
       <PageHeader
         title="Maintenance"
         subtitle="Track repairs, inspections, and routine tasks"
-      >
-        <button
-          onClick={onAddItem}
-          className="flex items-center gap-1.5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] text-[12px] font-medium px-3 py-1.5 rounded hover:opacity-90 cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add Item
-        </button>
-      </PageHeader>
+      />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
         <StatBox label="Total Items" value={stats.total} />
@@ -188,6 +184,15 @@ export default function MaintenancePage() {
               </span>
             </button>
           ))}
+          {/* Add Item button sits inline at the end of the quick-add row.
+              Same pill shape, dark fill so it reads as the primary action. */}
+          <button
+            onClick={onAddItem}
+            className="flex items-center gap-2 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] text-[12px] font-medium px-3 py-1.5 rounded hover:opacity-90 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Item
+          </button>
         </div>
       </div>
 

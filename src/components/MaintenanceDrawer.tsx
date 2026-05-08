@@ -23,6 +23,7 @@ interface MaintenanceItem {
   nextDueDate?: string;
   meetingNotes?: Array<{ id: string; text: string; author: string; createdAt: number }>;
   updatedAt?: number;
+  createdBy?: string;
   _creationTime?: number;
 }
 
@@ -217,7 +218,7 @@ export default function MaintenanceDrawer({
               {item.type || "(untitled)"}
             </p>
             <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">
-              Last updated {formatDateTime(item.updatedAt || item._creationTime)}
+              {item.createdBy ? `Created by ${item.createdBy} · ` : ""}Last updated {formatDateTime(item.updatedAt || item._creationTime)}
             </p>
           </div>
           <div className="flex items-center gap-1 ml-3 shrink-0">
