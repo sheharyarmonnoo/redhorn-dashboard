@@ -16,19 +16,10 @@ export default function PropertyGuard({ children }: { children: React.ReactNode 
     );
   }
 
-  if (!property.hasData) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center max-w-md">
-          <p className="text-[18px] font-semibold text-[#18181b] dark:text-[#fafafa]">{property.name}</p>
-          <p className="text-[13px] text-[#a1a1aa] dark:text-[#71717a] mt-2">{property.location}{property.sqft ? ` · ${property.sqft}` : ""}</p>
-          <p className="text-[13px] text-[#71717a] dark:text-[#a1a1aa] mt-5 leading-relaxed">
-            Coming Soon
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+  // No global hasData gate. Each page decides what to render for properties
+  // without a Yardi/Convex feed — e.g. /site-plan embeds Diamond Maps for
+  // the RV park while other pages still fall back to their own
+  // ComingSoonBanner. A blanket guard here masks that page-level logic and
+  // forces every route into "Coming Soon", which is wrong for site-plan.
   return <>{children}</>;
 }
