@@ -113,9 +113,6 @@ export default function SitePlanPage() {
             </div>
           </div>
           <p className="text-[16px] font-semibold text-[#18181b] dark:text-[#fafafa]">{property.name} site plan</p>
-          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1.5 max-w-md mx-auto leading-relaxed">
-            The interactive map opens in a new tab.
-          </p>
           <a
             href={mapUrl}
             target="_blank"
