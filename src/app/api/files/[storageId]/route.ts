@@ -6,8 +6,7 @@ import type { Id } from "../../../../../convex/_generated/dataModel";
 
 export const dynamic = "force-dynamic";
 
-const dbUrl = process.env.NEXT_PUBLIC_DB_URL || process.env.NEXT_PUBLIC_CONVEX_URL!;
-const convex = new ConvexHttpClient(dbUrl);
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_DB_URL!);
 
 export async function GET(
   req: NextRequest,
