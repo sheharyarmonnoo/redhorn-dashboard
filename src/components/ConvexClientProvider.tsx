@@ -21,9 +21,18 @@ const JWT_TEMPLATE = "sync";
 
 function useAuthForConvex() {
   const auth = useAuth();
+  // Hard-swallow getToken errors. Unauthenticated users (e.g. landed on
+  // /unauthorized after a Clerk role check) still trigger getToken probes
+  // from the Convex provider; without a catch, every probe surfaces a
+  // red error in the browser console even though "no session" is the
+  // expected state on those pages.
   const getTokenOverride = useCallback(
-    (opts?: { skipCache?: boolean }) => {
-      return auth.getToken({ template: JWT_TEMPLATE, skipCache: opts?.skipCache });
+    async (opts?: { skipCache?: boolean }) => {
+      try {
+        return await auth.getToken({ template: JWT_TEMPLATE, skipCache: opts?.skipCache });
+      } catch {
+        return null;
+      }
     },
     [auth],
   );
