@@ -1,6 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { ExternalLink } from "lucide-react";
 import { useActiveProperty, useTenantsWithLoading, useUnitsWithLoading, leasedUnitKeys } from "@/hooks/useConvexData";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
@@ -96,24 +97,34 @@ export default function SitePlanPage() {
     })),
   ];
 
-  // RV park branch FIRST — its iframe doesn't depend on tenants/units
-  // queries, so we mustn't gate it on dataLoading. Otherwise every Convex
-  // websocket reconnect (re-auth, idle ping) flips dataLoading=true →
-  // skeleton renders → iframe unmounts → query resolves → iframe
-  // re-mounts in an infinite refresh loop.
+  // RV park doesn't have a Yardi-driven site plan — Campspot integration
+  // is pending. Diamond Maps doesn't behave well embedded (frame chrome
+  // refreshes, auth retries unmount it), so render a launch card that
+  // opens the interactive map in a new tab instead.
   if (property?.propertyType === "rv_park") {
+    const mapUrl = "https://diamondmaps.com/map.ashx?key=36746260305125558991";
     return (
       <div>
         <PageHeader title="Site Plan" subtitle={`${property.name} — interactive map`} />
-        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden shadow-sm">
-          <iframe
-            src="https://diamondmaps.com/map.ashx?key=36746260305125558991"
-            title="Site plan"
-            className="block w-full border-0 bg-white dark:bg-[#18181b]"
-            style={{ height: "calc(100dvh - 9rem)", minHeight: "560px" }}
-            allow="fullscreen; geolocation"
-            referrerPolicy="no-referrer"
-          />
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-10 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-12 h-12 rounded-full bg-[#f4f4f5] dark:bg-[#27272a] flex items-center justify-center">
+              <ExternalLink className="w-5 h-5 text-[#52525b] dark:text-[#a1a1aa]" strokeWidth={1.75} />
+            </div>
+          </div>
+          <p className="text-[16px] font-semibold text-[#18181b] dark:text-[#fafafa]">{property.name} site plan</p>
+          <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1.5 max-w-md mx-auto leading-relaxed">
+            The interactive map opens in a new tab.
+          </p>
+          <a
+            href={mapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 mt-5 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] text-[12px] font-medium px-4 py-2 rounded hover:opacity-90 cursor-pointer"
+          >
+            Open site plan
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
         </div>
       </div>
     );
