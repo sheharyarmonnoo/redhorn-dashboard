@@ -142,6 +142,13 @@ export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: T
           <div className="bg-white dark:bg-[#18181b] border border-dashed border-[#e4e4e7] dark:border-[#3f3f46] rounded p-8 text-center">
             <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa]">No units loaded for this property yet.</p>
           </div>
+        ) : property?.code === "belgold" ? (
+          <BelgoldRow
+            tenants={merged}
+            onSelect={onSelect}
+            selectedUnit={selectedUnit}
+            propertyCode={property?.code}
+          />
         ) : (
           buildingGroups.map(([building, units]) => (
             <div key={building} className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4">
@@ -169,5 +176,100 @@ export default function SitePlan3D({ onSelect, selectedUnit }: { onSelect: (t: T
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#d97706]" /> Electric missing</span>
       </div>
     </div>
+  );
+}
+
+// Belgold's actual building is a single linear strip of 7 units, with I as
+// the largest (anchor end-cap) and A as the second-largest. Visual order
+// (left→right) matches the printed site plan: I, F, E, D, C, B, A. Block
+// widths track sqft so the proportions read like the real building.
+function BelgoldRow({
+  tenants,
+  onSelect,
+  selectedUnit,
+  propertyCode,
+}: {
+  tenants: Tenant[];
+  onSelect: (t: Tenant) => void;
+  selectedUnit: string | null;
+  propertyCode?: string;
+}) {
+  const ORDER = ["I", "F", "E", "D", "C", "B", "A"] as const;
+  const byUnit: Record<string, Tenant> = {};
+  for (const t of tenants) byUnit[(t.unit || "").trim().toUpperCase()] = t;
+
+  // Size each column by sqft so I (4500sf) and A (3600sf) read as the
+  // visually larger end-caps the way they do on the actual site map.
+  const ordered = ORDER.map(u => byUnit[u]).filter(Boolean);
+  if (ordered.length === 0) return null;
+  const minSqft = Math.min(...ordered.map(t => t.sqft || 1));
+  const fr = (sqft: number) => `${Math.max(1, (sqft || minSqft) / minSqft).toFixed(2)}fr`;
+  const gridCols = ordered.map(t => fr(t.sqft || minSqft)).join(" ");
+  const occCount = ordered.filter(t => t.status !== "vacant").length;
+  const vacCount = ordered.filter(t => t.status === "vacant").length;
+
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 sm:p-4">
+      <BuildingHeader
+        label="Belgold Strip"
+        sub={`${ordered.length} unit${ordered.length === 1 ? "" : "s"} · I → A`}
+        occ={occCount}
+        vac={vacCount}
+      />
+      <div
+        className="grid gap-1.5 w-full"
+        style={{ gridTemplateColumns: gridCols }}
+      >
+        {ordered.map(t => (
+          <BelgoldUnitBlock
+            key={t.unit}
+            tenant={t}
+            onSelect={onSelect}
+            isSelected={selectedUnit === t.unit}
+            propertyCode={propertyCode}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BelgoldUnitBlock({ tenant, onSelect, isSelected, propertyCode }: {
+  tenant: Tenant;
+  onSelect: (t: Tenant) => void;
+  isSelected: boolean;
+  propertyCode?: string;
+}) {
+  const c = statusColor(tenant.status);
+  const fullUnit = tenant.unit || "";
+  return (
+    <button
+      onClick={() => onSelect(tenant)}
+      title={fullUnit}
+      className={`
+        w-full ${c.bg} ${c.text} rounded flex flex-col items-center justify-center
+        transition-all duration-100 cursor-pointer relative px-2
+        h-[140px] sm:h-[180px]
+        ${isSelected ? "ring-2 ring-[#18181b] dark:ring-[#fafafa] ring-offset-1 ring-offset-white dark:ring-offset-[#18181b] z-10" : "hover:opacity-90"}
+      `}
+    >
+      <span className="text-[20px] sm:text-[24px] font-semibold leading-none">{fullUnit}</span>
+      {tenant.tenant ? (
+        <span className="text-[9px] opacity-80 leading-tight text-center truncate max-w-full mt-2 px-1">
+          {tenant.tenant}
+        </span>
+      ) : tenant.status === "vacant" ? (
+        <span className="text-[9px] opacity-60 mt-2 uppercase tracking-wide">Vacant</span>
+      ) : null}
+      {tenant.sqft ? (
+        <span className="text-[9px] opacity-60 mt-1 tabular-nums">{tenant.sqft.toLocaleString()} SF</span>
+      ) : null}
+      {tenant.pastDueAmount > 0 && (
+        <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#dc2626] rounded-full border-2 border-white dark:border-[#18181b]" />
+      )}
+      {!tenant.electricPosted && showsElectricIndicator(tenant, propertyCode) && tenant.tenant && (
+        <span className="absolute -top-1 -left-1 w-3 h-3 bg-[#d97706] rounded-full border-2 border-white dark:border-[#18181b]" />
+      )}
+    </button>
   );
 }
