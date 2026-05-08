@@ -29,6 +29,7 @@ export const create = mutation({
     isRecurring: v.optional(v.boolean()),
     recurFrequency: v.optional(v.string()),
     nextDueDate: v.optional(v.string()),
+    createdBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Auto-fill nextDueDate for recurring items if caller didn't provide one.
@@ -50,6 +51,7 @@ export const create = mutation({
       recurFrequency: args.recurFrequency,
       nextDueDate,
       updatedAt: Date.now(),
+      createdBy: args.createdBy,
     });
   },
 });

@@ -25,6 +25,7 @@ import type * as http from "../http.js";
 import type * as incomeLines from "../incomeLines.js";
 import type * as lineBudgets from "../lineBudgets.js";
 import type * as maintenanceLog from "../maintenanceLog.js";
+import type * as meetings from "../meetings.js";
 import type * as monthlyRevenue from "../monthlyRevenue.js";
 import type * as properties from "../properties.js";
 import type * as propertyDebt from "../propertyDebt.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   incomeLines: typeof incomeLines;
   lineBudgets: typeof lineBudgets;
   maintenanceLog: typeof maintenanceLog;
+  meetings: typeof meetings;
   monthlyRevenue: typeof monthlyRevenue;
   properties: typeof properties;
   propertyDebt: typeof propertyDebt;

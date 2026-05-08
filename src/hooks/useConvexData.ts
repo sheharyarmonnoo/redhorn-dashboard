@@ -486,6 +486,37 @@ export function useMaintenance(propertyId: string | undefined) {
   };
 }
 
+// ===== MEETINGS =====
+
+export function useMeetings(propertyId: string | undefined) {
+  const items = useQuery(
+    api.meetings.listByProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  const create = useMutation(api.meetings.create);
+  const update = useMutation(api.meetings.update);
+  const remove = useMutation(api.meetings.remove);
+  const addActionItem = useMutation(api.meetings.addActionItem);
+  const toggleActionItem = useMutation(api.meetings.toggleActionItem);
+  const removeActionItem = useMutation(api.meetings.removeActionItem);
+  const generateFileUploadUrl = useMutation(api.meetings.generateFileUploadUrl);
+  const addFile = useMutation(api.meetings.addFile);
+  const removeFile = useMutation(api.meetings.removeFile);
+  return {
+    items: items ?? [],
+    loading: items === undefined,
+    create,
+    update,
+    remove,
+    addActionItem,
+    toggleActionItem,
+    removeActionItem,
+    generateFileUploadUrl,
+    addFile,
+    removeFile,
+  };
+}
+
 // ===== TENANT MUTATIONS =====
 
 export function useTenantMutations() {

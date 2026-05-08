@@ -6,8 +6,8 @@ import PageHeader from "@/components/PageHeader";
 import RevenueFilter from "@/components/RevenueFilter";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
 import Link from "next/link";
-import { Wrench } from "lucide-react";
-import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, useMaintenance, formatCurrency, useDashboardLoading, isExpiringWithin, isExpired, leasedUnitKeys, useReceivableDetails, normalizeTenantName } from "@/hooks/useConvexData";
+import { Wrench, Users } from "lucide-react";
+import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, useMaintenance, useMeetings, formatCurrency, useDashboardLoading, isExpiringWithin, isExpired, leasedUnitKeys, useReceivableDetails, normalizeTenantName } from "@/hooks/useConvexData";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
@@ -225,6 +225,8 @@ export default function DashboardPage() {
       <LatestInsights propertyId={property._id} />
 
       <MaintenanceSummary propertyId={property._id} />
+
+      <MeetingsSummary propertyId={property._id} />
 
       <KPIDrawer open={!!kpiDrawer} kpiKey={kpiDrawer} onClose={() => setKpiDrawer(null)} />
     </div>
@@ -756,6 +758,74 @@ function MaintenanceSummary({ propertyId }: { propertyId: string }) {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+function MeetingsSummary({ propertyId }: { propertyId: string }) {
+  const { items } = useMeetings(propertyId);
+  const latest = items[0]; // sorted by date desc on the server
+  const allOpenItems: Array<{ id: string; text: string; assignee?: string; meetingId: string; meetingTitle: string; meetingDate: string }> = [];
+  for (const m of items as any[]) {
+    for (const it of m.actionItems || []) {
+      if (!it.done) {
+        allOpenItems.push({
+          id: it.id,
+          text: it.text,
+          assignee: it.assignee,
+          meetingId: m._id,
+          meetingTitle: m.title,
+          meetingDate: m.date,
+        });
+      }
+    }
+  }
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4 mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Users size={14} className="text-[#71717a] dark:text-[#a1a1aa]" />
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Meetings</p>
+          {allOpenItems.length > 0 && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-[#d97706]">
+              {allOpenItems.length} open action{allOpenItems.length === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+        <Link href="/meetings" className="text-[11px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]">
+          View all →
+        </Link>
+      </div>
+      {!latest ? (
+        <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] italic py-2">No meetings logged yet.</p>
+      ) : (
+        <>
+          <div className="text-[12px] mb-2">
+            <p className="text-[#71717a] dark:text-[#a1a1aa] text-[10px] uppercase tracking-wide font-semibold">Latest meeting</p>
+            <p className="text-[#18181b] dark:text-[#fafafa] font-medium mt-0.5">{latest.title}</p>
+            <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa]">{latest.date}{(latest.attendees || []).length > 0 ? ` · ${(latest.attendees as string[]).length} attendees` : ""}</p>
+          </div>
+          {allOpenItems.length > 0 && (
+            <div className="space-y-1 pt-2 border-t border-[#f4f4f5] dark:border-[#27272a]">
+              {allOpenItems.slice(0, 5).map((it) => (
+                <div key={`${it.meetingId}-${it.id}`} className="flex items-center justify-between gap-3 text-[12px] py-1">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#d97706] flex-shrink-0" />
+                    <span className="truncate text-[#18181b] dark:text-[#fafafa]">{it.text}</span>
+                    {it.assignee && <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] flex-shrink-0">→ {it.assignee}</span>}
+                  </div>
+                  <span className="text-[10px] text-[#a1a1aa] flex-shrink-0 tabular-nums">{it.meetingDate}</span>
+                </div>
+              ))}
+              {allOpenItems.length > 5 && (
+                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] italic pt-1">
+                  + {allOpenItems.length - 5} more open
+                </p>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
