@@ -89,7 +89,7 @@ export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter
           <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{p.value || "—"}</span>
         ) },
       { field: "stage", headerName: "Stage", width: 150, pinned: "left",
-        filter: "agSetColumnFilter",
+        filter: "agTextColumnFilter",
         cellRenderer: StageCellRenderer },
       // Address group — Address visible by default; City + State reveal on
       // group expand. Saves horizontal real estate while keeping the
@@ -161,7 +161,7 @@ export default function DealsGrid({ deals, quickSearch, onDealClick, stageFilter
           try { return new Date(p.value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }); } catch { return p.value; }
         };
       } else if (d.type === "select" || d.type === "text") {
-        base.filter = "agSetColumnFilter";
+        base.filter = "agTextColumnFilter";
       } else if (d.type === "longtext") {
         base.cellRenderer = (p: any) => {
           const t = String(p.value || "").replace(/\s+/g, " ").slice(0, 60);
