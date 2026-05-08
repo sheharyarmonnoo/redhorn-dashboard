@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { useActiveProperty, useTenants, useUnits, showsElectricIndicator } from "@/hooks/useConvexData";
 
 type TenantStatus = "current" | "past_due" | "locked_out" | "vacant" | "expiring_soon";
@@ -234,36 +235,75 @@ function BelgoldRow({
   );
 }
 
+// Same translucent fill palette Hollister uses (SitePlanFullSite). Keeping
+// the visual language consistent across properties so the dashboard reads
+// as one site-plan, not two skinned-differently grids.
+const BELGOLD_FILL: Record<string, string> = {
+  current:       "rgba(22,163,74,0.10)",
+  past_due:      "rgba(220,38,38,0.16)",
+  expiring_soon: "rgba(37,99,235,0.14)",
+  locked_out:    "rgba(217,119,6,0.14)",
+  vacant:        "transparent",
+};
+const BELGOLD_HOVER: Record<string, string> = {
+  current:       "rgba(22,163,74,0.16)",
+  past_due:      "rgba(220,38,38,0.22)",
+  expiring_soon: "rgba(37,99,235,0.20)",
+  locked_out:    "rgba(217,119,6,0.20)",
+  vacant:        "rgba(100,116,139,0.16)",
+};
+const BELGOLD_STROKE: Record<string, string> = {
+  current:       "rgba(22,163,74,0.55)",
+  past_due:      "rgba(220,38,38,0.70)",
+  expiring_soon: "rgba(37,99,235,0.65)",
+  locked_out:    "rgba(217,119,6,0.65)",
+  vacant:        "rgba(161,161,170,0.50)",
+};
+
 function BelgoldUnitBlock({ tenant, onSelect, isSelected, propertyCode }: {
   tenant: Tenant;
   onSelect: (t: Tenant) => void;
   isSelected: boolean;
   propertyCode?: string;
 }) {
-  const c = statusColor(tenant.status);
+  const [hovered, setHovered] = useState(false);
+  const status = (tenant.status || "vacant") as keyof typeof BELGOLD_FILL;
+  const fill = hovered ? BELGOLD_HOVER[status] : BELGOLD_FILL[status];
+  const stroke = isSelected ? BELGOLD_STROKE[status] : "rgba(63,63,70,0.6)";
   const fullUnit = tenant.unit || "";
   return (
     <button
       onClick={() => onSelect(tenant)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       title={fullUnit}
-      className={`
-        w-full ${c.bg} ${c.text} rounded flex flex-col items-center justify-center
-        transition-all duration-100 cursor-pointer relative px-2
-        h-[140px] sm:h-[180px]
-        ${isSelected ? "ring-2 ring-[#18181b] dark:ring-[#fafafa] ring-offset-1 ring-offset-white dark:ring-offset-[#18181b] z-10" : "hover:opacity-90"}
-      `}
+      className="w-full rounded flex flex-col items-center justify-center transition-all duration-100 cursor-pointer relative px-2 h-[140px] sm:h-[180px] text-[#18181b] dark:text-[#fafafa]"
+      style={{
+        backgroundColor: fill,
+        border: `${isSelected ? 2.5 : 1}px solid ${stroke}`,
+        transition: "background-color 140ms ease, border-color 140ms ease",
+      }}
     >
       <span className="text-[20px] sm:text-[24px] font-semibold leading-none">{fullUnit}</span>
       {tenant.tenant ? (
-        <span className="text-[9px] opacity-80 leading-tight text-center truncate max-w-full mt-2 px-1">
+        <span className="text-[10px] text-[#52525b] dark:text-[#a1a1aa] leading-tight text-center truncate max-w-full mt-2 px-1">
           {tenant.tenant}
         </span>
-      ) : tenant.status === "vacant" ? (
-        <span className="text-[9px] opacity-60 mt-2 uppercase tracking-wide">Vacant</span>
+      ) : status === "vacant" ? (
+        <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-2 uppercase tracking-wide">Vacant</span>
       ) : null}
       {tenant.sqft ? (
-        <span className="text-[9px] opacity-60 mt-1 tabular-nums">{tenant.sqft.toLocaleString()} SF</span>
+        <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1 tabular-nums">
+          {tenant.sqft.toLocaleString()} SF
+        </span>
       ) : null}
+      {/* Subtle status dot in the corner — same convention as Hollister */}
+      {status !== "vacant" && (
+        <span
+          className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
+          style={{ backgroundColor: BELGOLD_STROKE[status] }}
+        />
+      )}
       {tenant.pastDueAmount > 0 && (
         <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#dc2626] rounded-full border-2 border-white dark:border-[#18181b]" />
       )}
