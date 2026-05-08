@@ -10,11 +10,11 @@ export default {
   providers: [
     {
       domain: "https://clerk.dealmanagerai.com",
-      applicationID: "db-sync",
+      applicationID: "sync",
     },
     {
       domain: "https://ready-tiger-31.clerk.accounts.dev",
-      applicationID: "db-sync",
+      applicationID: "sync",
     },
   ],
 };
