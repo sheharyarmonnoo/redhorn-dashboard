@@ -44,6 +44,30 @@ function trimList<T>(items: T[], n: number): T[] {
   return items.length > n ? items.slice(0, n) : items;
 }
 
+// Mirrors the per-property + per-unit allowlist from src/hooks/useConvexData.ts
+// (`ELECTRIC_INDICATOR_UNITS`). Without it the chatbot would flag every
+// tenant whose electricPosted=false even though the dashboard's
+// "Electric Not Posted" indicator only renders for these specific units.
+const ELECTRIC_INDICATOR_UNITS: Record<string, Set<string>> = {
+  hollister: new Set([
+    "abd",
+    "c-100", "c-194", "c-200", "c-202", "c-204", "c-210",
+    "d-150", "d-160",
+  ]),
+};
+function showsElectricIndicator(tenant: any, propertyCode: string | undefined): boolean {
+  if (!tenant || tenant.status === "vacant") return false;
+  const code = (propertyCode || "").toLowerCase();
+  const allow = ELECTRIC_INDICATOR_UNITS[code];
+  if (!allow) return false;
+  const raw = (tenant.unit || "").trim().toLowerCase();
+  if (!raw) return false;
+  for (const part of raw.split(",")) {
+    if (allow.has(part.trim())) return true;
+  }
+  return false;
+}
+
 /**
  * Build the <data> context block from live Convex queries. We deliberately
  * cap each section so the prompt fits comfortably in the context window even
@@ -206,7 +230,13 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
       : "—";
     const leaseEnd = t.leaseTo || "—";
     const status = t.status || "—";
-    return `- ${t.unit || "?"} | ${t.tenant || "?"} | ${rent}/mo | ${sf} | ${rentPerSf} | lease ends ${leaseEnd} | ${status}`;
+    // Electric posting flag — only meaningful for tenants on the allowlist;
+    // for everyone else it's "n/a" so the chatbot doesn't hallucinate.
+    const electricFlag = showsElectricIndicator(t, property?.code)
+      ? (t.electricPosted ? "electric: posted" : "electric: NOT posted")
+      : "electric: n/a";
+    const electricAmount = t.monthlyElectric ? `${fmt$(t.monthlyElectric)}/mo elec` : "";
+    return `- ${t.unit || "?"} | ${t.tenant || "?"} | ${rent}/mo | ${sf} | ${rentPerSf} | lease ends ${leaseEnd} | ${status} | ${electricFlag}${electricAmount ? " | " + electricAmount : ""}`;
   });
 
   const sections: string[] = [];
@@ -249,6 +279,27 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
 
   sections.push(`Active alerts (${openAlerts.length}):`);
   sections.push(alertLines.length ? alertLines.join("\n") : "- (none)");
+  sections.push("");
+
+  // ---- Electric Not Posted ----
+  // Triple-net tenants on the per-property allowlist whose electric charge
+  // hasn't been posted this month. The dashboard surfaces this as the
+  // orange-dot indicator on the rent roll + site plan; the chatbot needs
+  // it to answer questions like "who hasn't been billed for electric".
+  const electricNotPosted = (tenants || []).filter(
+    (t: any) =>
+      t.status !== "vacant" &&
+      !t.electricPosted &&
+      t.tenant &&
+      !String(t.tenant).includes("Owner") &&
+      showsElectricIndicator(t, property?.code),
+  );
+  const electricLines = trimList(electricNotPosted, 20).map((t: any) => {
+    const electric = t.monthlyElectric ? `${fmt$(t.monthlyElectric)}/mo electric` : "no electric on record";
+    return `- ${t.unit || "?"} | ${t.tenant || "?"} | ${electric}`;
+  });
+  sections.push(`Electric Not Posted (NNN tenants on allowlist whose electric charge isn't posted this month, ${electricNotPosted.length}):`);
+  sections.push(electricLines.length ? electricLines.join("\n") : "- (none)");
   sections.push("");
 
   // ---- Acquisitions deal pipeline (portfolio-wide, not per-property) ----
