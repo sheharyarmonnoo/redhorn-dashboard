@@ -118,10 +118,27 @@ export default function SitePlanPage() {
     );
   }
 
-  // RV park doesn't get a Yardi-driven site plan — units come from Campspot
-  // and the data isn't wired up yet. Render the coming-soon card instead.
+  // RV park doesn't have a Yardi-driven site plan — Campspot integration
+  // is pending. As an interim, embed Diamond Maps' interactive site plan
+  // for Bradenburg. We host it inside a styled wrapper (page header + card
+  // chrome match the rest of the dashboard) so the iframe reads as a
+  // first-party feature rather than a third-party widget.
   if (property?.propertyType === "rv_park") {
-    return <ComingSoonBanner propertyName={property.name} />;
+    return (
+      <div>
+        <PageHeader title="Site Plan" subtitle={`${property.name} — interactive map`} />
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden shadow-sm">
+          <iframe
+            src="https://diamondmaps.com/map.ashx?key=36746260305125558991"
+            title="Site plan"
+            className="block w-full border-0 bg-white dark:bg-[#18181b]"
+            style={{ height: "calc(100dvh - 9rem)", minHeight: "560px" }}
+            allow="fullscreen; geolocation"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
