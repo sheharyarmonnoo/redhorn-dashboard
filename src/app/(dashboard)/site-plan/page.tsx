@@ -96,6 +96,29 @@ export default function SitePlanPage() {
     })),
   ];
 
+  // RV park branch FIRST — its iframe doesn't depend on tenants/units
+  // queries, so we mustn't gate it on dataLoading. Otherwise every Convex
+  // websocket reconnect (re-auth, idle ping) flips dataLoading=true →
+  // skeleton renders → iframe unmounts → query resolves → iframe
+  // re-mounts in an infinite refresh loop.
+  if (property?.propertyType === "rv_park") {
+    return (
+      <div>
+        <PageHeader title="Site Plan" subtitle={`${property.name} — interactive map`} />
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden shadow-sm">
+          <iframe
+            src="https://diamondmaps.com/map.ashx?key=36746260305125558991"
+            title="Site plan"
+            className="block w-full border-0 bg-white dark:bg-[#18181b]"
+            style={{ height: "calc(100dvh - 9rem)", minHeight: "560px" }}
+            allow="fullscreen; geolocation"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      </div>
+    );
+  }
+
   // Skeleton while tenants/units stream in. Without it the stats flash
   // "0 / 0 / 0 / 0" briefly on initial load (and on every property switch),
   // which reads as a real empty-state.
@@ -113,29 +136,6 @@ export default function SitePlanPage() {
         </div>
         <div className="mt-4 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6 animate-pulse">
           <div className="h-72 w-full bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
-        </div>
-      </div>
-    );
-  }
-
-  // RV park doesn't have a Yardi-driven site plan — Campspot integration
-  // is pending. As an interim, embed Diamond Maps' interactive site plan
-  // for Bradenburg. We host it inside a styled wrapper (page header + card
-  // chrome match the rest of the dashboard) so the iframe reads as a
-  // first-party feature rather than a third-party widget.
-  if (property?.propertyType === "rv_park") {
-    return (
-      <div>
-        <PageHeader title="Site Plan" subtitle={`${property.name} — interactive map`} />
-        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden shadow-sm">
-          <iframe
-            src="https://diamondmaps.com/map.ashx?key=36746260305125558991"
-            title="Site plan"
-            className="block w-full border-0 bg-white dark:bg-[#18181b]"
-            style={{ height: "calc(100dvh - 9rem)", minHeight: "560px" }}
-            allow="fullscreen; geolocation"
-            referrerPolicy="no-referrer"
-          />
         </div>
       </div>
     );
