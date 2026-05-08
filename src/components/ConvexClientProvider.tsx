@@ -6,9 +6,10 @@ import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
 import { ReactNode, useState, useEffect } from "react";
 
-// Backend DB URL — neutral env name that doesn't bake the vendor into the
-// variable. Set in .env.local / Vercel.
-const dbUrl = process.env.NEXT_PUBLIC_DB_URL!;
+// Backend DB URL — prefer the neutral name; fall back to the legacy
+// vendor-named var so an out-of-order env rename on the host doesn't
+// crash the client at boot.
+const dbUrl = process.env.NEXT_PUBLIC_DB_URL || process.env.NEXT_PUBLIC_CONVEX_URL!;
 const convex = new ConvexReactClient(dbUrl);
 
 export default function ConvexClientProvider({ children }: { children: ReactNode }) {
