@@ -4,13 +4,34 @@ import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, useCallback } from "react";
 
 // Backend DB URL — prefer the neutral name; fall back to the legacy
 // vendor-named var so an out-of-order env rename on the host doesn't
 // crash the client at boot.
 const dbUrl = process.env.NEXT_PUBLIC_DB_URL || process.env.NEXT_PUBLIC_CONVEX_URL!;
 const convex = new ConvexReactClient(dbUrl);
+
+// Override Clerk's JWT template name. ConvexProviderWithClerk hardcodes
+// `template: "convex"` when calling getToken, but we renamed the template
+// in Clerk to "sync" so the vendor name doesn't surface in network logs.
+// We wrap useAuth's getToken to ignore whatever template the caller asked
+// for and always request the "sync" template instead.
+const JWT_TEMPLATE = "sync";
+
+function useAuthForConvex() {
+  const auth = useAuth();
+  const getTokenOverride = useCallback(
+    (opts?: { skipCache?: boolean }) => {
+      return auth.getToken({ template: JWT_TEMPLATE, skipCache: opts?.skipCache });
+    },
+    [auth],
+  );
+  return {
+    ...auth,
+    getToken: getTokenOverride,
+  };
+}
 
 export default function ConvexClientProvider({ children }: { children: ReactNode }) {
   const [isDark, setIsDark] = useState(false);
@@ -54,7 +75,7 @@ export default function ConvexClientProvider({ children }: { children: ReactNode
           : undefined,
       }}
     >
-      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+      <ConvexProviderWithClerk client={convex} useAuth={useAuthForConvex}>
         {children}
       </ConvexProviderWithClerk>
     </ClerkProvider>
