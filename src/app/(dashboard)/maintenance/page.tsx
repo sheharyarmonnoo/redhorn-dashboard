@@ -117,10 +117,6 @@ export default function MaintenancePage() {
   // is fine for low-volume manual entry.
   async function onAddItem() {
     if (!property?._id) return;
-    // createdBy is wired but not yet sent — Convex schema deploy is queued
-    // (pending CLI auth refresh). Once deployed, swap the (any) cast and
-    // include it in the args.
-    void currentUser;
     const id = await create({
       propertyId: property._id as any,
       date: todayISO(),
@@ -128,6 +124,7 @@ export default function MaintenancePage() {
       type: "New Maintenance Item",
       description: "",
       status: "open",
+      createdBy: currentUser,
     });
     setOpenId(id as any);
   }
@@ -144,6 +141,7 @@ export default function MaintenancePage() {
       status: "scheduled",
       isRecurring: true,
       recurFrequency: t.frequency,
+      createdBy: currentUser,
     });
     setOpenId(id as any);
   }

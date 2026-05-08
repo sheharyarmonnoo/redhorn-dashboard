@@ -86,9 +86,47 @@ export default defineSchema({
       createdAt: v.number(),
     }))),
     updatedAt: v.optional(v.number()),
+    createdBy: v.optional(v.string()),
   })
     .index("by_unit", ["unitId"])
     .index("by_property", ["propertyId"]),
+
+  // ===== MEETINGS =====
+  // Recurring PM meeting log — date, who was there, what was discussed,
+  // a list of action items (optionally linked to a maintenance task), and
+  // attached files (marketing decks, finance updates, photos, etc).
+  meetings: defineTable({
+    propertyId: v.id("properties"),
+    date: v.string(),                 // ISO yyyy-mm-dd
+    title: v.string(),                // e.g. "Tuesday PM sync"
+    attendees: v.optional(v.array(v.string())),
+    discussion: v.optional(v.string()),
+    actionItems: v.optional(v.array(v.object({
+      id: v.string(),
+      text: v.string(),
+      assignee: v.optional(v.string()),
+      done: v.boolean(),
+      createdAt: v.number(),
+      maintenanceId: v.optional(v.id("maintenance_log")),
+    }))),
+    // Files dumped against this meeting — marketing updates, finance
+    // packets, photos, etc. Stored in Convex file storage; we keep the
+    // metadata here so the drawer can list them without an extra round
+    // trip.
+    files: v.optional(v.array(v.object({
+      id: v.string(),
+      storageId: v.id("_storage"),
+      name: v.string(),
+      size: v.number(),
+      mimeType: v.optional(v.string()),
+      category: v.optional(v.string()), // e.g. "marketing", "finance"
+      uploadedAt: v.number(),
+      uploadedBy: v.optional(v.string()),
+    }))),
+    createdBy: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_property_date", ["propertyId", "date"]),
 
   // ===== TENANTS / LEASES =====
   tenants: defineTable({
