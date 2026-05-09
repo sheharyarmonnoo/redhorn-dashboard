@@ -419,11 +419,22 @@ export const _commitBundleStatus = internalMutation({
     committedBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const bundle = await ctx.db.get(args.bundleId);
     await ctx.db.patch(args.bundleId, {
       status: "committed",
       committedAt: Date.now(),
       committedBy: args.committedBy,
     });
+    // Flip property.hasData=true on the RV park's first successful commit so
+    // the sidebar's "No data" badge clears. Commercial properties get this
+    // via incomeLines.upsert; RV's never wrote it because RV financials
+    // live in rv_financials, not income_lines.
+    if (bundle?.propertyId) {
+      const property = await ctx.db.get(bundle.propertyId);
+      if (property && !property.hasData) {
+        await ctx.db.patch(bundle.propertyId, { hasData: true });
+      }
+    }
   },
 });
 
