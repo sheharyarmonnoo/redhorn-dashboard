@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, X } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, RowClickedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
 import { useRvData, formatCurrency } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
@@ -29,6 +29,8 @@ type SiteRow = {
   totalPayments: number;
   totalBalance: number;
   percentPaid: number;
+  totalPosCharges: number;
+  totalUtilityCharges: number;
   hasOpenBalance: boolean;
   currentRes: Row | null;
   nextRes: Row | null;
@@ -107,6 +109,8 @@ function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
     const totalPayments = rs.reduce((s, r) => s + (r.totalPaymentsOnInvoice || 0), 0);
     const totalBalance = rs.reduce((s, r) => s + (r.balanceOnInvoice || 0), 0);
     const percentPaid = totalCharges > 0 ? totalPayments / totalCharges : 1;
+    const totalPosCharges = rs.reduce((s, r) => s + (r.posCharges || 0), 0);
+    const totalUtilityCharges = rs.reduce((s, r) => s + (r.utilityCharges || 0), 0);
 
     const focus = currentRes || nextRes;
     const numericMatch = code.match(/^\d+/);
@@ -121,6 +125,8 @@ function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
       totalPayments,
       totalBalance,
       percentPaid,
+      totalPosCharges,
+      totalUtilityCharges,
       hasOpenBalance: totalBalance > 0.5,
       currentRes,
       nextRes,
@@ -199,10 +205,11 @@ export default function RvRentRoll({
     return { total: allRows.length, occupied, arriving, vacant, pastDueCount: pastDueRows.length, totalAr };
   }, [allRows]);
 
-  // Column defs mirror the commercial rent roll pattern (sortable / filterable
-  // / resizable defaults handled at the grid level). Tenant column intentionally
-  // omitted — RV stays churn so fast that a guest name on the row is noise.
-  const columnDefs = useMemo<ColDef[]>(() => {
+  // Visible-by-default columns intentionally stay high-level: Site, Type,
+  // Status, Balance, Paid %, Stays. Detail columns (arrival/departure dates,
+  // package, charges/payments, POS, utility) reveal on group expand. The
+  // ledger-style drawer carries the full per-reservation drill-down.
+  const columnDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
     return [
       {
         field: "siteCode",
@@ -214,54 +221,89 @@ export default function RvRentRoll({
           a.localeCompare(b, undefined, { numeric: true }),
       },
       { field: "siteType", headerName: "Type", minWidth: 220, flex: 1 },
+      // Status group — current Status pill stays visible; arrival, departure,
+      // and active package open on expand.
       {
-        field: "status",
-        headerName: "Status",
-        width: 130,
-        cellRenderer: StatusCellRenderer,
-        filter: true,
+        headerName: "",
+        marryChildren: true,
+        children: [
+          {
+            field: "status",
+            headerName: "Status",
+            width: 130,
+            cellRenderer: StatusCellRenderer,
+            filter: true,
+          },
+          {
+            field: "arrivalDate",
+            headerName: "Arrival",
+            width: 110,
+            columnGroupShow: "open",
+            valueFormatter: (p: { value: string }) => formatShortDate(p.value),
+          },
+          {
+            field: "departureDate",
+            headerName: "Departure",
+            width: 110,
+            columnGroupShow: "open",
+            valueFormatter: (p: { value: string }) => formatShortDate(p.value),
+          },
+          {
+            field: "package",
+            headerName: "Package",
+            width: 220,
+            columnGroupShow: "open",
+            valueFormatter: (p: { value: string }) => p.value || "—",
+          },
+        ],
       },
+      // Charges & Payments group — Balance and Paid % stay visible; Charges,
+      // Payments, POS, Utility reveal on expand.
       {
-        field: "arrivalDate",
-        headerName: "Arrival",
-        width: 110,
-        valueFormatter: (p: { value: string }) => formatShortDate(p.value),
-      },
-      {
-        field: "departureDate",
-        headerName: "Departure",
-        width: 110,
-        valueFormatter: (p: { value: string }) => formatShortDate(p.value),
-      },
-      {
-        field: "package",
-        headerName: "Package",
-        width: 220,
-        valueFormatter: (p: { value: string }) => p.value || "—",
-      },
-      {
-        field: "totalCharges",
-        headerName: "Charges",
-        width: 120,
-        cellRenderer: CurrencyCellRenderer,
-      },
-      {
-        field: "totalPayments",
-        headerName: "Payments",
-        width: 120,
-        cellRenderer: CurrencyCellRenderer,
-      },
-      {
-        field: "totalBalance",
-        headerName: "Balance",
-        width: 120,
-        cellRenderer: BalanceCellRenderer,
-      },
-      {
-        field: "percentPaid",
-        headerName: "Paid %",
-        width: 100,
-        cellRenderer: PaidPctCellRenderer,
+        headerName: "",
+        marryChildren: true,
+        children: [
+          {
+            field: "totalBalance",
+            headerName: "Balance",
+            width: 120,
+            cellRenderer: BalanceCellRenderer,
+          },
+          {
+            field: "percentPaid",
+            headerName: "Paid %",
+            width: 100,
+            cellRenderer: PaidPctCellRenderer,
+          },
+          {
+            field: "totalCharges",
+            headerName: "Charges",
+            width: 120,
+            columnGroupShow: "open",
+            cellRenderer: CurrencyCellRenderer,
+          },
+          {
+            field: "totalPayments",
+            headerName: "Payments",
+            width: 120,
+            columnGroupShow: "open",
+            cellRenderer: CurrencyCellRenderer,
+          },
+          {
+            field: "totalPosCharges",
+            headerName: "POS",
+            width: 110,
+            columnGroupShow: "open",
+            cellRenderer: CurrencyCellRenderer,
+          },
+          {
+            field: "totalUtilityCharges",
+            headerName: "Utility",
+            width: 110,
+            columnGroupShow: "open",
+            cellRenderer: CurrencyCellRenderer,
+          },
+        ],
       },
       {
         field: "reservationCount",
@@ -422,25 +464,31 @@ function StatCard({
   );
 }
 
-// Replaces the commercial rent roll's ledger drawer for the RV park. Shows
-// the line items of the focused reservation (current if any, otherwise next
-// upcoming). Tabs switch between current / next when both exist.
+// Drawer = ledger view. Every reservation for the site is listed
+// chronologically (one row per stay) so you can see the whole tenancy
+// history including guest names, dates, charges, payments, balance, and
+// POS. Click a reservation row → its line-item breakdown renders below.
+// This is where the data the grid de-emphasizes (names, POS detail) lives.
 function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void }) {
-  const tabs: { key: "current" | "next"; label: string; res: Row | null }[] = [];
-  if (row.currentRes) tabs.push({ key: "current", label: "Current", res: row.currentRes });
-  if (row.nextRes) tabs.push({ key: "next", label: "Next", res: row.nextRes });
-  const fallback = row.reservations[0] || null;
-
-  const [activeKey, setActiveKey] = useState<"current" | "next">(
-    row.currentRes ? "current" : "next",
+  const today = todayIso();
+  // Default-select the most relevant reservation: the one currently in-house,
+  // else the next upcoming one, else the most recent past stay.
+  const initial = useMemo(() => {
+    if (row.currentRes) return row.currentRes.confirmation as string;
+    if (row.nextRes) return row.nextRes.confirmation as string;
+    return row.reservations[row.reservations.length - 1]?.confirmation || null;
+  }, [row]);
+  const [selectedConf, setSelectedConf] = useState<string | null>(initial);
+  const selected = useMemo(
+    () => row.reservations.find((r: Row) => r.confirmation === selectedConf) || null,
+    [row.reservations, selectedConf],
   );
-  const active = tabs.find((t) => t.key === activeKey)?.res ?? fallback;
 
   return (
     <div className="fixed inset-0 z-[70] flex justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40 dark:bg-black/60" />
       <div
-        className="relative bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-2xl w-full max-w-[560px] h-full overflow-hidden flex flex-col"
+        className="relative bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-2xl w-full max-w-[760px] h-full overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between px-5 py-4 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
@@ -457,9 +505,9 @@ function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void
           </button>
         </div>
 
-        {/* Site-level rollup summary */}
-        <div className="grid grid-cols-3 gap-2 px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a]/50">
+        <div className="grid grid-cols-4 gap-2 px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a]/50">
           <DrawerStat label="Stays" value={`${row.reservationCount}`} />
+          <DrawerStat label="Total Charges" value={row.totalCharges > 0 ? formatCurrency(row.totalCharges) : "—"} />
           <DrawerStat
             label="Total Balance"
             value={row.totalBalance > 0.5 ? formatCurrency(row.totalBalance) : "—"}
@@ -471,34 +519,112 @@ function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void
           />
         </div>
 
-        {tabs.length > 1 && (
-          <div className="flex gap-1 px-5 pt-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setActiveKey(t.key)}
-                className={`text-[12px] font-medium px-3 py-2 cursor-pointer border-b-2 -mb-px transition-colors ${
-                  activeKey === t.key
-                    ? "border-[#18181b] dark:border-[#fafafa] text-[#18181b] dark:text-[#fafafa]"
-                    : "border-transparent text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        )}
-
         <div className="flex-1 overflow-y-auto">
-          {active ? (
-            <ReservationLineItems res={active} />
-          ) : (
-            <div className="px-5 py-10 text-center text-[12px] text-[#a1a1aa]">
-              No active reservations on this site.
-            </div>
+          <div className="px-5 pt-4 pb-2">
+            <p className="text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">
+              Reservation Ledger
+            </p>
+          </div>
+          <ReservationLedger
+            reservations={row.reservations}
+            today={today}
+            selectedConf={selectedConf}
+            onSelect={setSelectedConf}
+          />
+          {selected && (
+            <>
+              <div className="px-5 pt-5 pb-2">
+                <p className="text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">
+                  Line Items · {selected.confirmation}
+                </p>
+              </div>
+              <ReservationLineItems res={selected} />
+            </>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ReservationLedger({
+  reservations,
+  today,
+  selectedConf,
+  onSelect,
+}: {
+  reservations: Row[];
+  today: string;
+  selectedConf: string | null;
+  onSelect: (conf: string) => void;
+}) {
+  // Chronological order — most recent / current at the top so the user sees
+  // the active stay first, then prior history below.
+  const sorted = [...reservations].sort((a, b) =>
+    (b.arrivalDate || "").localeCompare(a.arrivalDate || ""),
+  );
+
+  return (
+    <div className="border-y border-[#e4e4e7] dark:border-[#3f3f46]">
+      <div className="grid grid-cols-[80px_1fr_140px_90px_90px_90px_60px] px-5 py-2 bg-[#fafafa] dark:bg-[#27272a]/50 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <span>Status</span>
+        <span>Guest</span>
+        <span>Dates</span>
+        <span className="text-right">Charges</span>
+        <span className="text-right">Paid</span>
+        <span className="text-right">Balance</span>
+        <span className="text-right">Paid %</span>
+      </div>
+      {sorted.map((r) => {
+        const isCurrent = r.arrivalDate <= today && today <= r.departureDate;
+        const isFuture = r.arrivalDate > today;
+        const isPast = r.departureDate < today;
+        const balance = r.balanceOnInvoice || 0;
+        const isSelected = r.confirmation === selectedConf;
+        const guestName = `${r.firstName || ""} ${r.lastName || ""}`.trim() || "—";
+        return (
+          <button
+            key={r.confirmation}
+            onClick={() => onSelect(r.confirmation)}
+            className={`w-full grid grid-cols-[80px_1fr_140px_90px_90px_90px_60px] px-5 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-left cursor-pointer hover:bg-[#fafafa] dark:hover:bg-[#27272a]/50 ${
+              isSelected ? "bg-[#fef3c7]/40 dark:bg-[#422006]/20" : ""
+            }`}
+          >
+            <span className="inline-flex items-center gap-1.5 text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isCurrent ? "bg-[#16a34a]" : isFuture ? "bg-[#2563eb]" : "bg-[#a1a1aa]"
+                }`}
+              />
+              {isCurrent ? "Current" : isFuture ? "Upcoming" : isPast ? "Past" : "—"}
+            </span>
+            <span className="truncate text-[#18181b] dark:text-[#fafafa]" title={guestName}>
+              {guestName}
+            </span>
+            <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] tabular-nums">
+              {formatShortDate(r.arrivalDate)} → {formatShortDate(r.departureDate)}
+            </span>
+            <span className="text-right tabular-nums text-[#18181b] dark:text-[#fafafa]">
+              {(r.totalChargesOnInvoice || 0) > 0 ? formatCurrency(r.totalChargesOnInvoice) : "—"}
+            </span>
+            <span className="text-right tabular-nums text-[#16a34a]">
+              {(r.totalPaymentsOnInvoice || 0) > 0 ? formatCurrency(r.totalPaymentsOnInvoice) : "—"}
+            </span>
+            <span
+              className={`text-right tabular-nums ${
+                balance > 0.5 ? "text-[#dc2626] font-medium" : "text-[#a1a1aa]"
+              }`}
+            >
+              {balance > 0.5 ? formatCurrency(balance) : "—"}
+            </span>
+            <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa] text-[11px]">
+              {(r.totalChargesOnInvoice || 0) > 0
+                ? `${((r.percentPaid || 0) * 100).toFixed(0)}%`
+                : "—"}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -537,27 +663,17 @@ function ReservationLineItems({ res }: { res: Row }) {
     { label: "Total Payments on Invoice", value: -(res.totalPaymentsOnInvoice || 0), muted: true },
     { label: "Balance on Invoice", value: res.balanceOnInvoice || 0, emphasize: true },
   ];
+  const hasNonZero = items.some((it) => it.value !== 0);
 
   return (
-    <div>
-      {/* Reservation header — keeps confirmation # + arrival/departure context
-          without emphasizing the guest name (de-emphasized per directive). */}
-      <div className="px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
-        <div className="flex items-center justify-between">
-          <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">
-            {res.confirmation}
-          </p>
-          <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] tabular-nums">
-            {formatShortDate(res.arrivalDate)} → {formatShortDate(res.departureDate)} · {res.nights} night{res.nights === 1 ? "" : "s"}
-          </p>
+    <div className="divide-y divide-[#f4f4f5] dark:divide-[#27272a]">
+      {!hasNonZero && (
+        <div className="px-5 py-6 text-center text-[12px] text-[#a1a1aa]">
+          No charges or payments on this reservation.
         </div>
-        {res.packageApplied && (
-          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">{res.packageApplied}</p>
-        )}
-      </div>
-
-      <div className="divide-y divide-[#f4f4f5] dark:divide-[#27272a]">
-        {items.map((it, i) => (
+      )}
+      {hasNonZero &&
+        items.map((it, i) => (
           <div
             key={i}
             className={`grid grid-cols-[1fr_140px] px-5 py-2.5 text-[12px] ${
@@ -590,17 +706,10 @@ function ReservationLineItems({ res }: { res: Row }) {
             </span>
           </div>
         ))}
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 px-5 py-4 border-t border-[#e4e4e7] dark:border-[#3f3f46]">
-        <DrawerStat
-          label="Paid %"
-          value={`${((res.percentPaid || 0) * 100).toFixed(0)}%`}
-        />
-        <DrawerStat
-          label="Source"
-          value={res.reservationSource || "—"}
-        />
+      <div className="grid grid-cols-3 gap-3 px-5 py-4 bg-[#fafafa]/40 dark:bg-[#27272a]/30">
+        <DrawerStat label="Nights" value={`${res.nights || 0}`} />
+        <DrawerStat label="Source" value={res.reservationSource || "—"} />
+        <DrawerStat label="Package" value={res.packageApplied || "—"} />
       </div>
     </div>
   );
