@@ -475,7 +475,7 @@ export default function UploadsPage() {
           <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6 text-center">
             <p className="text-[12px] text-[#a1a1aa]">Loading…</p>
           </div>
-        ) : bundles.filter((b: any) => b.status === "committed").length === 0 ? (
+        ) : bundles.filter((b: any) => b.status === "committed" || b.status === "superseded").length === 0 ? (
           <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6 text-center">
             <p className="text-[12px] text-[#a1a1aa]">No committed bundles yet.</p>
           </div>
@@ -487,25 +487,46 @@ export default function UploadsPage() {
               <span>Committed by</span>
               <span>Committed</span>
             </div>
+            {/* Show every committed event for audit trail — re-uploads to the
+                same period flip the prior bundle's status to "superseded"
+                instead of deleting it, so the user sees each commit. Sort by
+                committedAt desc so the freshest event lands on top. */}
             {bundles
-              .filter((b: any) => b.status === "committed")
-              .sort((a: any, b: any) => (b.period || "").localeCompare(a.period || ""))
-              .map((b: any) => (
-                <div
-                  key={b._id}
-                  className="grid grid-cols-[140px_1fr_120px_140px] px-4 py-2.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] text-[#18181b] dark:text-[#fafafa] items-center"
-                >
-                  <span className="font-medium">{formatPeriod(b.period)}</span>
-                  <span className="text-[#71717a] dark:text-[#a1a1aa] truncate">
-                    {b.files.length} file{b.files.length === 1 ? "" : "s"} ·{" "}
-                    {b.files.reduce((sum: number, f: any) => sum + (f.rowsParsed || 0), 0)} rows
-                  </span>
-                  <span className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] truncate">{b.committedBy || "—"}</span>
-                  <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] tabular-nums">
-                    {formatRelative(b.committedAt)}
-                  </span>
-                </div>
-              ))}
+              .filter((b: any) => b.status === "committed" || b.status === "superseded")
+              .sort((a: any, b: any) => (b.committedAt || 0) - (a.committedAt || 0))
+              .map((b: any) => {
+                const isSuperseded = b.status === "superseded";
+                return (
+                  <div
+                    key={b._id}
+                    className={`grid grid-cols-[140px_1fr_120px_140px] px-4 py-2.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center ${
+                      isSuperseded
+                        ? "text-[#a1a1aa] dark:text-[#71717a]"
+                        : "text-[#18181b] dark:text-[#fafafa]"
+                    }`}
+                  >
+                    <span className="font-medium flex items-center gap-1.5">
+                      {formatPeriod(b.period)}
+                      {isSuperseded && (
+                        <span
+                          className="text-[9px] font-medium uppercase tracking-wide text-[#a1a1aa] dark:text-[#52525b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded px-1.5 py-0.5"
+                          title="Replaced by a later upload for this period"
+                        >
+                          Replaced
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[#71717a] dark:text-[#a1a1aa] truncate">
+                      {b.files.length} file{b.files.length === 1 ? "" : "s"} ·{" "}
+                      {b.files.reduce((sum: number, f: any) => sum + (f.rowsParsed || 0), 0)} rows
+                    </span>
+                    <span className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] truncate">{b.committedBy || "—"}</span>
+                    <span className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] tabular-nums">
+                      {formatRelative(b.committedAt)}
+                    </span>
+                  </div>
+                );
+              })}
           </div>
         )}
       </div>

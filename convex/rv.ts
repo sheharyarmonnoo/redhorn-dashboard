@@ -337,6 +337,20 @@ export const _deleteRowsForBundle = internalMutation({
   },
 });
 
+// Mark a prior bundle as superseded so the upload-history feed can keep
+// every commit event for the same period (audit trail). Data rows from
+// the bundle are wiped separately via _deleteRowsForBundle — only the
+// metadata stays, so queries against rv_* tables only ever see the most
+// recent snapshot's data.
+export const _markBundleSuperseded = internalMutation({
+  args: { bundleId: v.id("rv_upload_bundles") },
+  handler: async (ctx, args) => {
+    const bundle = await ctx.db.get(args.bundleId);
+    if (!bundle) return;
+    await ctx.db.patch(args.bundleId, { status: "superseded" });
+  },
+});
+
 export const _deleteBundle = internalMutation({
   args: { bundleId: v.id("rv_upload_bundles") },
   handler: async (ctx, args) => {
