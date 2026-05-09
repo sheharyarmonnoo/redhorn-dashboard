@@ -950,13 +950,17 @@ function BlockSection({
   onToggle?: () => void;
   totalIncome: number;
 }) {
-  // Hide rows with no values, all "Total - X" subtotals, and all empty
-  // subgroup headers when a block is expanded. The user's directive: when
-  // expanded, just show the actual line items — they roll up into the
-  // block header's inline numbers, so showing intermediate subtotals
-  // ("Total Bad Debt", "Total SRDE Income") reads as duplication.
+  // Hide rows with no period values, all "Total - X" subtotals, and all
+  // empty subgroup headers when a block is expanded. The IS table renders
+  // MTD / Budget / Variance / Var % / % Income — period-specific columns
+  // — so a row with only YTD amounts (no MTD anywhere) reads as fully
+  // empty here. Filter on MTD-side fields only; YTD-only rows still
+  // show up on Budget vs Actuals where YTD columns exist.
   const visibleChildren = block.children.filter((c) => {
-    if (isRowEmpty(c)) return false;
+    const noMtdContent =
+      Math.abs(c.amountMtd || 0) < 0.0001 &&
+      Math.abs(c.budgetMtd || 0) < 0.0001;
+    if (noMtdContent) return false;
     const k = classifyLine(c);
     if (k === "subtotal" || k === "subgroup") return false;
     return true;
