@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ExternalLink } from "lucide-react";
-import { useActiveProperty, useTenantsWithLoading, useUnitsWithLoading, leasedUnitKeys, useRvData, formatCurrency } from "@/hooks/useConvexData";
+import { useActiveProperty, useTenantsWithLoading, useUnitsWithLoading, leasedUnitKeys } from "@/hooks/useConvexData";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import PageHeader from "@/components/PageHeader";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
@@ -14,10 +14,6 @@ export default function SitePlanPage() {
   const property = useActiveProperty();
   const { tenants: tenantsListRaw, loading: tenantsLoading } = useTenantsWithLoading(property?._id);
   const { units: unitsRaw, loading: unitsLoading } = useUnitsWithLoading(property?._id);
-  // RV park's data lives in rv_* tables (uploaded monthly) instead of the
-  // Yardi-fed tenants/units. Hook is no-op when propertyId is undefined or
-  // the property isn't an RV park, so it's safe to always call.
-  const rv = useRvData(property?.propertyType === "rv_park" ? (property?._id as string) : undefined);
   const tenantsList = tenantsListRaw as any[];
   const units = unitsRaw as any[];
   const dataLoading = tenantsLoading || unitsLoading;
@@ -102,89 +98,17 @@ export default function SitePlanPage() {
   ];
 
   // RV park doesn't have a Yardi-driven site plan SVG — Campspot's interactive
-  // map lives at Diamond Maps and doesn't embed well (auth retries unmount the
-  // frame). We surface live stats from the monthly upload bundle and link out
-  // to the interactive map. No SVG layout = no per-site click-through here;
-  // Rent Roll is the per-site drill-down.
+  // map lives at Diamond Maps. Per the user's directive, no KPI cards on the
+  // RV /site-plan: occupancy/past-due numbers already live on Rent Roll +
+  // Financials, so duplicating them here was visual noise. Page is just the
+  // launch card pointing at the live Diamond Maps view.
   if (property?.propertyType === "rv_park") {
     const mapUrl = "https://diamondmaps.com/map.ashx?key=36746260305125558991";
-    const today = new Date().toISOString().slice(0, 10);
-    const reservations = rv.reservations as any[];
-    const sites = rv.sites as any[];
-
-    // Roll up reservations per site to compute occupied/arriving/vacant.
-    const bySite = new Map<string, any[]>();
-    for (const r of reservations) {
-      const code = r.siteCode;
-      if (!bySite.has(code)) bySite.set(code, []);
-      bySite.get(code)!.push(r);
-    }
-    const totalSites = sites.length;
-    let occupied = 0;
-    let pastDue = 0;
-    let totalAr = 0;
-    for (const s of sites) {
-      const rs = bySite.get(s.siteCode) || [];
-      const current = rs.find((r) => r.arrivalDate <= today && today <= r.departureDate);
-      if (current) occupied += 1;
-      const balance = rs.reduce((sum, r) => sum + (r.balanceOnInvoice || 0), 0);
-      if (balance > 0.5) {
-        pastDue += 1;
-        totalAr += balance;
-      }
-    }
-    const vacant = Math.max(0, totalSites - occupied);
-
     return (
       <div>
-        <PageHeader title="Site Plan" subtitle={`${property.name} — interactive map + occupancy`} />
+        <PageHeader title="Site Plan" subtitle={`${property.name} — interactive map`} />
 
-        {rv.loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 animate-pulse h-[68px]"
-              />
-            ))}
-          </div>
-        ) : totalSites === 0 ? (
-          <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-8 text-center">
-            <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">No data yet</p>
-            <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1.5">
-              Drop the monthly bundle in <span className="font-medium">Monthly Uploads</span> to populate occupancy.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-            {[
-              { label: "Total Sites", value: totalSites, color: "text-[#18181b] dark:text-[#fafafa]" },
-              { label: "Occupied", value: occupied, color: "text-[#16a34a]" },
-              { label: "Vacant", value: vacant, color: "text-[#71717a] dark:text-[#a1a1aa]" },
-              {
-                label: "Past Due",
-                value: pastDue,
-                color: "text-[#dc2626]",
-                sub: totalAr > 0 ? `${formatCurrency(totalAr)} A/R` : undefined,
-              },
-            ].map((s) => (
-              <div
-                key={s.label}
-                className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 text-center"
-              >
-                <p className={`text-[20px] sm:text-[24px] font-semibold ${s.color}`}>{s.value}</p>
-                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] font-medium uppercase tracking-wide mt-0.5">
-                  {s.label}
-                </p>
-                {s.sub && (
-                  <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">{s.sub}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-4 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-10 text-center">
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-10 text-center">
           <div className="flex justify-center mb-4">
             <div className="w-12 h-12 rounded-full bg-[#f4f4f5] dark:bg-[#27272a] flex items-center justify-center">
               <ExternalLink className="w-5 h-5 text-[#52525b] dark:text-[#a1a1aa]" strokeWidth={1.75} />
