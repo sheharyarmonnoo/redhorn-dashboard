@@ -241,7 +241,7 @@ function PastDueDetail({
         {open.length === 0 ? (
           <p className="text-[11px] text-[#16a34a]">No open balances.</p>
         ) : (
-          open.slice(0, 12).map((b: any) => {
+          open.slice(0, 10).map((b: any) => {
             const name = `${b.firstName || ""} ${b.lastName || ""}`.trim() || "(unknown)";
             return (
               <button
@@ -312,20 +312,9 @@ function VacantDetail({ propertyId }: { propertyId: string | undefined }) {
             ))}
         </div>
       )}
-      <div>
-        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">
-          Site Codes
-        </p>
-        {vacantSites.length === 0 ? (
-          <p className="text-[11px] text-[#16a34a]">All sites occupied.</p>
-        ) : (
-          vacantSites
-            .sort((a, b) => (a.siteCode || "").localeCompare(b.siteCode || "", undefined, { numeric: true }))
-            .map((s: any) => (
-              <Field key={s.siteCode} label={`Site ${s.siteCode}`} value={s.siteType || "—"} />
-            ))
-        )}
-      </div>
+      {vacantSites.length === 0 && (
+        <p className="text-[11px] text-[#16a34a]">All sites occupied.</p>
+      )}
     </div>
   );
 }

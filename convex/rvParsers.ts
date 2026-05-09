@@ -592,9 +592,11 @@ export const commitBundle = action({
       }
     }
 
-    // Replace semantics: if a committed bundle already exists for this
-    // (property, period), wipe its rows + delete the bundle so this commit
-    // becomes the canonical one. Lets Max fix mistakes himself.
+    // Replace semantics: wipe the prior bundle's data rows so the latest
+    // commit's snapshot is what queries see. The bundle metadata row stays —
+    // we mark it "superseded" so the upload History feed can keep every
+    // commit event for the same period (audit trail), instead of deleting
+    // history when Max re-uploads to fix a mistake.
     const priorBundles: any[] = await ctx.runQuery(internal.rv._findPriorBundleForPeriod, {
       propertyId: bundle.propertyId,
       period: bundle.period,
@@ -602,7 +604,7 @@ export const commitBundle = action({
     });
     for (const prior of priorBundles) {
       await ctx.runMutation(internal.rv._deleteRowsForBundle, { bundleId: prior.id });
-      await ctx.runMutation(internal.rv._deleteBundle, { bundleId: prior.id });
+      await ctx.runMutation(internal.rv._markBundleSuperseded, { bundleId: prior.id });
     }
 
     const period: string = bundle.period;
