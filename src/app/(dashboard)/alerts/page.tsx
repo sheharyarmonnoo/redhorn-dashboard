@@ -847,12 +847,19 @@ function AlertDrawer({
 // Many alert rows carry placeholder values for unit ("—", "-", "n/a", "")
 // because the upstream mapper does `a.unit || "—"`. Treat those as missing
 // so we don't render "Following up on Unit —:" in emails.
+//
+// RV-park alerts that captured the property code as the unit value
+// ("rv-ohio" / humanized "RV Ohio") are also treated as property-level —
+// nobody has "Unit RV Ohio", and the user explicitly asked emails not to
+// say "Unit" for the RV park.
 function hasRealUnit(unit: string | undefined | null): boolean {
   if (!unit) return false;
   const cleaned = unit.trim().toLowerCase();
   if (!cleaned) return false;
   if (/^[—–\-]+$/.test(cleaned)) return false;
   if (cleaned === "n/a" || cleaned === "na" || cleaned === "none") return false;
+  // Humanized or raw RV property codes that shouldn't be treated as a unit.
+  if (/^rv[\s-][a-z]+$/.test(cleaned)) return false;
   return true;
 }
 

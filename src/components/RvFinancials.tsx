@@ -1052,10 +1052,19 @@ function BlockSection({
         onToggle={onToggle}
         isOpen={isOpen}
       />
-      {isOpen &&
-        visibleChildren.map((c, i) => (
-          <ISRow key={`${c._id}-${i}`} row={c} totalIncome={totalIncome} />
-        ))}
+      {/* Smooth grid-rows 0fr↔1fr expand — same pattern the commercial
+          /financials uses. Children stay mounted and animate; no jump. */}
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+          isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden min-h-0">
+          {visibleChildren.map((c, i) => (
+            <ISRow key={`${c._id}-${i}`} row={c} totalIncome={totalIncome} />
+          ))}
+        </div>
+      </div>
       {/* The closing X-000 subtotal is intentionally NOT rendered when
           expanded — its numbers are already the block header's inline
           values, so re-rendering "Total RV Income $33,960" right under
