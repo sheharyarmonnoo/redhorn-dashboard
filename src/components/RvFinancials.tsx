@@ -24,6 +24,12 @@ function classifyLine(r: Row): LineKind {
   const li = String(r.lineItem || "").trim();
   if (!li) return "skip";
   if (/^Total\s*-/i.test(li)) return "subtotal";
+  // "Net Income (Loss)" / "Net Operating Income" / "Net Other Income" carry
+  // actual roll-up dollar values in the xlsx but no numeric prefix or
+  // subsidiary tag. Treat them as grand-total subtotals so the BudgetRow
+  // / IS rendering surfaces the numbers instead of greying them out as
+  // pure section headers.
+  if (/^Net\s+(Income|Operating|Ordinary|Other)/i.test(li)) return "subtotal";
   if (!/^\d/.test(li) && !r.subsidiary) return "header";
   if (/^\d{4}-000/.test(li)) return "subgroup";
   return "leaf";
