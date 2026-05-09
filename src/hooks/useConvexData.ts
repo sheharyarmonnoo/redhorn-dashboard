@@ -574,6 +574,13 @@ export function useRvFinancials(propertyId: string | undefined) {
   };
 }
 
+// Cross-property feed of committed RV bundles — joined with the property
+// name so the Data Pipeline grid can render bundles alongside Yardi syncs.
+export function useRvCommittedBundles() {
+  const bundles = useQuery(api.rv.listAllCommittedBundles, {});
+  return { bundles: bundles ?? [], loading: bundles === undefined };
+}
+
 // ===== RV PARK UPLOADS =====
 
 export function useRvUploads(propertyId: string | undefined) {
