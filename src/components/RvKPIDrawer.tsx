@@ -217,14 +217,37 @@ function PastDueDetail({
 }) {
   const { balances } = useRvData(propertyId);
   const router = useRouter();
-  const open = (balances as any[])
-    .filter((b) => (b.balance || 0) > 0.5)
-    .sort((a, b) => (b.balance || 0) - (a.balance || 0));
-  const total = open.reduce((s, b) => s + (b.balance || 0), 0);
-  function openRentRoll() {
-    onClose();
-    router.push("/rent-roll");
+  const openBalances = (balances as any[]).filter((b) => (b.balance || 0) > 0.5);
+  const total = openBalances.reduce((s, b) => s + (b.balance || 0), 0);
+
+  // Aggregate balances by site code so the panel surfaces "Top Units"
+  // instead of per-guest rows. Multiple stays at the same site (sequential
+  // guests, same site) collapse into one entry that opens the site's
+  // drawer in /rent-roll on click — matches the commercial flow where
+  // clicking a Past Due tenant lands on their unit row.
+  const bySite = new Map<string, { siteCode: string; balance: number; charges: number; payments: number; count: number }>();
+  for (const b of openBalances) {
+    const code = String(b.campsiteNames || "").trim() || "—";
+    const cur = bySite.get(code) || { siteCode: code, balance: 0, charges: 0, payments: 0, count: 0 };
+    cur.balance += b.balance || 0;
+    cur.charges += b.totalCharges || 0;
+    cur.payments += b.totalPayments || 0;
+    cur.count += 1;
+    bySite.set(code, cur);
   }
+  const topUnits = Array.from(bySite.values())
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, 10);
+
+  function openSite(code: string) {
+    onClose();
+    if (code && code !== "—") {
+      router.push(`/rent-roll?unit=${encodeURIComponent(code)}`);
+    } else {
+      router.push("/rent-roll");
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -232,37 +255,36 @@ function PastDueDetail({
           Past Due Summary
         </p>
         <Field label="Total A/R" value={formatCurrency(total)} color="text-[#dc2626]" />
-        <Field label="Guests with Balance" value={`${open.length}`} />
+        <Field label="Units with Balance" value={`${bySite.size}`} />
+        <Field label="Guests with Balance" value={`${openBalances.length}`} />
       </div>
       <div>
         <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">
-          Top Balances
+          Top Units with Past Due
         </p>
-        {open.length === 0 ? (
+        {topUnits.length === 0 ? (
           <p className="text-[11px] text-[#16a34a]">No open balances.</p>
         ) : (
-          open.slice(0, 10).map((b: any) => {
-            const name = `${b.firstName || ""} ${b.lastName || ""}`.trim() || "(unknown)";
-            return (
-              <button
-                key={`${b._id}`}
-                onClick={openRentRoll}
-                className="w-full text-left py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 hover:bg-[#fafafa] dark:hover:bg-[#27272a]/40 cursor-pointer transition-colors"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate min-w-0 flex-1">
-                    {name}
-                  </span>
-                  <span className="text-[12px] font-medium text-[#dc2626] whitespace-nowrap flex-shrink-0">
-                    {formatCurrency(b.balance)}
-                  </span>
-                </div>
-                <p className="text-[10px] text-[#a1a1aa] mt-0.5">
-                  Charges {formatCurrency(b.totalCharges)} · Paid {formatCurrency(b.totalPayments)}
-                </p>
-              </button>
-            );
-          })
+          topUnits.map((u) => (
+            <button
+              key={u.siteCode}
+              onClick={() => openSite(u.siteCode)}
+              className="w-full text-left py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 hover:bg-[#fafafa] dark:hover:bg-[#27272a]/40 cursor-pointer transition-colors"
+              title={`Open site ${u.siteCode} in rent roll`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate min-w-0 flex-1">
+                  Site {u.siteCode}
+                </span>
+                <span className="text-[12px] font-medium text-[#dc2626] whitespace-nowrap flex-shrink-0">
+                  {formatCurrency(u.balance)}
+                </span>
+              </div>
+              <p className="text-[10px] text-[#a1a1aa] mt-0.5">
+                {u.count} stay{u.count === 1 ? "" : "s"} · Charges {formatCurrency(u.charges)} · Paid {formatCurrency(u.payments)}
+              </p>
+            </button>
+          ))
         )}
       </div>
     </div>
