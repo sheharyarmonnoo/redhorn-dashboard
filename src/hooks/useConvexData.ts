@@ -601,31 +601,29 @@ export function useRvLastUpdated(propertyId: string | undefined) {
   };
 }
 
-// "Last updated 3 days ago · April 2026" — short relative + period label
-// used as a subtle subtitle on RV pages. Returns empty string when no
-// bundle has been committed yet so callers can omit the suffix entirely.
-export function formatLastUpdated(committedAt: number | null, period: string | null): string {
+// "Updated 3 days ago" — short relative-time used as a subtle suffix on RV
+// page subtitles so the user always sees data freshness. Period is no
+// longer appended (the page subtitle already shows the active period and
+// repeating it reads as duplication). Returns empty string when no bundle
+// has been committed yet so callers can omit the suffix entirely.
+export function formatLastUpdated(committedAt: number | null, _period?: string | null): string {
+  void _period;
   if (!committedAt) return "";
   const diffMs = Date.now() - committedAt;
   const sec = Math.floor(diffMs / 1000);
   const min = Math.floor(sec / 60);
   const hr = Math.floor(min / 60);
   const day = Math.floor(hr / 24);
-  let rel: string;
-  if (sec < 60) rel = "just now";
-  else if (min < 60) rel = `${min} min ago`;
-  else if (hr < 24) rel = `${hr} hr ago`;
-  else if (day < 7) rel = `${day} day${day === 1 ? "" : "s"} ago`;
-  else rel = new Date(committedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  if (period) {
-    const pretty = new Date(`${period}-01T00:00:00Z`).toLocaleDateString("en-US", {
-      month: "long",
-      year: "numeric",
-      timeZone: "UTC",
-    });
-    return `Last updated ${rel} · ${pretty} bundle`;
-  }
-  return `Last updated ${rel}`;
+  if (sec < 60) return "Updated just now";
+  if (min < 60) return `Updated ${min} min ago`;
+  if (hr < 24) return `Updated ${hr} hr ago`;
+  if (day < 7) return `Updated ${day} day${day === 1 ? "" : "s"} ago`;
+  const date = new Date(committedAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return `Updated ${date}`;
 }
 
 // Cross-property feed of committed RV bundles — joined with the property
