@@ -121,35 +121,27 @@ export default function SitePlanPage() {
     }
     const totalSites = sites.length;
     let occupied = 0;
-    let arriving = 0;
     let pastDue = 0;
     let totalAr = 0;
     for (const s of sites) {
       const rs = bySite.get(s.siteCode) || [];
       const current = rs.find((r) => r.arrivalDate <= today && today <= r.departureDate);
-      const next = rs
-        .filter((r) => r.arrivalDate > today)
-        .sort((a, b) => a.arrivalDate.localeCompare(b.arrivalDate))[0];
       if (current) occupied += 1;
-      else if (next) {
-        const days = (Date.parse(next.arrivalDate) - Date.parse(today)) / 86400000;
-        if (days <= 7) arriving += 1;
-      }
       const balance = rs.reduce((sum, r) => sum + (r.balanceOnInvoice || 0), 0);
       if (balance > 0.5) {
         pastDue += 1;
         totalAr += balance;
       }
     }
-    const vacant = Math.max(0, totalSites - occupied - arriving);
+    const vacant = Math.max(0, totalSites - occupied);
 
     return (
       <div>
         <PageHeader title="Site Plan" subtitle={`${property.name} — interactive map + occupancy`} />
 
         {rv.loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
-            {[1, 2, 3, 4, 5].map((i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+            {[1, 2, 3, 4].map((i) => (
               <div
                 key={i}
                 className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 animate-pulse h-[68px]"
@@ -164,11 +156,10 @@ export default function SitePlanPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
             {[
               { label: "Total Sites", value: totalSites, color: "text-[#18181b] dark:text-[#fafafa]" },
               { label: "Occupied", value: occupied, color: "text-[#16a34a]" },
-              { label: "Arriving (7d)", value: arriving, color: "text-[#2563eb]" },
               { label: "Vacant", value: vacant, color: "text-[#71717a] dark:text-[#a1a1aa]" },
               {
                 label: "Past Due",
