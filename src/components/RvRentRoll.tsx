@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, RowClickedEvent } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
 import { useRvData, formatCurrency } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
@@ -228,12 +228,10 @@ export default function RvRentRoll({
     return { total: allRows.length, occupied, vacant, pastDueCount: pastDueRows.length, totalAr };
   }, [allRows]);
 
-  // Visible columns kept high-level — Site, Type, Current Status, Balance,
-  // Paid %, Stays. Per-stay timing detail (arrival/departure/package) lives
-  // entirely inside the ledger drawer. Charges / Payments / POS / Utility
-  // reveal on group expand for an at-a-glance income check without leaving
-  // the grid.
-  const columnDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
+  // All financial columns visible by default — Balance, Paid %, Charges,
+  // Payments, POS, Utility, Stays. The drawer still carries the per-stay
+  // timing detail (arrival/departure/package) and full reservation ledger.
+  const columnDefs = useMemo<ColDef[]>(() => {
     return [
       {
         field: "siteCode",
@@ -252,53 +250,41 @@ export default function RvRentRoll({
         cellRenderer: StatusCellRenderer,
         filter: true,
       },
-      // Charges & Payments group — Balance and Paid % stay visible; Charges,
-      // Payments, POS, Utility reveal on expand.
       {
-        headerName: "",
-        marryChildren: true,
-        children: [
-          {
-            field: "totalBalance",
-            headerName: "Balance",
-            width: 120,
-            cellRenderer: BalanceCellRenderer,
-          },
-          {
-            field: "percentPaid",
-            headerName: "Paid %",
-            width: 100,
-            cellRenderer: PaidPctCellRenderer,
-          },
-          {
-            field: "totalCharges",
-            headerName: "Charges",
-            width: 120,
-            columnGroupShow: "open",
-            cellRenderer: CurrencyCellRenderer,
-          },
-          {
-            field: "totalPayments",
-            headerName: "Payments",
-            width: 120,
-            columnGroupShow: "open",
-            cellRenderer: CurrencyCellRenderer,
-          },
-          {
-            field: "totalPosCharges",
-            headerName: "POS",
-            width: 110,
-            columnGroupShow: "open",
-            cellRenderer: CurrencyCellRenderer,
-          },
-          {
-            field: "totalUtilityCharges",
-            headerName: "Utility",
-            width: 110,
-            columnGroupShow: "open",
-            cellRenderer: CurrencyCellRenderer,
-          },
-        ],
+        field: "totalBalance",
+        headerName: "Balance",
+        width: 120,
+        cellRenderer: BalanceCellRenderer,
+      },
+      {
+        field: "percentPaid",
+        headerName: "Paid %",
+        width: 100,
+        cellRenderer: PaidPctCellRenderer,
+      },
+      {
+        field: "totalCharges",
+        headerName: "Charges",
+        width: 120,
+        cellRenderer: CurrencyCellRenderer,
+      },
+      {
+        field: "totalPayments",
+        headerName: "Payments",
+        width: 120,
+        cellRenderer: CurrencyCellRenderer,
+      },
+      {
+        field: "totalPosCharges",
+        headerName: "POS",
+        width: 110,
+        cellRenderer: CurrencyCellRenderer,
+      },
+      {
+        field: "totalUtilityCharges",
+        headerName: "Utility",
+        width: 110,
+        cellRenderer: CurrencyCellRenderer,
       },
       {
         field: "reservationCount",
