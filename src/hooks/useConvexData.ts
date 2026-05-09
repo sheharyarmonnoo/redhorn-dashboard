@@ -517,6 +517,36 @@ export function useMeetings(propertyId: string | undefined) {
   };
 }
 
+// ===== RV PARK UPLOADS =====
+
+export function useRvUploads(propertyId: string | undefined) {
+  const window = useQuery(
+    api.rv.getCurrentWindow,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  const bundles = useQuery(
+    api.rv.listBundles,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  const generateUploadUrl = useMutation(api.rv.generateUploadUrl);
+  const stageFile = useMutation(api.rv.stageFile);
+  const removeStagedFile = useMutation(api.rv.removeStagedFile);
+  const updateDraftFileType = useMutation(api.rv.updateDraftFileType);
+  const updateDraftPeriod = useMutation(api.rv.updateDraftPeriod);
+  const cancelDraft = useMutation(api.rv.cancelDraft);
+  return {
+    window: window ?? null,
+    bundles: bundles ?? [],
+    loading: window === undefined,
+    generateUploadUrl,
+    stageFile,
+    removeStagedFile,
+    updateDraftFileType,
+    updateDraftPeriod,
+    cancelDraft,
+  };
+}
+
 // ===== TENANT MUTATIONS =====
 
 export function useTenantMutations() {
