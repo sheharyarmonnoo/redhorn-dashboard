@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, X } from "lucide-react";
+import { X } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, RowClickedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
@@ -23,7 +23,11 @@ type SiteRow = {
   siteCodeNumeric: number;
   siteType: string;
   siteClass?: string;
-  status: "occupied" | "departing" | "arriving" | "vacant";
+  // Status priority — past_due overrides occupancy since unpaid balance is
+  // the most actionable flag. "arriving" is intentionally dropped per the
+  // user feedback; transient turnover happens daily and an "arriving in 7
+  // days" state was visual noise.
+  status: "past_due" | "occupied" | "departing" | "vacant";
   reservationCount: number;
   totalCharges: number;
   totalPayments: number;
@@ -94,23 +98,24 @@ function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
       }
     }
 
-    let status: SiteRow["status"] = "vacant";
-    if (currentRes) {
-      const departInDays =
-        (Date.parse(currentRes.departureDate) - Date.parse(today)) / 86400000;
-      status = departInDays <= 1 ? "departing" : "occupied";
-    } else if (nextRes) {
-      const arriveInDays =
-        (Date.parse(nextRes.arrivalDate) - Date.parse(today)) / 86400000;
-      if (arriveInDays <= 7) status = "arriving";
-    }
-
     const totalCharges = rs.reduce((s, r) => s + (r.totalChargesOnInvoice || 0), 0);
     const totalPayments = rs.reduce((s, r) => s + (r.totalPaymentsOnInvoice || 0), 0);
     const totalBalance = rs.reduce((s, r) => s + (r.balanceOnInvoice || 0), 0);
     const percentPaid = totalCharges > 0 ? totalPayments / totalCharges : 1;
     const totalPosCharges = rs.reduce((s, r) => s + (r.posCharges || 0), 0);
     const totalUtilityCharges = rs.reduce((s, r) => s + (r.utilityCharges || 0), 0);
+    const hasOpenBalance = totalBalance > 0.5;
+
+    let status: SiteRow["status"] = "vacant";
+    if (hasOpenBalance) {
+      // Past due wins over everything else — money owed is the most
+      // actionable signal whether the guest is in-house, departing, or gone.
+      status = "past_due";
+    } else if (currentRes) {
+      const departInDays =
+        (Date.parse(currentRes.departureDate) - Date.parse(today)) / 86400000;
+      status = departInDays <= 1 ? "departing" : "occupied";
+    }
 
     const focus = currentRes || nextRes;
     const numericMatch = code.match(/^\d+/);
@@ -127,7 +132,7 @@ function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
       percentPaid,
       totalPosCharges,
       totalUtilityCharges,
-      hasOpenBalance: totalBalance > 0.5,
+      hasOpenBalance,
       currentRes,
       nextRes,
       arrivalDate: focus?.arrivalDate || "",
@@ -139,23 +144,33 @@ function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
   return rows;
 }
 
+// Status cell mirrors the commercial rent roll: dot + label for the everyday
+// states (Occupied, Departing, Vacant). Past Due gets a stronger pill-style
+// badge — same red treatment commercial uses for EXPIRED leases — so it
+// reads as actionable across a long list.
 function StatusCellRenderer(props: { value: string }) {
+  const status = props.value;
+  if (status === "past_due") {
+    return (
+      <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white whitespace-nowrap">
+        PAST DUE
+      </span>
+    );
+  }
   const dot: Record<string, string> = {
     occupied: "bg-[#16a34a]",
     departing: "bg-[#d97706]",
-    arriving: "bg-[#2563eb]",
     vacant: "bg-[#a1a1aa]",
   };
   const label: Record<string, string> = {
     occupied: "Occupied",
     departing: "Departing",
-    arriving: "Arriving",
     vacant: "Vacant",
   };
   return (
     <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b] dark:text-[#fafafa]">
-      <span className={`w-1.5 h-1.5 rounded-full ${dot[props.value] || "bg-[#a1a1aa]"}`} />
-      {label[props.value] || props.value}
+      <span className={`w-1.5 h-1.5 rounded-full ${dot[status] || "bg-[#a1a1aa]"}`} />
+      {label[status] || status}
     </span>
   );
 }
@@ -179,11 +194,9 @@ function PaidPctCellRenderer(props: { value: number; data: SiteRow }) {
 export default function RvRentRoll({
   propertyName,
   propertyId,
-  diamondMapsUrl,
 }: {
   propertyName: string;
   propertyId: string | undefined;
-  diamondMapsUrl?: string;
 }) {
   const { reservations, sites, loading } = useRvData(propertyId);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
@@ -197,18 +210,29 @@ export default function RvRentRoll({
   );
 
   const stats = useMemo(() => {
-    const occupied = allRows.filter((r) => r.status === "occupied" || r.status === "departing").length;
-    const arriving = allRows.filter((r) => r.status === "arriving").length;
+    // Past Due wins over Occupied in the status column, so re-derive the
+    // occupancy count from raw current/departing reservations rather than the
+    // status string. Otherwise a site that's both occupied AND past due
+    // would only show up in the Past Due bucket and the Occupied stat
+    // would under-report.
+    const today = todayIso();
+    let occupied = 0;
+    for (const r of allRows) {
+      if (r.currentRes && r.currentRes.arrivalDate <= today && today <= r.currentRes.departureDate) {
+        occupied += 1;
+      }
+    }
     const vacant = allRows.filter((r) => r.status === "vacant").length;
     const pastDueRows = allRows.filter((r) => r.hasOpenBalance);
     const totalAr = pastDueRows.reduce((s, r) => s + r.totalBalance, 0);
-    return { total: allRows.length, occupied, arriving, vacant, pastDueCount: pastDueRows.length, totalAr };
+    return { total: allRows.length, occupied, vacant, pastDueCount: pastDueRows.length, totalAr };
   }, [allRows]);
 
-  // Visible-by-default columns intentionally stay high-level: Site, Type,
-  // Status, Balance, Paid %, Stays. Detail columns (arrival/departure dates,
-  // package, charges/payments, POS, utility) reveal on group expand. The
-  // ledger-style drawer carries the full per-reservation drill-down.
+  // Visible columns kept high-level — Site, Type, Current Status, Balance,
+  // Paid %, Stays. Per-stay timing detail (arrival/departure/package) lives
+  // entirely inside the ledger drawer. Charges / Payments / POS / Utility
+  // reveal on group expand for an at-a-glance income check without leaving
+  // the grid.
   const columnDefs = useMemo<(ColDef | ColGroupDef)[]>(() => {
     return [
       {
@@ -221,41 +245,12 @@ export default function RvRentRoll({
           a.localeCompare(b, undefined, { numeric: true }),
       },
       { field: "siteType", headerName: "Type", minWidth: 220, flex: 1 },
-      // Status group — current Status pill stays visible; arrival, departure,
-      // and active package open on expand.
       {
-        headerName: "",
-        marryChildren: true,
-        children: [
-          {
-            field: "status",
-            headerName: "Status",
-            width: 130,
-            cellRenderer: StatusCellRenderer,
-            filter: true,
-          },
-          {
-            field: "arrivalDate",
-            headerName: "Arrival",
-            width: 110,
-            columnGroupShow: "open",
-            valueFormatter: (p: { value: string }) => formatShortDate(p.value),
-          },
-          {
-            field: "departureDate",
-            headerName: "Departure",
-            width: 110,
-            columnGroupShow: "open",
-            valueFormatter: (p: { value: string }) => formatShortDate(p.value),
-          },
-          {
-            field: "package",
-            headerName: "Package",
-            width: 220,
-            columnGroupShow: "open",
-            valueFormatter: (p: { value: string }) => p.value || "—",
-          },
-        ],
+        field: "status",
+        headerName: "Current Status",
+        width: 150,
+        cellRenderer: StatusCellRenderer,
+        filter: true,
       },
       // Charges & Payments group — Balance and Paid % stay visible; Charges,
       // Payments, POS, Utility reveal on expand.
@@ -349,8 +344,8 @@ export default function RvRentRoll({
     return (
       <div>
         <PageHeader title="Rent Roll" subtitle={`${propertyName} — loading…`} />
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mb-4">
-          {[1, 2, 3, 4, 5].map((i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
+          {[1, 2, 3, 4].map((i) => (
             <div
               key={i}
               className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 animate-pulse h-[68px]"
@@ -378,25 +373,12 @@ export default function RvRentRoll({
 
   return (
     <div>
-      <PageHeader title="Rent Roll" subtitle={`${propertyName} — ${stats.total} sites`}>
-        {diamondMapsUrl && (
-          <a
-            href={diamondMapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-[11px] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
-          >
-            Site map
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        )}
-      </PageHeader>
+      <PageHeader title="Rent Roll" subtitle={`${propertyName} — ${stats.total} sites`} />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mb-4">
+      {/* Stats — mirrors the Hollister/Belgold KPI strip: 4 cards, no Arriving */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
         <StatCard label="Total Sites" value={stats.total} />
         <StatCard label="Occupied" value={stats.occupied} valueClass="text-[#16a34a]" />
-        <StatCard label="Arriving" value={stats.arriving} valueClass="text-[#2563eb]" />
         <StatCard label="Vacant" value={stats.vacant} valueClass="text-[#71717a] dark:text-[#a1a1aa]" />
         <StatCard
           label="Past Due"
@@ -431,6 +413,9 @@ export default function RvRentRoll({
           rowHeight={36}
           headerHeight={36}
           suppressCellFocus
+          pagination
+          paginationPageSize={50}
+          paginationPageSizeSelector={[25, 50, 100, 200]}
           {...persistence}
         />
       </div>

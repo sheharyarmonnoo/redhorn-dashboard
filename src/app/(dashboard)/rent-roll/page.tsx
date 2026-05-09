@@ -483,12 +483,10 @@ export default function RentRollPage() {
   // up per site (per the user's directive: lead with site/unit data, treat
   // guests as ephemeral context since RV stays churn fast).
   if (activeProperty?.propertyType === "rv_park") {
-    const diamondMaps = "https://diamondmaps.com/map.ashx?key=36746260305125558991";
     return (
       <RvRentRoll
         propertyName={activeProperty.name}
         propertyId={activeProperty._id as string}
-        diamondMapsUrl={diamondMaps}
       />
     );
   }
