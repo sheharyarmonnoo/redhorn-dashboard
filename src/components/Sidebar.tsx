@@ -26,7 +26,6 @@ const navGroups: NavGroup[] = [
       { href: "/alerts", label: "Alerts", icon: AlertTriangle },
       { href: "/maintenance", label: "Maintenance", icon: Wrench },
       { href: "/meetings", label: "Meetings", icon: Users },
-      { href: "/uploads", label: "Monthly Uploads", icon: Upload, rvOnly: true },
     ],
   },
   {
@@ -43,6 +42,16 @@ const navGroups: NavGroup[] = [
       { href: "/account", label: "Account", icon: UserCircle },
     ],
   },
+  // Manual Uploads — RV park only. Owns the monthly Campspot+Northgate
+  // bundle drop-zone. The other portfolio properties sync via Yardi and
+  // don't need a manual upload route, so the whole group hides for them
+  // (empty groups get filtered out of visibleGroups below).
+  {
+    label: "Manual Uploads",
+    items: [
+      { href: "/uploads", label: "Monthly Uploads", icon: Upload, rvOnly: true },
+    ],
+  },
 ];
 
 function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
@@ -57,13 +66,15 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
   const current = properties.find(p => p.code === propId) || properties[0];
   const isRv = current?.propertyType === "rv_park";
 
-  // Hide rvOnly items unless the active property is the RV park. Same filter
-  // is applied in both collapsed + expanded renders so the sidebar stays in
-  // sync as Max switches portfolios.
-  const visibleGroups = navGroups.map((g) => ({
-    ...g,
-    items: g.items.filter((i) => !i.rvOnly || isRv),
-  }));
+  // Hide rvOnly items unless the active property is the RV park. Then drop
+  // any group that ended up empty (e.g. the Manual Uploads group is RV-only
+  // and would render as a stray label with no items for commercial props).
+  const visibleGroups = navGroups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((i) => !i.rvOnly || isRv),
+    }))
+    .filter((g) => g.items.length > 0);
 
   function switchProperty(code: string) {
     setActiveProperty(code);

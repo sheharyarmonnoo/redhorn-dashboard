@@ -36,6 +36,41 @@ function isExpenseContext(li: string): boolean {
   return /^[5-9]\d{3}-/.test(li);
 }
 
+// Strip the GL account code prefix off line-item labels so the IS reads
+// as plain category names ("RV Seasonal Rent", "Late Payment and NSF Fees")
+// instead of Northgate's internal numbering ("4020-120 - RV Seasonal Rent").
+// Three label patterns to handle:
+//   1. "Total - NNNN-NNN - Total Foo" → "Total Foo"
+//   2. "NNNN-000 - Total Foo"         → "Foo"   (block header, leading "Total" dropped)
+//   3. "NNNN-NNN - Foo"               → "Foo"
+function cleanLabel(li: string, opts: { stripLeadingTotal?: boolean } = {}): string {
+  const raw = String(li || "").trim();
+  if (!raw) return "";
+  // Subtotal: strip "Total - NNNN-NNN - " then collapse double "Total" prefix
+  let s = raw.replace(/^Total\s*-\s*\d{4}-\d{3}\s*-\s*/i, "Total ");
+  // Header / leaf: strip the bare "NNNN-NNN - " prefix
+  s = s.replace(/^\d{4}-\d{3}\s*-\s*/, "");
+  // Block header gets its leading "Total" dropped — collapsed row reads as
+  // the section name ("RV Income"), expanded view shows "Total RV Income"
+  // as the closing subtotal.
+  if (opts.stripLeadingTotal) {
+    s = s.replace(/^Total\s+/i, "");
+  }
+  return s;
+}
+
+// True when a row carries no numeric content anywhere — these get hidden
+// inside expanded blocks so users don't scan past zero rows.
+function isRowEmpty(r: Row): boolean {
+  return (
+    Math.abs(r.amountMtd || 0) < 0.0001 &&
+    Math.abs(r.amountYtd || 0) < 0.0001 &&
+    Math.abs(r.budgetMtd || 0) < 0.0001 &&
+    Math.abs(r.budgetYtd || 0) < 0.0001 &&
+    !r.subsidiary
+  );
+}
+
 function formatPeriodLabel(period: string | null) {
   if (!period) return "—";
   return new Date(`${period}-01T00:00:00Z`).toLocaleDateString("en-US", {
@@ -438,6 +473,11 @@ function BlockSection({
   onToggle?: () => void;
   totalIncome: number;
 }) {
+  // Hide rows with no values anywhere — the expanded view should only show
+  // line items that actually moved. This keeps "Bad Debt Expense" / "Water
+  // and Sewer Income" / similar zero-everywhere placeholders out of view.
+  const visibleChildren = block.children.filter((c) => !isRowEmpty(c));
+
   return (
     <>
       {/* Block header row — uses summaryRow values when collapsed so the
@@ -454,7 +494,7 @@ function BlockSection({
         isOpen={isOpen}
       />
       {isOpen &&
-        block.children.map((c, i) => (
+        visibleChildren.map((c, i) => (
           <ISRow key={`${c._id}-${i}`} row={c} totalIncome={totalIncome} />
         ))}
       {isOpen && block.closingTotal && (
@@ -486,7 +526,11 @@ function ISRow({
   if (kind === "skip") return null;
 
   const li = String(row.lineItem || "").trim();
-  const cleanLabel = kind === "subtotal" ? li.replace(/^Total\s*-\s*/i, "Total ") : li;
+  // Block-header label (collapsed view of "4020-000 - Total RV Income") drops
+  // the leading "Total" so the row reads as the section name. Subtotals keep
+  // it ("Total RV Income"); leaves and subgroups have their numeric prefix
+  // stripped to read as plain category names.
+  const displayLabel = cleanLabel(li, { stripLeadingTotal: !!isBlockHeader });
   // Indent: leaves nest deepest, X-100 subgroups one level in, headers/X-000 at root.
   // Block headers are at root with the chevron drawn alongside.
   const indent = isBlockHeader ? 0 : kind === "leaf" ? 24 : kind === "subgroup" ? 12 : 0;
@@ -543,7 +587,7 @@ function ISRow({
 
   return (
     <div className={rowClass} onClick={onToggle}>
-      <span style={{ paddingLeft: indent }} className="truncate flex items-center gap-1.5" title={cleanLabel}>
+      <span style={{ paddingLeft: indent }} className="truncate flex items-center gap-1.5" title={displayLabel}>
         {/* Chevron only when there's a toggle handler (i.e. block has values). */}
         {isBlockHeader && onToggle && (
           <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] inline-block w-3">
@@ -551,7 +595,7 @@ function ISRow({
           </span>
         )}
         {isBlockHeader && !onToggle && <span className="inline-block w-3" />}
-        <span className="truncate">{cleanLabel}</span>
+        <span className="truncate">{displayLabel}</span>
       </span>
       <span className={`text-right tabular-nums ${isNegMtd ? "text-[#dc2626]" : ""}`}>
         {!showValues || mtd === 0 ? "—" : formatCurrency(Math.abs(mtd))}
