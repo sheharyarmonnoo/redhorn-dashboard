@@ -682,6 +682,14 @@ function ReservationLedger({
   // what the PM most often acts on. Past Due surfaces every reservation
   // (regardless of date) that still carries an unpaid balance.
   const [filter, setFilter] = useState<"upcoming" | "past" | "past_due" | "all">("upcoming");
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 7;
+  // Reset to first page whenever the filter changes — otherwise switching
+  // from a 50-row Upcoming list to an empty Past list would land on a
+  // page that doesn't exist.
+  useEffect(() => {
+    setPage(0);
+  }, [filter]);
 
   const sorted = useMemo(
     () =>
@@ -702,9 +710,15 @@ function ReservationLedger({
     });
   }, [sorted, filter, today]);
 
-  // ~30% taller than before — 7 rows visible at once, the rest scrolls.
+  // 7 rows visible at once. Body height stays locked at this size whether
+  // the filtered list has 1 row or 100 — switching tabs shouldn't make the
+  // drawer reflow. Pagination kicks in past 7 rows.
   const ROW_PX = 36;
   const VISIBLE_ROWS = 7;
+  const BODY_PX = ROW_PX * VISIBLE_ROWS;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageRows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   const counts = useMemo(() => {
     let upcoming = 0;
@@ -758,13 +772,17 @@ function ReservationLedger({
           <span className="text-right">Balance</span>
           <span className="text-right">Paid %</span>
         </div>
-        {filtered.length === 0 ? (
-          <div className="px-3 py-6 text-center text-[12px] text-[#a1a1aa]">
-            No {filter === "all" ? "" : filter} reservations.
-          </div>
-        ) : (
-          <div className="overflow-y-auto" style={{ maxHeight: `${ROW_PX * VISIBLE_ROWS}px` }}>
-            {filtered.map((r) => {
+        <div
+          className="relative overflow-hidden"
+          style={{ height: `${BODY_PX}px` }}
+        >
+          {filtered.length === 0 ? (
+            <div className="absolute inset-0 flex items-center justify-center text-[12px] text-[#a1a1aa]">
+              No {filter === "all" ? "" : filter.replace("_", " ")} reservations.
+            </div>
+          ) : (
+            <div className="absolute inset-0">
+            {pageRows.map((r) => {
               const isCurrent = r.arrivalDate <= today && today <= r.departureDate;
               const isFuture = r.arrivalDate > today;
               const isPast = r.departureDate < today;
@@ -819,6 +837,39 @@ function ReservationLedger({
                 </button>
               );
             })}
+            </div>
+          )}
+        </div>
+
+        {/* Pagination footer — sits inside the bordered table so the entire
+            ledger reads as one block. Mirrors the AG Grid pagination
+            chrome on the rent roll grid (Page X of Y · prev / next). */}
+        {filtered.length > 0 && (
+          <div className="flex items-center justify-between border-t border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a]/40 px-3 py-2 text-[11px] text-[#71717a] dark:text-[#a1a1aa]">
+            <span className="tabular-nums">
+              {filtered.length === 0
+                ? "0 reservations"
+                : `${safePage * PAGE_SIZE + 1}-${Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of ${filtered.length}`}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={safePage === 0}
+                className="px-2 py-0.5 rounded border border-[#e4e4e7] dark:border-[#3f3f46] bg-white dark:bg-[#18181b] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Prev
+              </button>
+              <span className="tabular-nums">
+                Page {safePage + 1} of {pageCount}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={safePage >= pageCount - 1}
+                className="px-2 py-0.5 rounded border border-[#e4e4e7] dark:border-[#3f3f46] bg-white dark:bg-[#18181b] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>
