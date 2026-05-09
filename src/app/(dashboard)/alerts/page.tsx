@@ -13,6 +13,21 @@ import { Zap, DollarSign, CalendarClock, AlertTriangle, Mail } from "lucide-reac
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
+// Humanize a property code like "rv-ohio" → "RV Ohio" so the alerts grid
+// reads naturally. Pre-existing income_insight alerts had Claude's
+// (now-fixed) property-code-as-unit slip stored verbatim — we still need
+// to surface them legibly until those rows are regenerated.
+function humanizeUnit(raw: string | undefined | null): string {
+  if (!raw) return "—";
+  const s = String(raw).trim();
+  if (!s || s === "—") return "—";
+  if (/^rv-/i.test(s)) {
+    const tail = s.slice(3);
+    return `RV ${tail.charAt(0).toUpperCase()}${tail.slice(1).toLowerCase()}`;
+  }
+  return s;
+}
+
 interface AlertRow {
   id: string;
   unit: string;
@@ -165,7 +180,7 @@ export default function AlertsPage() {
         const lease = findLeaseForAlertUnit(a.unit || "");
         return ({
         id: `custom-${a._id}`,
-        unit: a.unit || "—",
+        unit: humanizeUnit(a.unit),
         tenant: lease?.tenant || "",
         building: lease?.building || "",
         category: (a.dataContext as any)?.category || "General",
@@ -285,7 +300,7 @@ export default function AlertsPage() {
       .forEach(a => {
         alerts.push({
           id: `aii-${a._id}`,
-          unit: a.unit || "—",
+          unit: humanizeUnit(a.unit),
           tenant: a.dataContext?.lineItem || "",
           building: "",
           category: "AI Insight",
@@ -319,7 +334,7 @@ export default function AlertsPage() {
         && a.status === "resolved")
       .map(a => ({
         id: `aii-${a._id}`,
-        unit: a.unit || "—",
+        unit: humanizeUnit(a.unit),
         tenant: a.dataContext?.lineItem || "",
         building: "",
         category: "AI Insight",

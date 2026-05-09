@@ -49,7 +49,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Manual Uploads",
     items: [
-      { href: "/uploads", label: "Pipeline Uploads", icon: Upload, rvOnly: true },
+      { href: "/uploads", label: "Pipeline Upload", icon: Upload, rvOnly: true },
     ],
   },
 ];

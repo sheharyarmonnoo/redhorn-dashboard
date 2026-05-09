@@ -222,7 +222,11 @@ export default function RvDashboard({
                 chart: { toolbar: { show: false }, fontFamily: "inherit", background: "transparent" },
                 theme: { mode: isDark ? "dark" : "light" },
                 grid: { borderColor: isDark ? "#27272a" : "#f4f4f5" },
-                colors: ["#18181b"],
+                // Theme-aware bar color — was hard-coded #18181b which is
+                // the dark-mode page background, so bars rendered invisible
+                // in dark mode. Match the commercial Revenue Breakdown
+                // which inverts for dark.
+                colors: [isDark ? "#fafafa" : "#18181b"],
                 xaxis: {
                   categories: posSeries.map(([month]) => month),
                   labels: { style: { colors: isDark ? "#a1a1aa" : "#71717a", fontSize: "11px" } },
