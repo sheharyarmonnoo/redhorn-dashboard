@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Wrench } from "lucide-react";
@@ -7,6 +7,7 @@ import KPICard from "@/components/KPICard";
 import PageHeader from "@/components/PageHeader";
 import { useRvData, useMaintenance, useRvLastUpdated, formatCurrency, formatLastUpdated } from "@/hooks/useConvexData";
 import LatestInsights from "@/components/LatestInsights";
+import RvKPIDrawer from "@/components/RvKPIDrawer";
 import { useTheme } from "@/components/ThemeProvider";
 
 // RV park dashboard — same KPI strip + revenue chart shape Hollister/Belgold
@@ -38,6 +39,10 @@ export default function RvDashboard({
   const { reservations, balances, sites, pos, financials, loading } = useRvData(propertyId);
   const { committedAt, period: lastBundlePeriod } = useRvLastUpdated(propertyId);
   const lastUpdated = formatLastUpdated(committedAt, lastBundlePeriod);
+  // KPI drawer key — null = closed, else points to the KPI bucket whose
+  // detail panel should be visible (mirrors the commercial dashboard's
+  // setKpiDrawer pattern).
+  const [kpiDrawer, setKpiDrawer] = useState<string | null>(null);
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
@@ -162,35 +167,47 @@ export default function RvDashboard({
         }`}
       />
 
-      {/* KPI strip — six cards, same shape as the commercial dashboard. */}
+      {/* KPI strip — six cards, same shape as the commercial dashboard.
+          Each card is clickable to open RvKPIDrawer with the matching
+          breakdown panel. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-4">
         <KPICard
           title="Income"
           value={formatCurrency(ipKpis.income)}
           subtitle={period ? `${periodLabel} actual` : "Latest period"}
+          onClick={() => setKpiDrawer("income")}
         />
         <KPICard
           title="NOI"
           value={formatCurrency(ipKpis.noi)}
           color={ipKpis.noi >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}
           subtitle={`YTD ${formatCurrency(ipKpis.noiYtd)}`}
+          onClick={() => setKpiDrawer("noi")}
         />
         <KPICard
           title="Occupancy"
           value={`${occupancyPct.toFixed(0)}%`}
           subtitle={`${stats.occupied} of ${stats.total} sites`}
+          onClick={() => setKpiDrawer("occupancy")}
         />
         <KPICard
           title="Past Due"
           value={`${stats.pastDueCount}`}
           color="text-[#dc2626]"
           subtitle={stats.totalAr > 0 ? `${formatCurrency(stats.totalAr)} owed` : undefined}
+          onClick={() => setKpiDrawer("pastdue")}
         />
-        <KPICard title="Vacant" value={`${stats.vacant}`} subtitle={`${stats.total} total sites`} />
+        <KPICard
+          title="Vacant"
+          value={`${stats.vacant}`}
+          subtitle={`${stats.total} total sites`}
+          onClick={() => setKpiDrawer("vacant")}
+        />
         <KPICard
           title="Total Sites"
           value={`${stats.total}`}
           subtitle="Across all site types"
+          onClick={() => setKpiDrawer("sites")}
         />
       </div>
 
@@ -272,6 +289,13 @@ export default function RvDashboard({
           the chart. Pulls open / overdue / routine counts from
           maintenance_log and lists the next 5 actionable items. */}
       <MaintenanceSummary propertyId={propertyId} />
+
+      <RvKPIDrawer
+        open={!!kpiDrawer}
+        kpiKey={kpiDrawer}
+        onClose={() => setKpiDrawer(null)}
+        propertyId={propertyId}
+      />
     </div>
   );
 }
