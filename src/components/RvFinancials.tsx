@@ -46,8 +46,10 @@ function isExpenseContext(li: string): boolean {
 function cleanLabel(li: string, opts: { stripLeadingTotal?: boolean } = {}): string {
   const raw = String(li || "").trim();
   if (!raw) return "";
-  // Subtotal: strip "Total - NNNN-NNN - " then collapse double "Total" prefix
-  let s = raw.replace(/^Total\s*-\s*\d{4}-\d{3}\s*-\s*/i, "Total ");
+  // Subtotal: strip "Total - NNNN-NNN - " entirely. The trailing tail in the
+  // source already starts with "Total ", so injecting another "Total " here
+  // produced "Total Total RV Contract" — the prefix gets dropped in full.
+  let s = raw.replace(/^Total\s*-\s*\d{4}-\d{3}\s*-\s*/i, "");
   // Header / leaf: strip the bare "NNNN-NNN - " prefix
   s = s.replace(/^\d{4}-\d{3}\s*-\s*/, "");
   // Block header gets its leading "Total" dropped — collapsed row reads as
@@ -307,209 +309,103 @@ function TabbedContent({
   );
 }
 
-// Budget vs Actuals — focuses on per-line variance to budget, sorted by
-// absolute MTD dollar variance. Reuses the same isBudget data feeding the
-// IS but reorders for "where's the biggest gap" scan.
+// Budget vs Actuals — flat IS-style table matching the Hollister/Belgold
+// reference. Same hierarchy + row palette as the Income Statement, but no
+// collapsibility (every row visible) and the columns are
+//   Line Item | <period> Actual | <period> Budget | Var % | YTD Actual | YTD Budget | YTD Var %
 function BudgetVsActualsView({
   lines,
-  totals,
+  totals: _totals,
   periodLabel,
 }: {
   lines: Row[];
   totals: Totals;
   periodLabel: string;
 }) {
-  // Pull every leaf line that has either an actual or a budget figure.
-  const leaves = useMemo(
-    () =>
-      lines
-        .filter((r) => classifyLine(r) === "leaf")
-        .filter((r) => !isRowEmpty(r))
-        .map((r) => {
-          const li = String(r.lineItem || "");
-          const actual = r.amountMtd || 0;
-          const budget = r.budgetMtd || 0;
-          return {
-            row: r,
-            label: cleanLabel(li),
-            actual,
-            budget,
-            variance: actual - budget,
-            varPct: r.pctVarianceMtd,
-            isIncome: isIncomeContext(li),
-            isExpense: isExpenseContext(li),
-          };
-        }),
-    [lines],
-  );
-
-  const overBudget = useMemo(
-    () =>
-      leaves
-        .filter((l) => l.isExpense ? l.variance > 0.5 : l.variance < -0.5)
-        .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance))
-        .slice(0, 8),
-    [leaves],
-  );
-  const underBudget = useMemo(
-    () =>
-      leaves
-        .filter((l) => l.isExpense ? l.variance < -0.5 : l.variance > 0.5)
-        .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance))
-        .slice(0, 8),
-    [leaves],
-  );
-
-  return (
-    <div className="space-y-4">
-      {/* Headline summary — a compact echo of the IS Summary panel for the
-          variance view's header. */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <BudgetCard
-          label="Income"
-          actual={totals.income}
-          budget={totals.incomeBudget}
-          goodWhenPositive
-        />
-        <BudgetCard
-          label="Expense"
-          actual={totals.expense}
-          budget={totals.expenseBudget}
-          goodWhenPositive={false}
-        />
-        <BudgetCard
-          label="NOI"
-          actual={totals.noi}
-          budget={totals.noiBudget}
-          goodWhenPositive
-        />
-      </div>
-
-      <VarianceTable
-        title="Worst variances vs budget"
-        rows={overBudget}
-        emptyLabel="No lines materially over budget."
-        periodLabel={periodLabel}
-      />
-      <VarianceTable
-        title="Outperformers vs budget"
-        rows={underBudget}
-        emptyLabel="No lines materially under budget."
-        periodLabel={periodLabel}
-      />
-    </div>
-  );
-}
-
-function BudgetCard({
-  label,
-  actual,
-  budget,
-  goodWhenPositive,
-}: {
-  label: string;
-  actual: number;
-  budget: number;
-  goodWhenPositive: boolean;
-}) {
-  const variance = actual - budget;
-  const pct = budget !== 0 ? variance / Math.abs(budget) : null;
-  const good = goodWhenPositive ? variance >= 0 : variance <= 0;
-  const color =
-    Math.abs(variance) < 0.5
-      ? "text-[#71717a] dark:text-[#a1a1aa]"
-      : good
-      ? "text-[#16a34a]"
-      : "text-[#dc2626]";
-  return (
-    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
-      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] font-medium uppercase tracking-wide">
-        {label}
-      </p>
-      <p className="text-[20px] font-semibold mt-1 text-[#18181b] dark:text-[#fafafa]">
-        {formatCurrency(actual)}
-      </p>
-      <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mt-1">
-        Budget {formatCurrency(budget)}
-      </p>
-      <p className={`text-[11px] font-medium mt-1 ${color}`}>
-        {Math.abs(variance) < 0.5
-          ? "On budget"
-          : `${variance >= 0 ? "+" : "−"}${formatCurrency(Math.abs(variance))}${
-              pct != null ? ` (${pct >= 0 ? "+" : ""}${(pct * 100).toFixed(1)}%)` : ""
-            }`}
-      </p>
-    </div>
-  );
-}
-
-function VarianceTable({
-  title,
-  rows,
-  emptyLabel,
-  periodLabel,
-}: {
-  title: string;
-  rows: Array<{
-    label: string;
-    actual: number;
-    budget: number;
-    variance: number;
-    varPct: number | null | undefined;
-    isExpense: boolean;
-  }>;
-  emptyLabel: string;
-  periodLabel: string;
-}) {
+  void _totals;
   return (
     <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-      <div className="px-4 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex items-center justify-between">
-        <p className="text-[12px] font-semibold text-[#18181b] dark:text-[#fafafa]">{title}</p>
-        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">{periodLabel}</p>
+      <div className="grid grid-cols-[1fr_140px_140px_90px_140px_140px_90px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2.5 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <span>Line Item</span>
+        <span className="text-right">{periodLabel} Actual</span>
+        <span className="text-right">{periodLabel} Budget</span>
+        <span className="text-right">Var %</span>
+        <span className="text-right">YTD Actual</span>
+        <span className="text-right">YTD Budget</span>
+        <span className="text-right">Var %</span>
       </div>
-      {rows.length === 0 ? (
-        <div className="px-5 py-6 text-center text-[12px] text-[#a1a1aa]">{emptyLabel}</div>
-      ) : (
-        <>
-          <div className="grid grid-cols-[1fr_120px_120px_120px_90px] px-4 py-2 bg-[#fafafa] dark:bg-[#27272a]/40 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
-            <span>Line Item</span>
-            <span className="text-right">Actual</span>
-            <span className="text-right">Budget</span>
-            <span className="text-right">Variance $</span>
-            <span className="text-right">Var %</span>
-          </div>
-          {rows.map((r, i) => {
-            const sign = r.isExpense ? -1 : 1;
-            const rev = r.variance * sign; // revenue-positive variance
-            const color =
-              Math.abs(r.variance) < 0.5
-                ? "text-[#71717a] dark:text-[#a1a1aa]"
-                : rev >= 0
-                ? "text-[#16a34a]"
-                : "text-[#dc2626]";
-            return (
-              <div
-                key={i}
-                className="grid grid-cols-[1fr_120px_120px_120px_90px] px-4 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-[#18181b] dark:text-[#fafafa]"
-              >
-                <span className="truncate">{r.label}</span>
-                <span className="text-right tabular-nums">
-                  {formatCurrency(r.actual)}
-                </span>
-                <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
-                  {formatCurrency(r.budget)}
-                </span>
-                <span className={`text-right tabular-nums ${color}`}>
-                  {formatVarianceDollars(r.variance)}
-                </span>
-                <span className={`text-right tabular-nums text-[11px] ${color}`}>
-                  {formatPctSigned(r.varPct ?? null)}
-                </span>
-              </div>
-            );
-          })}
-        </>
-      )}
+      {lines.map((r: Row, i: number) => (
+        <BudgetRow key={`${r._id}-${i}`} row={r} />
+      ))}
+    </div>
+  );
+}
+
+function BudgetRow({ row }: { row: Row }) {
+  const kind = classifyLine(row);
+  if (kind === "skip") return null;
+  if (kind === "leaf" && isRowEmpty(row)) return null;
+
+  const li = String(row.lineItem || "").trim();
+  const displayLabel = cleanLabel(li);
+  const indent = kind === "leaf" ? 24 : kind === "subgroup" ? 12 : 0;
+
+  const rowClass = [
+    "grid grid-cols-[1fr_140px_140px_90px_140px_140px_90px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center",
+    kind === "header"
+      ? "bg-[#f4f4f5] dark:bg-[#27272a] uppercase tracking-wide font-semibold text-[#18181b] dark:text-[#fafafa]"
+      : kind === "subtotal"
+      ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]"
+      : kind === "subgroup"
+      ? "font-medium text-[#18181b] dark:text-[#fafafa]"
+      : "text-[#18181b] dark:text-[#fafafa]",
+  ].join(" ");
+
+  const mtd = row.amountMtd || 0;
+  const budgetMtd = row.budgetMtd || 0;
+  const ytd = row.amountYtd || 0;
+  const budgetYtd = row.budgetYtd || 0;
+  const varPctMtd = budgetMtd !== 0 ? (mtd - budgetMtd) / Math.abs(budgetMtd) : null;
+  const varPctYtd = budgetYtd !== 0 ? (ytd - budgetYtd) / Math.abs(budgetYtd) : null;
+  const isExpense = isExpenseContext(li);
+
+  function pctColor(p: number | null) {
+    if (p == null || Math.abs(p) < 0.0001) return "text-[#71717a] dark:text-[#a1a1aa]";
+    // Income: positive = green, negative = red. Expense: positive = red, negative = green.
+    const positive = p >= 0;
+    if (isExpense) return positive ? "text-[#dc2626]" : "text-[#16a34a]";
+    return positive ? "text-[#16a34a]" : "text-[#dc2626]";
+  }
+
+  const showPctMtd =
+    varPctMtd != null && Number.isFinite(varPctMtd) && Math.abs(varPctMtd) > 0.0001;
+  const showPctYtd =
+    varPctYtd != null && Number.isFinite(varPctYtd) && Math.abs(varPctYtd) > 0.0001;
+  const showValues = kind !== "header";
+
+  return (
+    <div className={rowClass}>
+      <span style={{ paddingLeft: indent }} className="truncate" title={displayLabel}>
+        {displayLabel}
+      </span>
+      <span className="text-right tabular-nums">
+        {!showValues || mtd === 0 ? "—" : formatCurrency(Math.abs(mtd))}
+      </span>
+      <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
+        {!showValues || budgetMtd === 0 ? "—" : formatCurrency(budgetMtd)}
+      </span>
+      <span className={`text-right tabular-nums text-[11px] ${pctColor(varPctMtd)}`}>
+        {showPctMtd ? formatPctSigned(varPctMtd) : "—"}
+      </span>
+      <span className="text-right tabular-nums">
+        {!showValues || ytd === 0 ? "—" : formatCurrency(Math.abs(ytd))}
+      </span>
+      <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
+        {!showValues || budgetYtd === 0 ? "—" : formatCurrency(budgetYtd)}
+      </span>
+      <span className={`text-right tabular-nums text-[11px] ${pctColor(varPctYtd)}`}>
+        {showPctYtd ? formatPctSigned(varPctYtd) : "—"}
+      </span>
     </div>
   );
 }

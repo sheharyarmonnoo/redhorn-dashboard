@@ -204,9 +204,30 @@ export default function RvRentRoll({
     [allRows, selectedCode],
   );
 
-  // Stats strip removed to match the commercial rent roll, which leads with
-  // the grid and surfaces aggregate counts in the Dashboard / Site Plan
-  // pages instead. Total site count moves to the page subtitle/header.
+  // KPI strip — high-level occupancy and A/R counts above the grid.
+  const stats = useMemo(() => {
+    const today = todayIso();
+    let occupied = 0;
+    for (const r of allRows) {
+      if (
+        r.currentRes &&
+        r.currentRes.arrivalDate <= today &&
+        today <= r.currentRes.departureDate
+      ) {
+        occupied += 1;
+      }
+    }
+    const vacant = allRows.filter((r) => r.status === "vacant").length;
+    const pastDueRows = allRows.filter((r) => r.hasOpenBalance);
+    const totalAr = pastDueRows.reduce((s, r) => s + r.totalBalance, 0);
+    return {
+      total: allRows.length,
+      occupied,
+      vacant,
+      pastDueCount: pastDueRows.length,
+      totalAr,
+    };
+  }, [allRows]);
 
   // All financial columns visible by default — Balance, Paid %, Charges,
   // Payments, POS, Utility, Stays. The drawer still carries the per-stay
@@ -355,6 +376,19 @@ export default function RvRentRoll({
         </button>
       </PageHeader>
 
+      {/* KPI strip — Total Sites / Occupied / Vacant / Past Due ($ A/R) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
+        <StatCard label="Total Sites" value={stats.total} />
+        <StatCard label="Occupied" value={stats.occupied} valueClass="text-[#16a34a]" />
+        <StatCard label="Vacant" value={stats.vacant} valueClass="text-[#71717a] dark:text-[#a1a1aa]" />
+        <StatCard
+          label="Past Due"
+          value={stats.pastDueCount}
+          valueClass="text-[#dc2626]"
+          sub={stats.totalAr > 0 ? `${formatCurrency(stats.totalAr)} A/R` : undefined}
+        />
+      </div>
+
       {/* Search + Clear filters — matches the commercial rent roll layout */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-3 text-[12px]">
         <div className="sm:ml-auto w-full sm:w-auto flex items-center gap-2">
@@ -396,6 +430,28 @@ export default function RvRentRoll({
       {selectedRow && (
         <ReservationDrawer row={selectedRow} onClose={() => setSelectedCode(null)} />
       )}
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  valueClass = "text-[#18181b] dark:text-[#fafafa]",
+  sub,
+}: {
+  label: string;
+  value: number | string;
+  valueClass?: string;
+  sub?: string;
+}) {
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 text-center">
+      <p className={`text-[20px] sm:text-[24px] font-semibold ${valueClass}`}>{value}</p>
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] font-medium uppercase tracking-wide mt-0.5">
+        {label}
+      </p>
+      {sub && <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -466,7 +522,7 @@ function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void
     >
       <div
         className={`bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-xl w-full ${
-          tab === "details" ? "max-w-md" : "max-w-3xl"
+          tab === "details" ? "max-w-md" : "max-w-5xl"
         } h-full overflow-y-auto rh-drawer transition-[max-width] duration-200`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -657,9 +713,10 @@ function ReservationLedger({
   selectedConf: string | null;
   onSelect: (conf: string) => void;
 }) {
-  // Past / Upcoming toggle — defaults to Upcoming since that's what the PM
-  // most often acts on. "All" stays available for anyone scanning history.
-  const [filter, setFilter] = useState<"upcoming" | "past" | "all">("upcoming");
+  // Past / Upcoming / Past Due toggle — defaults to Upcoming since that's
+  // what the PM most often acts on. Past Due surfaces every reservation
+  // (regardless of date) that still carries an unpaid balance.
+  const [filter, setFilter] = useState<"upcoming" | "past" | "past_due" | "all">("upcoming");
 
   const sorted = useMemo(
     () =>
@@ -672,34 +729,39 @@ function ReservationLedger({
     return sorted.filter((r) => {
       const isPast = r.departureDate < today;
       const isUpcomingOrCurrent = r.departureDate >= today; // covers both
+      const balance = r.balanceOnInvoice || 0;
       if (filter === "upcoming") return isUpcomingOrCurrent;
       if (filter === "past") return isPast;
+      if (filter === "past_due") return balance > 0.5;
       return true;
     });
   }, [sorted, filter, today]);
 
-  // 5 rows visible at once; the rest scrolls inside the table body.
+  // ~30% taller than before — 7 rows visible at once, the rest scrolls.
   const ROW_PX = 36;
-  const VISIBLE_ROWS = 5;
+  const VISIBLE_ROWS = 7;
 
   const counts = useMemo(() => {
     let upcoming = 0;
     let past = 0;
+    let pastDue = 0;
     for (const r of sorted) {
       if (r.departureDate < today) past += 1;
       else upcoming += 1;
+      if ((r.balanceOnInvoice || 0) > 0.5) pastDue += 1;
     }
-    return { upcoming, past, all: sorted.length };
+    return { upcoming, past, pastDue, all: sorted.length };
   }, [sorted, today]);
 
   return (
     <div>
-      {/* Past / Upcoming filter pills above the ledger */}
-      <div className="flex items-center gap-1.5 mb-2">
+      {/* Past / Upcoming / Past Due / All filter pills above the ledger */}
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         {(
           [
             { key: "upcoming", label: "Upcoming", count: counts.upcoming },
             { key: "past", label: "Past", count: counts.past },
+            { key: "past_due", label: "Past Due", count: counts.pastDue },
             { key: "all", label: "All", count: counts.all },
           ] as const
         ).map((f) => (
@@ -719,9 +781,11 @@ function ReservationLedger({
       </div>
 
       <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
-        <div className="grid grid-cols-[90px_1fr_90px_90px_90px_90px_90px_60px] px-3 py-2 bg-[#fafafa] dark:bg-[#27272a]/50 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <div className="grid grid-cols-[90px_minmax(140px,1fr)_24px_90px_90px_90px_90px_90px_60px] px-3 py-2 bg-[#fafafa] dark:bg-[#27272a]/50 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
           <span>Status</span>
           <span>Guest</span>
+          {/* spacer column for visual gap between Guest and Coming */}
+          <span />
           <span>Coming</span>
           <span>Leaving</span>
           <span className="text-right">Charges</span>
@@ -746,7 +810,7 @@ function ReservationLedger({
                 <button
                   key={r.confirmation}
                   onClick={() => onSelect(r.confirmation)}
-                  className={`w-full grid grid-cols-[90px_1fr_90px_90px_90px_90px_90px_60px] px-3 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-left cursor-pointer hover:bg-[#fafafa] dark:hover:bg-[#27272a]/50 ${
+                  className={`w-full grid grid-cols-[90px_minmax(140px,1fr)_24px_90px_90px_90px_90px_90px_60px] px-3 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-left cursor-pointer hover:bg-[#fafafa] dark:hover:bg-[#27272a]/50 ${
                     isSelected ? "bg-[#fef3c7]/40 dark:bg-[#422006]/20" : ""
                   }`}
                 >
@@ -761,6 +825,8 @@ function ReservationLedger({
                   <span className="truncate text-[#18181b] dark:text-[#fafafa]" title={guestName}>
                     {guestName}
                   </span>
+                  {/* spacer column for visual gap between Guest and Coming */}
+                  <span />
                   <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] tabular-nums">
                     {formatShortDate(r.arrivalDate)}
                   </span>
@@ -882,15 +948,15 @@ function ReservationLineItems({ res }: { res: Row }) {
   );
 }
 
-// Reservation summary card — Nights / Source on one row, Package on its
-// own line so long package names ("5-Night Deal—30% OFF Cabins…") don't
-// overflow or compete for column width with the small numeric stats.
+// Reservation summary card — Nights up top, Package on its own line so
+// long names ("5-Night Deal—30% OFF Cabins…") don't get clipped. Source
+// is intentionally dropped — it's almost always "EXTERNAL" and added no
+// per-stay context.
 function ReservationCard({ res }: { res: Row }) {
   return (
     <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
-      <div className="grid grid-cols-2 gap-3 px-4 py-3">
+      <div className="px-4 py-3">
         <DrawerStat label="Nights" value={`${res.nights || 0}`} />
-        <DrawerStat label="Source" value={res.reservationSource || "—"} />
       </div>
       <div className="border-t border-[#e4e4e7] dark:border-[#3f3f46] px-4 py-3">
         <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] font-medium uppercase tracking-wide">

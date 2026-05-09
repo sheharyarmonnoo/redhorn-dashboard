@@ -308,6 +308,12 @@ function parseFinancialPackage(buffer: ArrayBuffer, bundleId: string, propertyId
         const row = aoa[r] || [];
         const lineItem = str(row[0]);
         if (!lineItem) continue;
+        // Keep structural rows even when their numeric cells are empty —
+        // section labels ("Income" / "Expense"), subgroup openers
+        // ("4020-000 - Total RV Income"), and the closing subtotals are
+        // what let the rendering layer build collapsible blocks. The
+        // earlier "skip when zero everywhere" filter dropped them and
+        // left the IS as a flat sea of leaves.
         const subsidiary = str(row[1]);
         const amountMtd = num(row[2]);
         const budgetMtd = num(row[3]);
@@ -315,12 +321,9 @@ function parseFinancialPackage(buffer: ArrayBuffer, bundleId: string, propertyId
         const pctVarianceMtd = num(row[5]);
         const amountYtd = num(row[6]);
         const budgetYtd = num(row[7]);
-        if (
-          amountMtd === 0 && budgetMtd === 0 && amountYtd === 0 && budgetYtd === 0 &&
-          !subsidiary
-        ) {
-          continue;
-        }
+        // Drop only obvious metadata noise — anything else (numeric and
+        // non-numeric) flows through.
+        if (/^Options:/i.test(lineItem) || /^Period:/i.test(lineItem)) continue;
         out.push({
           bundleId,
           propertyId,
