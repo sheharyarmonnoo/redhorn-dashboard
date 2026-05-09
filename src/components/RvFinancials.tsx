@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
-import { useRvFinancials, useDebt, formatCurrency } from "@/hooks/useConvexData";
+import { useRvFinancials, useRvLastUpdated, useDebt, formatCurrency, formatLastUpdated } from "@/hooks/useConvexData";
 
 // RV park income statement — visually mirrors the commercial Hollister/
 // Belgold /financials layout: KPI strip + Summary panel + IS table with
@@ -119,6 +119,8 @@ export default function RvFinancials({
   // matching the commercial /financials Period selector pattern.
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
   const { financials, periods, loading } = useRvFinancials(propertyId, selectedPeriod);
+  const { committedAt, period: lastBundlePeriod } = useRvLastUpdated(propertyId);
+  const lastUpdated = formatLastUpdated(committedAt, lastBundlePeriod);
 
   void propertyName;
   const lines = useMemo(() => financials.filter((r: Row) => r.kind === "isBudget"), [financials]);
@@ -210,7 +212,7 @@ export default function RvFinancials({
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-10 text-center">
           <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">No financial data yet</p>
           <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1.5">
-            Drop the monthly bundle (with the Northgate Financial Package xlsx) in <span className="font-medium">Monthly Uploads</span>.
+            Drop the monthly bundle (with the Northgate Financial Package xlsx) in <span className="font-medium">Pipeline Uploads</span>.
           </p>
         </div>
       </div>
@@ -236,7 +238,10 @@ export default function RvFinancials({
 
   return (
     <div>
-      <PageHeader title="Financials" subtitle={tabSubtitle} />
+      <PageHeader
+        title="Financials"
+        subtitle={`${tabSubtitle}${lastUpdated ? ` · ${lastUpdated}` : ""}`}
+      />
 
       {/* KPI strip — matches commercial /financials shape */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">

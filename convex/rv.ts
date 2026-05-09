@@ -77,6 +77,29 @@ export const listBundles = query({
   },
 });
 
+// Most recent committed bundle for a property — drives the "Last updated"
+// subtitle that appears on RV-park pages so the user always knows how
+// fresh the manually-uploaded data is.
+export const latestBundleForProperty = query({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    const bundles = await ctx.db
+      .query("rv_upload_bundles")
+      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const committed = bundles.filter((b) => b.status === "committed");
+    if (committed.length === 0) return null;
+    committed.sort((a, b) => (b.committedAt || 0) - (a.committedAt || 0));
+    const latest = committed[0];
+    return {
+      committedAt: latest.committedAt || null,
+      committedBy: latest.committedBy || null,
+      period: latest.period,
+      bundleId: latest._id,
+    };
+  },
+});
+
 // Cross-property feed for the Data Pipeline page — every committed bundle
 // across the portfolio so RV park's monthly uploads appear in the same
 // file-history grid as Yardi sync jobs. Joins each bundle to its property

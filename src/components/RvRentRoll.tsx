@@ -4,7 +4,7 @@ import { Download, X } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
-import { useRvData, formatCurrency } from "@/hooks/useConvexData";
+import { useRvData, useRvLastUpdated, formatCurrency, formatLastUpdated } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -226,6 +226,8 @@ export default function RvRentRoll({
   propertyId: string | undefined;
 }) {
   const { reservations, sites, loading } = useRvData(propertyId);
+  const { committedAt, period: lastBundlePeriod } = useRvLastUpdated(propertyId);
+  const lastUpdated = formatLastUpdated(committedAt, lastBundlePeriod);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [quickSearch, setQuickSearch] = useState("");
   const gridRef = useRef<AgGridReact>(null);
@@ -353,7 +355,7 @@ export default function RvRentRoll({
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-10 text-center">
           <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">No data yet</p>
           <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1.5">
-            Drop the monthly bundle in <span className="font-medium">Monthly Uploads</span> to populate the rent roll.
+            Drop the monthly bundle in <span className="font-medium">Pipeline Uploads</span> to populate the rent roll.
           </p>
         </div>
       </div>
@@ -374,7 +376,12 @@ export default function RvRentRoll({
 
   return (
     <div>
-      <PageHeader title="Rent Roll" subtitle={`${propertyName} — Tap any row for details`}>
+      <PageHeader
+        title="Rent Roll"
+        subtitle={`${propertyName} — Tap any row for details${
+          lastUpdated ? ` · ${lastUpdated}` : ""
+        }`}
+      >
         <button
           onClick={exportCsv}
           disabled={allRows.length === 0}

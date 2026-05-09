@@ -584,6 +584,50 @@ export function useRvFinancials(propertyId: string | undefined, period?: string 
   };
 }
 
+// Returns the most-recent committed bundle's timestamp + period for the
+// active property. Powers the "Last updated · X" subtitle that appears on
+// RV-park pages (Dashboard, Rent Roll, Financials, Site Plan) so the user
+// always knows how stale the manually-uploaded data is.
+export function useRvLastUpdated(propertyId: string | undefined) {
+  const latest = useQuery(
+    api.rv.latestBundleForProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  return {
+    committedAt: (latest?.committedAt as number | null | undefined) ?? null,
+    committedBy: (latest?.committedBy as string | null | undefined) ?? null,
+    period: latest?.period ?? null,
+    loading: !!propertyId && latest === undefined,
+  };
+}
+
+// "Last updated 3 days ago · April 2026" — short relative + period label
+// used as a subtle subtitle on RV pages. Returns empty string when no
+// bundle has been committed yet so callers can omit the suffix entirely.
+export function formatLastUpdated(committedAt: number | null, period: string | null): string {
+  if (!committedAt) return "";
+  const diffMs = Date.now() - committedAt;
+  const sec = Math.floor(diffMs / 1000);
+  const min = Math.floor(sec / 60);
+  const hr = Math.floor(min / 60);
+  const day = Math.floor(hr / 24);
+  let rel: string;
+  if (sec < 60) rel = "just now";
+  else if (min < 60) rel = `${min} min ago`;
+  else if (hr < 24) rel = `${hr} hr ago`;
+  else if (day < 7) rel = `${day} day${day === 1 ? "" : "s"} ago`;
+  else rel = new Date(committedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  if (period) {
+    const pretty = new Date(`${period}-01T00:00:00Z`).toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+    return `Last updated ${rel} · ${pretty} bundle`;
+  }
+  return `Last updated ${rel}`;
+}
+
 // Cross-property feed of committed RV bundles — joined with the property
 // name so the Data Pipeline grid can render bundles alongside Yardi syncs.
 export function useRvCommittedBundles() {

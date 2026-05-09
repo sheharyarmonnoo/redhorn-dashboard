@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Wrench } from "lucide-react";
 import KPICard from "@/components/KPICard";
 import PageHeader from "@/components/PageHeader";
-import { useRvData, useMaintenance, useAlerts, formatCurrency } from "@/hooks/useConvexData";
+import { useRvData, useMaintenance, useAlerts, useRvLastUpdated, formatCurrency, formatLastUpdated } from "@/hooks/useConvexData";
 import { useUser } from "@clerk/nextjs";
 import { useTheme } from "@/components/ThemeProvider";
 import { useMutation } from "convex/react";
@@ -38,6 +38,8 @@ export default function RvDashboard({
   propertyId: string;
 }) {
   const { reservations, balances, sites, pos, financials, loading } = useRvData(propertyId);
+  const { committedAt, period: lastBundlePeriod } = useRvLastUpdated(propertyId);
+  const lastUpdated = formatLastUpdated(committedAt, lastBundlePeriod);
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
@@ -146,7 +148,7 @@ export default function RvDashboard({
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-10 text-center">
           <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">No data yet</p>
           <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1.5">
-            Drop the monthly Campspot + Northgate bundle in <span className="font-medium">Monthly Uploads</span> to populate the dashboard.
+            Drop the monthly Campspot + Northgate bundle in <span className="font-medium">Pipeline Uploads</span> to populate the dashboard.
           </p>
         </div>
       </div>
@@ -157,7 +159,9 @@ export default function RvDashboard({
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle={`${propertyName}${period ? ` — ${periodLabel}` : ""}`}
+        subtitle={`${propertyName}${period ? ` — ${periodLabel}` : ""}${
+          lastUpdated ? ` · ${lastUpdated}` : ""
+        }`}
       />
 
       {/* KPI strip — six cards, same shape as the commercial dashboard. */}
