@@ -113,6 +113,7 @@ export default function RvFinancials({
   propertyId: string | undefined;
 }) {
   const { financials, loading } = useRvFinancials(propertyId);
+  const [view, setView] = useState<"statement" | "budget" | "debt">("statement");
 
   void propertyName;
   const lines = useMemo(() => financials.filter((r: Row) => r.kind === "isBudget"), [financials]);
@@ -219,9 +220,18 @@ export default function RvFinancials({
       })
     : "";
 
+  // Subtitle reflects the active tab so the page header reads correctly
+  // when the user lands on Budget vs Actuals or Debt & DSCR.
+  const tabSubtitle =
+    view === "budget"
+      ? `Budget vs Actuals · ${subtitlePeriod}`
+      : view === "debt"
+      ? "Debt & DSCR"
+      : `Income Statement · ${subtitlePeriod}`;
+
   return (
     <div>
-      <PageHeader title="Financials" subtitle={`Income Statement · ${subtitlePeriod}`} />
+      <PageHeader title="Financials" subtitle={tabSubtitle} />
 
       {/* KPI strip — matches commercial /financials shape */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
@@ -249,6 +259,8 @@ export default function RvFinancials({
         totals={totals}
         periodLabel={periodLabel}
         propertyId={propertyId}
+        view={view}
+        onView={setView}
       />
     </div>
   );
@@ -274,13 +286,17 @@ function TabbedContent({
   totals,
   periodLabel,
   propertyId,
+  view,
+  onView,
 }: {
   lines: Row[];
   totals: Totals;
   periodLabel: string;
   propertyId: string;
+  view: "statement" | "budget" | "debt";
+  onView: (v: "statement" | "budget" | "debt") => void;
 }) {
-  const [view, setView] = useState<"statement" | "budget" | "debt">("statement");
+  const setView = onView;
   return (
     <>
       {/* Tab switcher styled identically to commercial /financials */}
