@@ -349,32 +349,29 @@ function BudgetVsActualsView({
 function BudgetRow({ row }: { row: Row }) {
   const kind = classifyLine(row);
   if (kind === "skip") return null;
-  // Budget vs Actuals is a section-level summary view — drop leaves so the
-  // table reads as section / subsection / subtotal lines only. Per-line
-  // detail belongs in the Income Statement tab where you can drill in.
-  if (kind === "leaf") return null;
-  // Drop the same noise rows we filter from the IS tree:
-  //  • "Ordinary Income/Expense" generic scaffold
-  //  • intermediate "Total - NNNN-100" subtotals (only NNNN-000 closing
-  //    subtotals carry through, so the table doesn't double up).
+  // Budget vs Actuals matches Belgold's high-level layout: ONLY section
+  // headers + grand totals. Subgroup openers, leaves, and intermediate
+  // subtotals all collapse out so the table reads as a compact P&L summary.
+  if (kind === "leaf" || kind === "subgroup") return null;
   const li = String(row.lineItem || "").trim();
   if (/^Ordinary\s+Income\/Expense$/i.test(li)) return null;
-  const interimMatch = li.match(/^Total\s*-\s*(\d{4}-)(\d{3})/i);
-  if (interimMatch && interimMatch[2] !== "000") return null;
+  // Closing X-000 subtotals (like "Total RV Income", "Total SRDE Income")
+  // are still per-section, so keep the GRAND totals only ("Total Income",
+  // "Total Operating Expense", "Net Operating Income", "Net Income").
+  // Closing X-000 subtotals match `Total - NNNN-NNN - X`; everything else
+  // labelled "Total " without a numeric code is a grand total and stays.
+  if (/^Total\s*-\s*\d{4}-\d{3}/i.test(li)) return null;
 
   const displayLabel = cleanLabel(li);
-  // Leaves were filtered above, so only headers / subgroups / subtotals reach here.
-  const indent = kind === "subgroup" ? 12 : 0;
+  // Leaves and subgroups were filtered above; only headers and grand-total
+  // subtotals reach here.
+  const indent = 0;
 
   const rowClass = [
     "grid grid-cols-[1fr_140px_140px_90px_140px_140px_90px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center",
     kind === "header"
       ? "bg-[#f4f4f5] dark:bg-[#27272a] uppercase tracking-wide font-semibold text-[#18181b] dark:text-[#fafafa]"
-      : kind === "subtotal"
-      ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]"
-      : kind === "subgroup"
-      ? "font-medium text-[#18181b] dark:text-[#fafafa]"
-      : "text-[#18181b] dark:text-[#fafafa]",
+      : "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]",
   ].join(" ");
 
   const mtd = row.amountMtd || 0;
@@ -824,32 +821,42 @@ function parseBlocks(lines: Row[]): (Block | Row)[] {
   }
   if (current) out.push(current);
 
-  // Merge step — fold SRDE Income (4200-000) and the rest of the operating
-  // sub-blocks into Other Income (4040-000) so the user only sees three
-  // top-level income toggles: RV Income, Other Income (with SRDE inside),
-  // and Miscellaneous Income. SRDE's own header becomes a sub-section row
-  // inside Other Income's children, so expanding Other Income reveals the
-  // SRDE roll-up as one of its line items.
+  // Merge step — fold the entire SRDE Income family (4200-000 plus the
+  // 4220-000 / 4230-000 / etc. sub-blocks AND the orphaned "Total -
+  // 4200-000" row that the parser couldn't pair to a closing) under Other
+  // Income (4040-000). The xlsx data nests 4220 / 4230 inside 4200, but
+  // our flat parseBlocks only handles one level of nesting, which leaves
+  // SRDE content scattered across top level. The merge re-binds it.
   const otherIncomeIdx = out.findIndex(
     (item) =>
       isBlock(item) && /^4040-000/.test(String(item.header.lineItem || "")),
   );
-  const srdeIdx = out.findIndex(
-    (item) =>
-      isBlock(item) && /^4200-000/.test(String(item.header.lineItem || "")),
-  );
-  if (otherIncomeIdx >= 0 && srdeIdx >= 0) {
+  if (otherIncomeIdx >= 0) {
     const otherBlock = out[otherIncomeIdx] as Block;
-    const srdeBlock = out[srdeIdx] as Block;
-    // Fold the SRDE block in BEFORE the Other Income closing total so the
-    // user reads: Other Income leaves → SRDE section → SRDE leaves → Total
-    // SRDE Income → Total Other Income.
-    otherBlock.children.push(srdeBlock.header);
-    otherBlock.children.push(...srdeBlock.children);
-    if (srdeBlock.closingTotal) {
-      otherBlock.children.push(srdeBlock.closingTotal);
+    const srdeFamily = /^42\d{2}-000/;
+    const srdeClosingFamily = /^Total\s*-\s*4200-000/i;
+    const indexesToMove: number[] = [];
+    for (let i = 0; i < out.length; i++) {
+      if (i === otherIncomeIdx) continue;
+      const item = out[i];
+      const li = isBlock(item) ? String(item.header.lineItem || "") : String(item.lineItem || "");
+      if (isBlock(item) && srdeFamily.test(li)) indexesToMove.push(i);
+      else if (!isBlock(item) && srdeClosingFamily.test(li)) indexesToMove.push(i);
     }
-    out.splice(srdeIdx, 1);
+    const itemsToMove = indexesToMove.map((i) => out[i]);
+    // Splice highest-index-first to keep earlier indexes valid.
+    for (let i = indexesToMove.length - 1; i >= 0; i--) {
+      out.splice(indexesToMove[i], 1);
+    }
+    for (const item of itemsToMove) {
+      if (isBlock(item)) {
+        otherBlock.children.push(item.header);
+        otherBlock.children.push(...item.children);
+        if (item.closingTotal) otherBlock.children.push(item.closingTotal);
+      } else {
+        otherBlock.children.push(item);
+      }
+    }
   }
 
   return out;
@@ -923,10 +930,17 @@ function BlockSection({
   onToggle?: () => void;
   totalIncome: number;
 }) {
-  // Hide rows with no values anywhere — the expanded view should only show
-  // line items that actually moved. This keeps "Bad Debt Expense" / "Water
-  // and Sewer Income" / similar zero-everywhere placeholders out of view.
-  const visibleChildren = block.children.filter((c) => !isRowEmpty(c));
+  // Hide rows with no values, all "Total - X" subtotals, and all empty
+  // subgroup headers when a block is expanded. The user's directive: when
+  // expanded, just show the actual line items — they roll up into the
+  // block header's inline numbers, so showing intermediate subtotals
+  // ("Total Bad Debt", "Total SRDE Income") reads as duplication.
+  const visibleChildren = block.children.filter((c) => {
+    if (isRowEmpty(c)) return false;
+    const k = classifyLine(c);
+    if (k === "subtotal" || k === "subgroup") return false;
+    return true;
+  });
 
   return (
     <>
@@ -947,9 +961,11 @@ function BlockSection({
         visibleChildren.map((c, i) => (
           <ISRow key={`${c._id}-${i}`} row={c} totalIncome={totalIncome} />
         ))}
-      {isOpen && block.closingTotal && (
-        <ISRow row={block.closingTotal} totalIncome={totalIncome} />
-      )}
+      {/* The closing X-000 subtotal is intentionally NOT rendered when
+          expanded — its numbers are already the block header's inline
+          values, so re-rendering "Total RV Income $33,960" right under
+          "RV Income $33,960" reads as duplication. Children roll up
+          visually into the header. */}
     </>
   );
 }
