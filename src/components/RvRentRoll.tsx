@@ -69,7 +69,22 @@ function normalizeDate(d: string | undefined): string {
   }
   const m3 = d.match(/^(\d{2})-(\d{2})-(\d{4})$/);
   if (m3) return `${m3[3]}-${m3[1]}-${m3[2]}`;
-  return d;
+  // Fallback: hand off to Date.parse for anything else ("Apr 21 2026",
+  // "21-Apr-2026", ISO with timestamp, etc.). If JS can't parse it we
+  // return empty so downstream code treats the value as missing rather
+  // than letting "Apr 21 2026" leak into a string compare and break the
+  // Upcoming/Past filter (lex-compare puts "A" before any digit so
+  // anything starting with a letter would always read as Past or Future
+  // depending on direction).
+  const ts = Date.parse(d);
+  if (!Number.isNaN(ts)) {
+    const dt = new Date(ts);
+    const yy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getUTCDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
+  }
+  return "";
 }
 
 function formatShortDate(iso?: string): string {
