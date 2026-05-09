@@ -256,6 +256,41 @@ async function callClaude(apiKey: string, model: string, system: string, user: s
   return block?.text || "";
 }
 
+// Parse the new envelope { summary, insights } returned by the prompt.
+// Falls back gracefully if Claude returns just an array (legacy shape) or
+// drops one of the two fields.
+function parseInsightsObject(text: string): { summary: string; insights: Insight[] } {
+  const cleaned = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+  try {
+    const parsed: any = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) {
+      return { summary: "", insights: normalizeInsights(parsed) };
+    }
+    const summary = typeof parsed?.summary === "string" ? parsed.summary.trim() : "";
+    const arr = Array.isArray(parsed?.insights) ? parsed.insights : [];
+    return { summary, insights: normalizeInsights(arr) };
+  } catch {
+    return { summary: "", insights: [] };
+  }
+}
+
+function normalizeInsights(arr: any[]): Insight[] {
+  return arr
+    .map((row) => ({
+      severity: (["critical", "warning", "info"].includes(row?.severity)
+        ? row.severity
+        : "warning") as Insight["severity"],
+      title: String(row?.title || "").slice(0, 160),
+      body: String(row?.body || "").slice(0, 1200),
+      category: String(row?.category || "operational").slice(0, 40),
+      unit: row?.unit ? String(row.unit).slice(0, 40) : undefined,
+    }))
+    .filter((i) => i.title && i.body);
+}
+
 function parseInsightsJson(text: string): Insight[] {
   // Claude usually wraps JSON in ```json fences; strip them.
   const cleaned = text
@@ -296,18 +331,26 @@ export const extractInsightsForBundle = action({
 
     const { contextText, propertyCode } = await buildContext(ctx, args.propertyId, args.period);
 
-    const system = `You are an analytics assistant reviewing a freshly-loaded month of RV park operating data for Redhorn Capital. Read the <data> block and surface 3–7 specific findings the asset manager should know about: budget variance drivers, A/R concentration, POS revenue swings, occupancy red flags, payment-mix shifts. Each finding must reference real numbers from the data — never invent. Suppress findings that are simply a prior false-flagged pattern with no material change.
+    const system = `You are an analytics assistant reviewing a freshly-loaded month of RV park operating data for Redhorn Capital. Read the <data> block and produce two outputs:
 
-Return ONLY a JSON array — no prose, no markdown fences. Each element:
+1. A SHORT executive summary (3-6 lines, markdown-friendly) leading with the period headline number, NOI margin, and the single most important driver. Bullet 2-3 specific call-outs with $ figures. Suitable for the dashboard SummaryCard.
+2. 3-7 specific findings the asset manager should action: budget variance drivers, A/R concentration, POS revenue swings, occupancy red flags, payment-mix shifts. Each finding must reference real numbers from the data — never invent. Suppress findings that are simply a prior false-flagged pattern with no material change.
+
+Return ONLY a JSON object — no prose, no markdown fences. Shape:
 {
-  "severity": "critical" | "warning" | "info",
-  "title": "<=12 word headline",
-  "body": "2–4 sentences with specific numbers",
-  "category": "income" | "expense" | "occupancy" | "ar" | "pos" | "operational",
-  "unit": "<specific Campspot site code (e.g. 003, 207) OR guest name if and only if the finding is scoped to one site or one guest. Omit the field entirely otherwise — DO NOT use the property code or any portfolio-wide identifier here>"
+  "summary": "<markdown summary, 3-6 lines, may use **bold** and '- ' bullets and \\n>",
+  "insights": [
+    {
+      "severity": "critical" | "warning" | "info",
+      "title": "<=12 word headline",
+      "body": "2–4 sentences with specific numbers (markdown-friendly: **bold** ok, '- ' bullets ok)",
+      "category": "income" | "expense" | "occupancy" | "ar" | "pos" | "operational",
+      "unit": "<specific Campspot site code (e.g. 003, 207) OR guest name if and only if the finding is scoped to one site or one guest. Omit the field entirely otherwise — DO NOT use the property code or any portfolio-wide identifier here>"
+    }
+  ]
 }`;
 
-    const user = `<data>\n${contextText}\n</data>\n\nReturn the JSON array of insights now.`;
+    const user = `<data>\n${contextText}\n</data>\n\nReturn the JSON object now.`;
 
     let raw = "";
     try {
@@ -320,7 +363,7 @@ Return ONLY a JSON array — no prose, no markdown fences. Each element:
       }
     }
 
-    const insights = parseInsightsJson(raw);
+    const { summary, insights } = parseInsightsObject(raw);
     if (insights.length === 0) {
       return { ok: false, written: 0, reason: "Claude returned no parseable insights" };
     }
@@ -341,15 +384,21 @@ Return ONLY a JSON array — no prose, no markdown fences. Each element:
     }
 
     const today = new Date().toISOString();
+    // Attach the executive summary to the freshest insight only — the
+    // dashboard SummaryCard reads top-of-list .aiAnalysis. Putting it on
+    // every row would render N copies. Fallback to a one-liner when
+    // Claude didn't produce a summary block.
+    const aiAnalysis = summary || `Generated from monthly bundle ${args.period}.`;
     let written = 0;
-    for (const ins of insights) {
+    for (let i = 0; i < insights.length; i++) {
+      const ins = insights[i];
       await ctx.runMutation(api.alerts.create, {
         propertyId: args.propertyId,
         alertType: "income_insight",
         severity: ins.severity,
         title: ins.title,
         body: ins.body,
-        aiAnalysis: `Generated from monthly bundle ${args.period}.`,
+        aiAnalysis: i === 0 ? aiAnalysis : `Generated from monthly bundle ${args.period}.`,
         dataContext: {
           period: args.period,
           bundleId: args.bundleId,
