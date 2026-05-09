@@ -678,6 +678,42 @@ export function useTenantMutations() {
 
 // ===== HELPER: format currency =====
 
+// Normalize whatever date string the parser stored back into "YYYY-MM-DD"
+// for safe lexicographic comparison. Older RV bundles ingested before the
+// rvParsers fix accepted "M/D/YYYY" raw, and a few sources hand back odd
+// shapes like "Apr 21 2026" or ISO-with-timezone. Date.parse() is the last
+// resort — anything it still can't parse returns empty string so callers
+// can treat the row as missing rather than letting the value leak into a
+// string-compare that misclassifies it.
+export function normalizeRvDate(d: string | undefined | null): string {
+  if (!d) return "";
+  const s = String(d);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) {
+    const mm = m[1].padStart(2, "0");
+    const dd = m[2].padStart(2, "0");
+    return `${m[3]}-${mm}-${dd}`;
+  }
+  const m2 = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (m2) {
+    const mm = m2[2].padStart(2, "0");
+    const dd = m2[3].padStart(2, "0");
+    return `${m2[1]}-${mm}-${dd}`;
+  }
+  const m3 = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (m3) return `${m3[3]}-${m3[1]}-${m3[2]}`;
+  const ts = Date.parse(s);
+  if (!Number.isNaN(ts)) {
+    const dt = new Date(ts);
+    const yy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getUTCDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
+  }
+  return "";
+}
+
 export function formatCurrency(amount: number): string {
   // Round to whole dollars everywhere. The RV park's Northgate financial
   // package carries cents (e.g. $35,615.97) which read as noise next to the

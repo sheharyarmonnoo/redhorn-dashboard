@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Wrench } from "lucide-react";
 import KPICard from "@/components/KPICard";
 import PageHeader from "@/components/PageHeader";
-import { useRvData, useMaintenance, useRvLastUpdated, formatCurrency, formatLastUpdated } from "@/hooks/useConvexData";
+import { useRvData, useMaintenance, useRvLastUpdated, formatCurrency, formatLastUpdated, normalizeRvDate } from "@/hooks/useConvexData";
 import LatestInsights from "@/components/LatestInsights";
 import RvKPIDrawer from "@/components/RvKPIDrawer";
 import { useTheme } from "@/components/ThemeProvider";
@@ -67,7 +67,11 @@ export default function RvDashboard({
     for (const s of sites as any[]) {
       const rs = bySite.get(s.siteCode) || [];
       const current = rs.find(
-        (r: any) => r.arrivalDate <= today && today <= r.departureDate,
+        (r: any) => {
+          const arr = normalizeRvDate(r.arrivalDate);
+          const dep = normalizeRvDate(r.departureDate);
+          return !!arr && !!dep && arr <= today && today <= dep;
+        },
       );
       if (current) occupied += 1;
     }
