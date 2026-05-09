@@ -612,14 +612,20 @@ function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void
               onSelect={setSelectedConf}
             />
             {selected && (
-              <div>
-                <p className="text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide mb-2">
-                  Line Items · {selected.confirmation}
-                </p>
-                <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
+              <>
+                <div>
+                  <p className="text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide mb-2">
+                    Reservation · {selected.confirmation}
+                  </p>
+                  <ReservationCard res={selected} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide mb-2">
+                    Line Items
+                  </p>
                   <ReservationLineItems res={selected} />
                 </div>
-              </div>
+              </>
             )}
           </div>
         )}
@@ -651,83 +657,139 @@ function ReservationLedger({
   selectedConf: string | null;
   onSelect: (conf: string) => void;
 }) {
-  // Chronological order — most recent / current at the top so the user sees
-  // the active stay first, then prior history below.
-  const sorted = [...reservations].sort((a, b) =>
-    (b.arrivalDate || "").localeCompare(a.arrivalDate || ""),
-  );
+  // Past / Upcoming toggle — defaults to Upcoming since that's what the PM
+  // most often acts on. "All" stays available for anyone scanning history.
+  const [filter, setFilter] = useState<"upcoming" | "past" | "all">("upcoming");
 
-  // 5 rows visible at once. Row ~36px (py-2 + 12px text) + 28px header. Set
-  // max-height and let overflow-y-auto reveal additional history on scroll.
+  const sorted = useMemo(
+    () =>
+      [...reservations].sort((a, b) =>
+        (b.arrivalDate || "").localeCompare(a.arrivalDate || ""),
+      ),
+    [reservations],
+  );
+  const filtered = useMemo(() => {
+    return sorted.filter((r) => {
+      const isPast = r.departureDate < today;
+      const isUpcomingOrCurrent = r.departureDate >= today; // covers both
+      if (filter === "upcoming") return isUpcomingOrCurrent;
+      if (filter === "past") return isPast;
+      return true;
+    });
+  }, [sorted, filter, today]);
+
+  // 5 rows visible at once; the rest scrolls inside the table body.
   const ROW_PX = 36;
-  const HEADER_PX = 28;
   const VISIBLE_ROWS = 5;
 
+  const counts = useMemo(() => {
+    let upcoming = 0;
+    let past = 0;
+    for (const r of sorted) {
+      if (r.departureDate < today) past += 1;
+      else upcoming += 1;
+    }
+    return { upcoming, past, all: sorted.length };
+  }, [sorted, today]);
+
   return (
-    <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
-      <div className="grid grid-cols-[90px_1fr_140px_90px_90px_90px_60px] px-3 py-2 bg-[#fafafa] dark:bg-[#27272a]/50 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
-        <span>Status</span>
-        <span>Guest</span>
-        <span>Dates</span>
-        <span className="text-right">Charges</span>
-        <span className="text-right">Paid</span>
-        <span className="text-right">Balance</span>
-        <span className="text-right">Paid %</span>
-      </div>
-      <div
-        className="overflow-y-auto"
-        style={{ maxHeight: `${ROW_PX * VISIBLE_ROWS}px` }}
-      >
-      {sorted.map((r) => {
-        const isCurrent = r.arrivalDate <= today && today <= r.departureDate;
-        const isFuture = r.arrivalDate > today;
-        const isPast = r.departureDate < today;
-        const balance = r.balanceOnInvoice || 0;
-        const isSelected = r.confirmation === selectedConf;
-        const guestName = `${r.firstName || ""} ${r.lastName || ""}`.trim() || "—";
-        return (
+    <div>
+      {/* Past / Upcoming filter pills above the ledger */}
+      <div className="flex items-center gap-1.5 mb-2">
+        {(
+          [
+            { key: "upcoming", label: "Upcoming", count: counts.upcoming },
+            { key: "past", label: "Past", count: counts.past },
+            { key: "all", label: "All", count: counts.all },
+          ] as const
+        ).map((f) => (
           <button
-            key={r.confirmation}
-            onClick={() => onSelect(r.confirmation)}
-            className={`w-full grid grid-cols-[90px_1fr_140px_90px_90px_90px_60px] px-3 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-left cursor-pointer hover:bg-[#fafafa] dark:hover:bg-[#27272a]/50 ${
-              isSelected ? "bg-[#fef3c7]/40 dark:bg-[#422006]/20" : ""
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            className={`text-[11px] font-medium px-2.5 py-1 rounded-full cursor-pointer transition-colors ${
+              filter === f.key
+                ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]"
+                : "bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
             }`}
           >
-            <span className="inline-flex items-center gap-1.5 text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  isCurrent ? "bg-[#16a34a]" : isFuture ? "bg-[#2563eb]" : "bg-[#a1a1aa]"
-                }`}
-              />
-              {isCurrent ? "Current" : isFuture ? "Upcoming" : isPast ? "Past" : "—"}
-            </span>
-            <span className="truncate text-[#18181b] dark:text-[#fafafa]" title={guestName}>
-              {guestName}
-            </span>
-            <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] tabular-nums">
-              {formatShortDate(r.arrivalDate)} → {formatShortDate(r.departureDate)}
-            </span>
-            <span className="text-right tabular-nums text-[#18181b] dark:text-[#fafafa]">
-              {(r.totalChargesOnInvoice || 0) > 0 ? formatCurrency(r.totalChargesOnInvoice) : "—"}
-            </span>
-            <span className="text-right tabular-nums text-[#16a34a]">
-              {(r.totalPaymentsOnInvoice || 0) > 0 ? formatCurrency(r.totalPaymentsOnInvoice) : "—"}
-            </span>
-            <span
-              className={`text-right tabular-nums ${
-                balance > 0.5 ? "text-[#dc2626] font-medium" : "text-[#a1a1aa]"
-              }`}
-            >
-              {balance > 0.5 ? formatCurrency(balance) : "—"}
-            </span>
-            <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa] text-[11px]">
-              {(r.totalChargesOnInvoice || 0) > 0
-                ? `${((r.percentPaid || 0) * 100).toFixed(0)}%`
-                : "—"}
-            </span>
+            {f.label}
+            <span className="ml-1 opacity-70">{f.count}</span>
           </button>
-        );
-      })}
+        ))}
+      </div>
+
+      <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
+        <div className="grid grid-cols-[90px_1fr_90px_90px_90px_90px_90px_60px] px-3 py-2 bg-[#fafafa] dark:bg-[#27272a]/50 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+          <span>Status</span>
+          <span>Guest</span>
+          <span>Coming</span>
+          <span>Leaving</span>
+          <span className="text-right">Charges</span>
+          <span className="text-right">Paid</span>
+          <span className="text-right">Balance</span>
+          <span className="text-right">Paid %</span>
+        </div>
+        {filtered.length === 0 ? (
+          <div className="px-3 py-6 text-center text-[12px] text-[#a1a1aa]">
+            No {filter === "all" ? "" : filter} reservations.
+          </div>
+        ) : (
+          <div className="overflow-y-auto" style={{ maxHeight: `${ROW_PX * VISIBLE_ROWS}px` }}>
+            {filtered.map((r) => {
+              const isCurrent = r.arrivalDate <= today && today <= r.departureDate;
+              const isFuture = r.arrivalDate > today;
+              const isPast = r.departureDate < today;
+              const balance = r.balanceOnInvoice || 0;
+              const isSelected = r.confirmation === selectedConf;
+              const guestName = `${r.firstName || ""} ${r.lastName || ""}`.trim() || "—";
+              return (
+                <button
+                  key={r.confirmation}
+                  onClick={() => onSelect(r.confirmation)}
+                  className={`w-full grid grid-cols-[90px_1fr_90px_90px_90px_90px_90px_60px] px-3 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-left cursor-pointer hover:bg-[#fafafa] dark:hover:bg-[#27272a]/50 ${
+                    isSelected ? "bg-[#fef3c7]/40 dark:bg-[#422006]/20" : ""
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-[#71717a] dark:text-[#a1a1aa]">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isCurrent ? "bg-[#16a34a]" : isFuture ? "bg-[#2563eb]" : "bg-[#a1a1aa]"
+                      }`}
+                    />
+                    {isCurrent ? "Current" : isFuture ? "Upcoming" : isPast ? "Past" : "—"}
+                  </span>
+                  <span className="truncate text-[#18181b] dark:text-[#fafafa]" title={guestName}>
+                    {guestName}
+                  </span>
+                  <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] tabular-nums">
+                    {formatShortDate(r.arrivalDate)}
+                  </span>
+                  <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] tabular-nums">
+                    {formatShortDate(r.departureDate)}
+                  </span>
+                  <span className="text-right tabular-nums text-[#18181b] dark:text-[#fafafa]">
+                    {(r.totalChargesOnInvoice || 0) > 0 ? formatCurrency(r.totalChargesOnInvoice) : "—"}
+                  </span>
+                  <span className="text-right tabular-nums text-[#16a34a]">
+                    {(r.totalPaymentsOnInvoice || 0) > 0 ? formatCurrency(r.totalPaymentsOnInvoice) : "—"}
+                  </span>
+                  <span
+                    className={`text-right tabular-nums ${
+                      balance > 0.5 ? "text-[#dc2626] font-medium" : "text-[#a1a1aa]"
+                    }`}
+                  >
+                    {balance > 0.5 ? formatCurrency(balance) : "—"}
+                  </span>
+                  <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa] text-[11px]">
+                    {(r.totalChargesOnInvoice || 0) > 0
+                      ? `${((r.percentPaid || 0) * 100).toFixed(0)}%`
+                      : "—"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -754,6 +816,10 @@ function DrawerStat({
   );
 }
 
+// Compact line-item list. Mirrors the ledger's row rhythm so the two
+// stack visually as one continuous block — no heavy emphasized rows.
+// Empty line items are skipped entirely; totals carry only a slightly
+// heavier weight, no background banding.
 function ReservationLineItems({ res }: { res: Row }) {
   const items: { label: string; value: number; muted?: boolean; emphasize?: boolean }[] = [
     { label: "Reservation Charges", value: res.reservationCharges || 0 },
@@ -767,53 +833,72 @@ function ReservationLineItems({ res }: { res: Row }) {
     { label: "Total Payments on Invoice", value: -(res.totalPaymentsOnInvoice || 0), muted: true },
     { label: "Balance on Invoice", value: res.balanceOnInvoice || 0, emphasize: true },
   ];
-  const hasNonZero = items.some((it) => it.value !== 0);
-
+  const visible = items.filter((it) => it.value !== 0 || it.emphasize);
+  if (visible.length === 0) {
+    return (
+      <div className="px-3 py-4 text-center text-[11px] text-[#a1a1aa]">
+        No charges or payments on this reservation.
+      </div>
+    );
+  }
   return (
-    <div className="divide-y divide-[#f4f4f5] dark:divide-[#27272a]">
-      {!hasNonZero && (
-        <div className="px-5 py-6 text-center text-[12px] text-[#a1a1aa]">
-          No charges or payments on this reservation.
-        </div>
-      )}
-      {hasNonZero &&
-        items.map((it, i) => (
-          <div
-            key={i}
-            className={`grid grid-cols-[1fr_140px] px-5 py-2.5 text-[12px] ${
-              it.emphasize ? "bg-[#fafafa]/60 dark:bg-[#27272a]/40 font-medium" : ""
+    <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
+      {visible.map((it, i) => (
+        <div
+          key={i}
+          className={`grid grid-cols-[1fr_120px] px-3 py-1.5 text-[11px] ${
+            i > 0 ? "border-t border-[#f4f4f5] dark:border-[#27272a]" : ""
+          } ${it.emphasize ? "font-medium" : ""}`}
+        >
+          <span
+            className={
+              it.emphasize
+                ? "text-[#18181b] dark:text-[#fafafa]"
+                : "text-[#71717a] dark:text-[#a1a1aa]"
+            }
+          >
+            {it.label}
+          </span>
+          <span
+            className={`text-right tabular-nums ${
+              it.value === 0
+                ? "text-[#a1a1aa]"
+                : it.muted || it.value < 0
+                ? "text-[#16a34a]"
+                : it.emphasize
+                ? "text-[#18181b] dark:text-[#fafafa]"
+                : "text-[#18181b] dark:text-[#fafafa]"
             }`}
           >
-            <span
-              className={
-                it.emphasize
-                  ? "text-[#18181b] dark:text-[#fafafa]"
-                  : it.muted
-                  ? "text-[#71717a] dark:text-[#a1a1aa]"
-                  : "text-[#18181b] dark:text-[#fafafa]"
-              }
-            >
-              {it.label}
-            </span>
-            <span
-              className={`text-right tabular-nums ${
-                it.value === 0
-                  ? "text-[#a1a1aa]"
-                  : it.muted
-                  ? "text-[#16a34a]"
-                  : it.value < 0
-                  ? "text-[#16a34a]"
-                  : "text-[#18181b] dark:text-[#fafafa]"
-              }`}
-            >
-              {it.value === 0 ? "—" : it.value < 0 ? `(${formatCurrency(Math.abs(it.value))})` : formatCurrency(it.value)}
-            </span>
-          </div>
-        ))}
-      <div className="grid grid-cols-3 gap-3 px-5 py-4 bg-[#fafafa]/40 dark:bg-[#27272a]/30">
+            {it.value === 0
+              ? "—"
+              : it.value < 0
+              ? `(${formatCurrency(Math.abs(it.value))})`
+              : formatCurrency(it.value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Reservation summary card — Nights / Source on one row, Package on its
+// own line so long package names ("5-Night Deal—30% OFF Cabins…") don't
+// overflow or compete for column width with the small numeric stats.
+function ReservationCard({ res }: { res: Row }) {
+  return (
+    <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
+      <div className="grid grid-cols-2 gap-3 px-4 py-3">
         <DrawerStat label="Nights" value={`${res.nights || 0}`} />
         <DrawerStat label="Source" value={res.reservationSource || "—"} />
-        <DrawerStat label="Package" value={res.packageApplied || "—"} />
+      </div>
+      <div className="border-t border-[#e4e4e7] dark:border-[#3f3f46] px-4 py-3">
+        <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] font-medium uppercase tracking-wide">
+          Package
+        </p>
+        <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] mt-1 leading-snug">
+          {res.packageApplied || "—"}
+        </p>
       </div>
     </div>
   );

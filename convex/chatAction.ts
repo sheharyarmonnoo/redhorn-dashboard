@@ -82,12 +82,20 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
     };
   }
 
-  // Run queries in parallel for latency.
-  // deals are a portfolio-wide pipeline, not per-property — we still pull them
-  // so questions like "what deals are in outreach" can be answered regardless
-  // of which property the user has selected.
-  const [properties, tenants, monthlyRevenue, incomeLines, alerts, syncJobs, deals, aging] = await Promise.all([
-    ctx.runQuery(api.properties.list, {}),
+  // Resolve the property first so we can branch on propertyType. RV park
+  // doesn't have Yardi-fed tenants / income_lines / aging — its data flows
+  // from the monthly Campspot+Northgate bundle into rv_* tables — so we
+  // route to an RV-specific context builder instead of running empty
+  // commercial queries.
+  const properties = await ctx.runQuery(api.properties.list, {});
+  const property = (properties || []).find((p: any) => p._id === propertyId);
+  const propertyName = property?.name || property?.code || "(unknown property)";
+  if (property?.propertyType === "rv_park") {
+    return buildRvContext(ctx, property, propertyName);
+  }
+
+  // Run remaining queries in parallel for latency.
+  const [tenants, monthlyRevenue, incomeLines, alerts, syncJobs, deals, aging] = await Promise.all([
     ctx.runQuery(api.tenants.listByProperty, { propertyId: propertyId as any }),
     ctx.runQuery(api.monthlyRevenue.listByProperty, { propertyId: propertyId as any }),
     ctx.runQuery(api.incomeLines.listByProperty, { propertyId: propertyId as any }),
@@ -96,9 +104,6 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
     ctx.runQuery(api.deals.list, {}),
     ctx.runQuery(api.agingRecords.listByProperty, { propertyId: propertyId as any }),
   ]);
-
-  const property = (properties || []).find((p: any) => p._id === propertyId);
-  const propertyName = property?.name || property?.code || "(unknown property)";
 
   // ---- Past-due tenants ----
   // Join the rent-roll past-due list with the aging snapshot so each row
@@ -362,6 +367,242 @@ async function buildContext(ctx: any, propertyId: string | undefined): Promise<{
       },
     },
   };
+}
+
+// RV park context — data lives in rv_* tables (uploaded monthly from
+// Campspot + Northgate), not the Yardi-fed tenants/income_lines/aging that
+// commercial properties use. Sections cover: site occupancy, past-due
+// guests, monthly POS revenue, payment-mix, and the Income Statement
+// roll-ups so the assistant can answer questions like "who's at site 208",
+// "how much in A/R", "what was March P&L vs budget".
+async function buildRvContext(
+  ctx: any,
+  property: any,
+  propertyName: string,
+): Promise<{ contextText: string; propertyName: string; raw: any }> {
+  const propertyId = property._id;
+  const [reservations, balances, sites, pos, payments, financials] = await Promise.all([
+    ctx.runQuery(api.rv.listLatestReservations, { propertyId: propertyId as any }),
+    ctx.runQuery(api.rv.listLatestBalances, { propertyId: propertyId as any }),
+    ctx.runQuery(api.rv.listSites, { propertyId: propertyId as any }),
+    ctx.runQuery(api.rv.listLatestPos, { propertyId: propertyId as any }),
+    ctx.runQuery(api.rv.listLatestPayments, { propertyId: propertyId as any }),
+    ctx.runQuery(api.rv.listFinancials, { propertyId: propertyId as any }),
+  ]);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const sections: string[] = [];
+
+  sections.push(`Property: ${propertyName} (RV park, code ${property.code})`);
+  sections.push(
+    `Source: monthly Campspot reservation/POS export + Northgate financial xlsx, uploaded by Max once per month via /uploads.`,
+  );
+  sections.push("");
+
+  // ---- Occupancy snapshot ----
+  const bySite = new Map<string, any[]>();
+  for (const r of (reservations || []) as any[]) {
+    if (!bySite.has(r.siteCode)) bySite.set(r.siteCode, []);
+    bySite.get(r.siteCode)!.push(r);
+  }
+  let occupied = 0;
+  let upcomingWeek = 0;
+  for (const s of (sites || []) as any[]) {
+    const rs = bySite.get(s.siteCode) || [];
+    const current = rs.find(
+      (x: any) => x.arrivalDate <= today && today <= x.departureDate,
+    );
+    if (current) occupied += 1;
+    const next = rs
+      .filter((x: any) => x.arrivalDate > today)
+      .sort((a: any, b: any) => a.arrivalDate.localeCompare(b.arrivalDate))[0];
+    if (next) {
+      const days = (Date.parse(next.arrivalDate) - Date.parse(today)) / 86400000;
+      if (days <= 7) upcomingWeek += 1;
+    }
+  }
+  const totalSites = (sites || []).length;
+  const vacant = Math.max(0, totalSites - occupied);
+  sections.push(
+    `Occupancy: ${occupied}/${totalSites} sites occupied today, ${upcomingWeek} arriving in the next 7 days, ${vacant} vacant.`,
+  );
+  sections.push("");
+
+  // ---- Currently in-house guests (sample) ----
+  const inHouse = ((reservations || []) as any[])
+    .filter((r) => r.arrivalDate <= today && today <= r.departureDate)
+    .sort((a, b) => (a.siteCode || "").localeCompare(b.siteCode || "", undefined, { numeric: true }));
+  sections.push(`Currently in-house (${inHouse.length}):`);
+  if (inHouse.length === 0) {
+    sections.push("- (none)");
+  } else {
+    for (const r of trimList(inHouse, 25)) {
+      const guest = `${r.firstName || ""} ${r.lastName || ""}`.trim() || "(unknown)";
+      const balance = r.balanceOnInvoice || 0;
+      sections.push(
+        `- site ${r.siteCode} (${r.siteType || "?"}) | ${guest} | arr ${r.arrivalDate} → dep ${r.departureDate} | charges ${fmt$(r.totalChargesOnInvoice)} | balance ${balance > 0.5 ? fmt$(balance) : "$0"}`,
+      );
+    }
+    if (inHouse.length > 25) sections.push(`- …and ${inHouse.length - 25} more in-house`);
+  }
+  sections.push("");
+
+  // ---- Past-due / open balances ----
+  const balancesArr = ((balances || []) as any[]).filter((b) => (b.balance || 0) > 0.5);
+  const totalAr = balancesArr.reduce((s, b) => s + (b.balance || 0), 0);
+  sections.push(
+    `Open balances (Guests with Balance report — ${balancesArr.length} guests, ${fmt$(totalAr)} total A/R):`,
+  );
+  if (balancesArr.length === 0) {
+    sections.push("- (none)");
+  } else {
+    const sorted = [...balancesArr].sort((a, b) => (b.balance || 0) - (a.balance || 0));
+    for (const b of trimList(sorted, 20)) {
+      const name = `${b.firstName || ""} ${b.lastName || ""}`.trim() || "(unknown)";
+      const dates = b.arrivalDate ? `${b.arrivalDate} → ${b.departureDate || "?"}` : "(no dates)";
+      sections.push(
+        `- ${name} | ${b.campsiteType || "?"} ${b.campsiteNames || ""} | ${dates} | balance ${fmt$(b.balance)} | charges ${fmt$(b.totalCharges)} | paid ${fmt$(b.totalPayments)}`,
+      );
+    }
+    if (sorted.length > 20) sections.push(`- …and ${sorted.length - 20} more guests with balances`);
+  }
+  sections.push("");
+
+  // ---- POS / camp-store revenue ----
+  const posArr = (pos || []) as any[];
+  const monthTotals = new Map<string, number>();
+  const categoryTotals = new Map<string, number>();
+  for (const p of posArr) {
+    monthTotals.set(p.saleMonth, (monthTotals.get(p.saleMonth) || 0) + (p.total || 0));
+    const key = `${p.financialAccount} / ${p.productCategory}`;
+    categoryTotals.set(key, (categoryTotals.get(key) || 0) + (p.total || 0));
+  }
+  const monthsSorted = Array.from(monthTotals.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  sections.push(`Camp-store POS revenue by month:`);
+  if (monthsSorted.length === 0) {
+    sections.push("- (no POS data)");
+  } else {
+    for (const [m, total] of monthsSorted) {
+      sections.push(`- ${m}: ${fmt$(total)}`);
+    }
+  }
+  const topCategories = Array.from(categoryTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+  if (topCategories.length > 0) {
+    sections.push(`POS top categories:`);
+    for (const [cat, total] of topCategories) {
+      sections.push(`- ${cat}: ${fmt$(total)}`);
+    }
+  }
+  sections.push("");
+
+  // ---- Payment mix ----
+  const paymentsArr = ((payments || []) as any[]).filter((p) => (p.totalPayments || 0) !== 0);
+  if (paymentsArr.length > 0) {
+    const grandTotal = paymentsArr.reduce((s, p) => s + (p.totalPayments || 0), 0);
+    sections.push(`Payment mix (${fmt$(grandTotal)} total):`);
+    const sorted = [...paymentsArr].sort((a, b) => (b.totalPayments || 0) - (a.totalPayments || 0));
+    for (const p of trimList(sorted, 12)) {
+      const label = p.cardType ? `${p.paymentType} (${p.cardType})` : p.paymentType;
+      sections.push(`- ${label}: ${fmt$(p.totalPayments)}`);
+    }
+    sections.push("");
+  }
+
+  // ---- Income Statement roll-ups (from Northgate financial package) ----
+  const isLines = ((financials || []) as any[]).filter((f) => f.kind === "isBudget");
+  if (isLines.length > 0) {
+    const period = isLines[0]?.snapshotPeriod || "(unknown period)";
+    let income = 0;
+    let incomeBudget = 0;
+    let incomeYtd = 0;
+    let expense = 0;
+    let expenseBudget = 0;
+    let expenseYtd = 0;
+    for (const r of isLines) {
+      const li = String(r.lineItem || "");
+      // Skip subtotals to avoid double-counting; sum leaf lines only.
+      if (/^Total\s*-/i.test(li)) continue;
+      if (/^4\d{3}-/.test(li)) {
+        income += r.amountMtd || 0;
+        incomeBudget += r.budgetMtd || 0;
+        incomeYtd += r.amountYtd || 0;
+      } else if (/^[5-9]\d{3}-/.test(li)) {
+        expense += r.amountMtd || 0;
+        expenseBudget += r.budgetMtd || 0;
+        expenseYtd += r.amountYtd || 0;
+      }
+    }
+    const noi = income - expense;
+    const noiYtd = incomeYtd - expenseYtd;
+    sections.push(
+      `Income Statement (period ${period}, derived from monthly Northgate financial package):`,
+    );
+    sections.push(
+      `- Total Income: ${fmt$(income)} (budget ${fmt$(incomeBudget)}, YTD ${fmt$(incomeYtd)})`,
+    );
+    sections.push(
+      `- Total Expense: ${fmt$(expense)} (budget ${fmt$(expenseBudget)}, YTD ${fmt$(expenseYtd)})`,
+    );
+    sections.push(`- NOI (period): ${fmt$(noi)}; YTD NOI: ${fmt$(noiYtd)}`);
+    // Top variance lines so the assistant can call out where budget broke.
+    const variances = isLines
+      .filter((r) => classifyForVariance(r.lineItem))
+      .map((r) => ({
+        label: cleanRvLabel(r.lineItem),
+        actual: r.amountMtd || 0,
+        budget: r.budgetMtd || 0,
+        variance: (r.amountMtd || 0) - (r.budgetMtd || 0),
+        isExpense: /^[5-9]\d{3}-/.test(String(r.lineItem || "")),
+      }))
+      .filter((v) => Math.abs(v.variance) > 25)
+      .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance));
+    if (variances.length > 0) {
+      sections.push(`Largest budget variances (period vs budget):`);
+      for (const v of trimList(variances, 8)) {
+        const sign = v.variance >= 0 ? "+" : "−";
+        sections.push(
+          `- ${v.label}: actual ${fmt$(v.actual)} vs budget ${fmt$(v.budget)} → ${sign}${fmt$(Math.abs(v.variance))} (${v.isExpense ? "expense" : "income"})`,
+        );
+      }
+    }
+    sections.push("");
+  }
+
+  return {
+    contextText: sections.join("\n"),
+    propertyName,
+    raw: {
+      propertyId,
+      propertyCode: property.code,
+      propertyType: "rv_park",
+      counts: {
+        sites: totalSites,
+        occupied,
+        vacant,
+        upcomingWeek,
+        balances: balancesArr.length,
+        totalAr,
+        posLines: posArr.length,
+      },
+    },
+  };
+}
+
+// Strip "NNNN-NNN - " / "Total - NNNN-NNN - " prefixes so the assistant
+// quotes plain category names back to the user.
+function cleanRvLabel(li: string | undefined): string {
+  const raw = String(li || "").trim();
+  let s = raw.replace(/^Total\s*-\s*\d{4}-\d{3}\s*-\s*/i, "Total ");
+  s = s.replace(/^\d{4}-\d{3}\s*-\s*/, "");
+  return s;
+}
+
+function classifyForVariance(li: string | undefined): boolean {
+  const s = String(li || "");
+  if (/^Total/i.test(s)) return false;
+  return /^\d{4}-/.test(s);
 }
 
 export const ask = action({
