@@ -46,10 +46,15 @@ function isExpenseContext(li: string): boolean {
 function cleanLabel(li: string, opts: { stripLeadingTotal?: boolean } = {}): string {
   const raw = String(li || "").trim();
   if (!raw) return "";
-  // Subtotal: strip "Total - NNNN-NNN - " entirely. The trailing tail in the
-  // source already starts with "Total ", so injecting another "Total " here
-  // produced "Total Total RV Contract" — the prefix gets dropped in full.
+  // Subtotal with full numeric code: "Total - NNNN-NNN - Total Foo" →
+  // "Total Foo". Strip the prefix entirely; the suffix already starts with
+  // "Total ", so the cleaned label reads naturally.
   let s = raw.replace(/^Total\s*-\s*\d{4}-\d{3}\s*-\s*/i, "");
+  // Top-level subtotals don't carry a numeric code: "Total - Income" /
+  // "Total - Cost Of Sales" / "Total - Operating Expense". Drop the dash
+  // and tighten whitespace so they read as "Total Income" / "Total Cost
+  // Of Sales".
+  s = s.replace(/^Total\s*-\s*/i, "Total ");
   // Header / leaf: strip the bare "NNNN-NNN - " prefix
   s = s.replace(/^\d{4}-\d{3}\s*-\s*/, "");
   // Block header gets its leading "Total" dropped — collapsed row reads as
@@ -344,11 +349,15 @@ function BudgetVsActualsView({
 function BudgetRow({ row }: { row: Row }) {
   const kind = classifyLine(row);
   if (kind === "skip") return null;
-  if (kind === "leaf" && isRowEmpty(row)) return null;
+  // Budget vs Actuals is a section-level summary view — drop leaves so the
+  // table reads as section / subsection / subtotal lines only. Per-line
+  // detail belongs in the Income Statement tab where you can drill in.
+  if (kind === "leaf") return null;
 
   const li = String(row.lineItem || "").trim();
   const displayLabel = cleanLabel(li);
-  const indent = kind === "leaf" ? 24 : kind === "subgroup" ? 12 : 0;
+  // Leaves were filtered above, so only headers / subgroups / subtotals reach here.
+  const indent = kind === "subgroup" ? 12 : 0;
 
   const rowClass = [
     "grid grid-cols-[1fr_140px_140px_90px_140px_140px_90px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center",
@@ -885,10 +894,17 @@ function BlockSection({
       />
       {isOpen &&
         visibleChildren.map((c, i) => (
-          <ISRow key={`${c._id}-${i}`} row={c} totalIncome={totalIncome} />
+          <div key={`${c._id}-${i}`} className="rh-section-expand" style={{ animationDelay: `${Math.min(i, 6) * 18}ms` }}>
+            <ISRow row={c} totalIncome={totalIncome} />
+          </div>
         ))}
       {isOpen && block.closingTotal && (
-        <ISRow row={block.closingTotal} totalIncome={totalIncome} />
+        <div
+          className="rh-section-expand"
+          style={{ animationDelay: `${Math.min(visibleChildren.length, 6) * 18}ms` }}
+        >
+          <ISRow row={block.closingTotal} totalIncome={totalIncome} />
+        </div>
       )}
     </>
   );
