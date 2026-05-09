@@ -542,17 +542,35 @@ export function useRvData(propertyId: string | undefined) {
     api.rv.listLatestPayments,
     propertyId ? { propertyId: propertyId as any } : "skip",
   );
+  const financials = useQuery(
+    api.rv.listFinancials,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
   return {
     reservations: reservations ?? [],
     balances: balances ?? [],
     sites: sites ?? [],
     pos: pos ?? [],
     payments: payments ?? [],
+    financials: financials ?? [],
     loading:
       !!propertyId &&
       (reservations === undefined ||
         balances === undefined ||
         sites === undefined),
+  };
+}
+
+// Same as useRvData but only loads financials — used by the financials page
+// to avoid pulling reservations/POS when only the package is needed.
+export function useRvFinancials(propertyId: string | undefined) {
+  const financials = useQuery(
+    api.rv.listFinancials,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  return {
+    financials: financials ?? [],
+    loading: !!propertyId && financials === undefined,
   };
 }
 

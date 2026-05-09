@@ -4,6 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import PageHeader from "@/components/PageHeader";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
+import RvFinancials from "@/components/RvFinancials";
 import { api } from "../../../../convex/_generated/api";
 import { useActiveProperty, useIncomeLinesWithLoading, useMonthlyRevenue, useDebt, useLineBudgets, formatCurrency } from "@/hooks/useConvexData";
 
@@ -230,11 +231,17 @@ export default function FinancialsPage() {
 
   if (!property) return null;
 
-  // RV park doesn't have a Yardi income statement — the property's financials
-  // will integrate from Campspot in a future release. Render the coming-soon
-  // card so the user doesn't stare at zero-state KPIs.
+  // RV park financials are sourced from the monthly Northgate xlsx that Max
+  // uploads (rv_financials table, kind = isBudget / balanceSheet / cashFlow /
+  // generalLedger). RvFinancials renders all four as tabs above the IS-vs-
+  // budget KPI strip — different shape from the commercial Yardi-fed pages.
   if (property.propertyType === "rv_park") {
-    return <ComingSoonBanner propertyName={property.name} />;
+    return (
+      <RvFinancials
+        propertyName={property.name}
+        propertyId={property._id as string}
+      />
+    );
   }
 
   // Skeleton while income_lines streams in. Without this, the page flashes
