@@ -435,13 +435,33 @@ function StatCard({
   );
 }
 
-// Drawer = ledger view. Every reservation for the site is listed
-// chronologically (one row per stay) so you can see the whole tenancy
-// history including guest names, dates, charges, payments, balance, and
-// POS. Click a reservation row → its line-item breakdown renders below.
-// This is where the data the grid de-emphasizes (names, POS detail) lives.
+// Drawer mirrors the commercial RentRollDrawer: header (site + type) + tab
+// switcher with Details / Ledger. Details tab shows a 2-column field grid;
+// Ledger tab shows the per-reservation table capped to ~5 rows visible at
+// once with scroll, and clicking a row drills into its line items below.
+const RV_STATUS_PILL: Record<string, { label: string; cls: string }> = {
+  occupied: {
+    label: "Occupied",
+    cls: "bg-green-100 dark:bg-green-950/40 text-[#16a34a] border-green-200 dark:border-green-900",
+  },
+  past_due: {
+    label: "Past Due",
+    cls: "bg-red-100 dark:bg-red-950/40 text-[#dc2626] border-red-200 dark:border-red-900",
+  },
+  departing: {
+    label: "Departing",
+    cls: "bg-orange-100 dark:bg-orange-950/40 text-[#d97706] border-orange-200 dark:border-orange-900",
+  },
+  vacant: {
+    label: "Vacant",
+    cls: "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] border-[#e4e4e7] dark:border-[#3f3f46]",
+  },
+};
+
 function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void }) {
   const today = todayIso();
+  const [tab, setTab] = useState<"details" | "ledger">("details");
+
   // Default-select the most relevant reservation: the one currently in-house,
   // else the next upcoming one, else the most recent past stay.
   const initial = useMemo(() => {
@@ -455,65 +475,202 @@ function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void
     [row.reservations, selectedConf],
   );
 
+  const statusCfg =
+    RV_STATUS_PILL[row.status] || {
+      label: row.status,
+      cls: "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] border-[#e4e4e7] dark:border-[#3f3f46]",
+    };
+
+  // Pick the focus reservation surfaced on the Details tab. Past-due sites
+  // surface their delinquent stay; otherwise the in-house or next reservation.
+  const focusRes: Row | null = useMemo(() => {
+    if (row.hasOpenBalance) {
+      const overdue = row.reservations.find((r: Row) => (r.balanceOnInvoice || 0) > 0.5);
+      if (overdue) return overdue;
+    }
+    return row.currentRes || row.nextRes || row.reservations[row.reservations.length - 1] || null;
+  }, [row]);
+  const focusGuest = focusRes
+    ? `${focusRes.firstName || ""} ${focusRes.lastName || ""}`.trim()
+    : "";
+
   return (
-    <div className="fixed inset-0 z-[70] flex justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 dark:bg-black/60" />
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/40 dark:bg-black/60 rh-backdrop"
+      onClick={onClose}
+    >
       <div
-        className="relative bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-2xl w-full max-w-[760px] h-full overflow-hidden flex flex-col"
+        className={`bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-xl w-full ${
+          tab === "details" ? "max-w-md" : "max-w-3xl"
+        } h-full overflow-y-auto rh-drawer transition-[max-width] duration-200`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between px-5 py-4 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
-          <div>
-            <p className="text-[16px] font-semibold text-[#18181b] dark:text-[#fafafa]">Site {row.siteCode}</p>
-            <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5">{row.siteType}</p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="p-1 rounded hover:bg-[#71717a]/10 text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-4 gap-2 px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a]/50">
-          <DrawerStat label="Stays" value={`${row.reservationCount}`} />
-          <DrawerStat label="Total Charges" value={row.totalCharges > 0 ? formatCurrency(row.totalCharges) : "—"} />
-          <DrawerStat
-            label="Total Balance"
-            value={row.totalBalance > 0.5 ? formatCurrency(row.totalBalance) : "—"}
-            valueClass={row.hasOpenBalance ? "text-[#dc2626]" : ""}
-          />
-          <DrawerStat
-            label="Paid %"
-            value={row.totalCharges > 0 ? `${(row.percentPaid * 100).toFixed(0)}%` : "—"}
-          />
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-5 pt-4 pb-2">
-            <p className="text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">
-              Reservation Ledger
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#e4e4e7] dark:border-[#3f3f46] sticky top-0 bg-white dark:bg-[#18181b] z-10">
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] truncate">
+              {row.siteCode}
+            </p>
+            <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] truncate">
+              {row.siteType || "—"}
             </p>
           </div>
-          <ReservationLedger
-            reservations={row.reservations}
-            today={today}
-            selectedConf={selectedConf}
-            onSelect={setSelectedConf}
-          />
-          {selected && (
-            <>
-              <div className="px-5 pt-5 pb-2">
-                <p className="text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide">
+          <div className="flex items-center gap-2">
+            {row.hasOpenBalance && (
+              <span className="text-[10px] font-medium text-[#dc2626] bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/40 px-2 py-0.5 rounded">
+                Past Due
+              </span>
+            )}
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="text-[16px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer leading-none"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        {/* Tab switcher — matches the Hollister/Belgold pattern */}
+        <div className="px-5 pt-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] flex items-center gap-4 sticky top-[57px] bg-white dark:bg-[#18181b] z-10">
+          {(
+            [
+              { value: "details", label: "Details" },
+              {
+                value: "ledger",
+                label: `Ledger${row.reservationCount ? ` (${row.reservationCount})` : ""}`,
+              },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setTab(t.value as any)}
+              className={`text-[12px] font-medium pb-2 -mb-px border-b-2 transition-colors cursor-pointer ${
+                tab === t.value
+                  ? "border-[#18181b] dark:border-[#fafafa] text-[#18181b] dark:text-[#fafafa]"
+                  : "border-transparent text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "details" && (
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Current Status">
+                <span
+                  className={`inline-block text-[11px] font-semibold px-2.5 py-1 rounded border ${statusCfg.cls}`}
+                >
+                  {statusCfg.label}
+                </span>
+                <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">
+                  Auto-derived from monthly Campspot bundle.
+                </p>
+              </Field>
+              <Field label="Site Type">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
+                  {row.siteType || "—"}
+                </p>
+              </Field>
+
+              <Field label="Current Guest">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
+                  {focusGuest || "—"}
+                </p>
+              </Field>
+              <Field label="Confirmation">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
+                  {focusRes?.confirmation || "—"}
+                </p>
+              </Field>
+
+              <Field label="Arrival">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
+                  {focusRes ? formatShortDate(focusRes.arrivalDate) : "—"}
+                </p>
+              </Field>
+              <Field label="Departure">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
+                  {focusRes ? formatShortDate(focusRes.departureDate) : "—"}
+                </p>
+              </Field>
+
+              <Field label="Total Charges">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
+                  {row.totalCharges > 0 ? formatCurrency(row.totalCharges) : "—"}
+                </p>
+              </Field>
+              <Field label="Total Payments">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
+                  {row.totalPayments > 0 ? formatCurrency(row.totalPayments) : "—"}
+                </p>
+              </Field>
+
+              <Field label="Total Balance">
+                <p
+                  className={`text-[12px] py-1.5 ${
+                    row.hasOpenBalance
+                      ? "text-[#dc2626] font-semibold"
+                      : "text-[#18181b] dark:text-[#fafafa]"
+                  }`}
+                >
+                  {row.totalBalance > 0.5 ? formatCurrency(row.totalBalance) : "—"}
+                </p>
+              </Field>
+              <Field label="Paid %">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
+                  {row.totalCharges > 0 ? `${(row.percentPaid * 100).toFixed(0)}%` : "—"}
+                </p>
+              </Field>
+
+              <Field label="Stays on Record">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
+                  {row.reservationCount}
+                </p>
+              </Field>
+              <Field label="Package">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
+                  {focusRes?.packageApplied || "—"}
+                </p>
+              </Field>
+            </div>
+          </div>
+        )}
+
+        {tab === "ledger" && (
+          <div className="p-5 space-y-4">
+            <ReservationLedger
+              reservations={row.reservations}
+              today={today}
+              selectedConf={selectedConf}
+              onSelect={setSelectedConf}
+            />
+            {selected && (
+              <div>
+                <p className="text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide mb-2">
                   Line Items · {selected.confirmation}
                 </p>
+                <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
+                  <ReservationLineItems res={selected} />
+                </div>
               </div>
-              <ReservationLineItems res={selected} />
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// Field — same pattern as the commercial RentRollDrawer.
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-[10px] font-medium text-[#71717a] dark:text-[#a1a1aa] uppercase tracking-wide flex items-center gap-1.5 mb-1">
+        {label}
+      </label>
+      {children}
     </div>
   );
 }
@@ -535,9 +692,15 @@ function ReservationLedger({
     (b.arrivalDate || "").localeCompare(a.arrivalDate || ""),
   );
 
+  // 5 rows visible at once. Row ~36px (py-2 + 12px text) + 28px header. Set
+  // max-height and let overflow-y-auto reveal additional history on scroll.
+  const ROW_PX = 36;
+  const HEADER_PX = 28;
+  const VISIBLE_ROWS = 5;
+
   return (
-    <div className="border-y border-[#e4e4e7] dark:border-[#3f3f46]">
-      <div className="grid grid-cols-[80px_1fr_140px_90px_90px_90px_60px] px-5 py-2 bg-[#fafafa] dark:bg-[#27272a]/50 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+    <div className="border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
+      <div className="grid grid-cols-[90px_1fr_140px_90px_90px_90px_60px] px-3 py-2 bg-[#fafafa] dark:bg-[#27272a]/50 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
         <span>Status</span>
         <span>Guest</span>
         <span>Dates</span>
@@ -546,6 +709,10 @@ function ReservationLedger({
         <span className="text-right">Balance</span>
         <span className="text-right">Paid %</span>
       </div>
+      <div
+        className="overflow-y-auto"
+        style={{ maxHeight: `${ROW_PX * VISIBLE_ROWS}px` }}
+      >
       {sorted.map((r) => {
         const isCurrent = r.arrivalDate <= today && today <= r.departureDate;
         const isFuture = r.arrivalDate > today;
@@ -557,7 +724,7 @@ function ReservationLedger({
           <button
             key={r.confirmation}
             onClick={() => onSelect(r.confirmation)}
-            className={`w-full grid grid-cols-[80px_1fr_140px_90px_90px_90px_60px] px-5 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-left cursor-pointer hover:bg-[#fafafa] dark:hover:bg-[#27272a]/50 ${
+            className={`w-full grid grid-cols-[90px_1fr_140px_90px_90px_90px_60px] px-3 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-left cursor-pointer hover:bg-[#fafafa] dark:hover:bg-[#27272a]/50 ${
               isSelected ? "bg-[#fef3c7]/40 dark:bg-[#422006]/20" : ""
             }`}
           >
@@ -596,6 +763,7 @@ function ReservationLedger({
           </button>
         );
       })}
+      </div>
     </div>
   );
 }
