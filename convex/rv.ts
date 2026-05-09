@@ -555,3 +555,58 @@ export const listSites = query({
       .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
       .collect(),
 });
+
+// Distinct months (YYYY-MM) for which a financial package has been ingested.
+// Powers the Period dropdown on the IS / Budget vs Actuals tabs so the user
+// can pick which historical snapshot to view.
+export const listFinancialPeriods = query({
+  args: { propertyId: v.id("properties"), kind: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("rv_financials")
+      .withIndex("by_property_period", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const set = new Set<string>();
+    for (const r of rows) {
+      if (args.kind && r.kind !== args.kind) continue;
+      if (r.snapshotPeriod) set.add(r.snapshotPeriod);
+    }
+    return Array.from(set).sort();
+  },
+});
+
+// Pull a specific historical snapshot of financial rows for the period the
+// user picked. Falls back to the latest snapshot when `period` is omitted so
+// existing callers keep their behavior.
+export const listFinancialsForPeriod = query({
+  args: {
+    propertyId: v.id("properties"),
+    period: v.optional(v.string()),
+    kind: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (args.period) {
+      const rows = await ctx.db
+        .query("rv_financials")
+        .withIndex("by_property_period", (q) =>
+          q.eq("propertyId", args.propertyId).eq("snapshotPeriod", args.period!),
+        )
+        .collect();
+      return args.kind ? rows.filter((r) => r.kind === args.kind) : rows;
+    }
+    if (args.kind) {
+      return await ctx.db
+        .query("rv_financials")
+        .withIndex("by_property_kind_latest", (q) =>
+          q.eq("propertyId", args.propertyId).eq("kind", args.kind!).eq("isLatest", true),
+        )
+        .collect();
+    }
+    return await ctx.db
+      .query("rv_financials")
+      .withIndex("by_property_latest", (q) =>
+        q.eq("propertyId", args.propertyId).eq("isLatest", true),
+      )
+      .collect();
+  },
+});

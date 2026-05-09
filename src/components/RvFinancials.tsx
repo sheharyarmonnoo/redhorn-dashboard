@@ -112,8 +112,13 @@ export default function RvFinancials({
   propertyName: string;
   propertyId: string | undefined;
 }) {
-  const { financials, loading } = useRvFinancials(propertyId);
   const [view, setView] = useState<"statement" | "budget" | "debt">("statement");
+  // Selected historical snapshot. `null` = latest committed period (the
+  // useRvFinancials hook treats `undefined` as "latest"). The dropdown lets
+  // the user pivot the IS / Budget vs Actuals tables to any past month
+  // matching the commercial /financials Period selector pattern.
+  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
+  const { financials, periods, loading } = useRvFinancials(propertyId, selectedPeriod);
 
   void propertyName;
   const lines = useMemo(() => financials.filter((r: Row) => r.kind === "isBudget"), [financials]);
@@ -261,6 +266,9 @@ export default function RvFinancials({
         propertyId={propertyId}
         view={view}
         onView={setView}
+        periods={periods}
+        selectedPeriod={selectedPeriod ?? period}
+        onChangeSelectedPeriod={setSelectedPeriod}
       />
     </div>
   );
@@ -288,6 +296,9 @@ function TabbedContent({
   propertyId,
   view,
   onView,
+  periods,
+  selectedPeriod,
+  onChangeSelectedPeriod,
 }: {
   lines: Row[];
   totals: Totals;
@@ -295,31 +306,57 @@ function TabbedContent({
   propertyId: string;
   view: "statement" | "budget" | "debt";
   onView: (v: "statement" | "budget" | "debt") => void;
+  periods: string[];
+  selectedPeriod: string | null;
+  onChangeSelectedPeriod: (p: string | null) => void;
 }) {
   const setView = onView;
+  // Period selector only matters for the IS + Budget vs Actuals tabs. Debt &
+  // DSCR is sourced from a separate property_debt feed and isn't period-aware.
+  const showPeriodSelector = view !== "debt" && periods.length > 0;
   return (
     <>
       {/* Tab switcher styled identically to commercial /financials */}
-      <div className="flex gap-1 mb-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
-        {(
-          [
-            { key: "statement", label: "Income Statement" },
-            { key: "budget", label: "Budget vs Actuals" },
-            { key: "debt", label: "Debt & DSCR" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setView(t.key)}
-            className={`text-[12px] font-medium px-3 py-1.5 rounded cursor-pointer transition-colors ${
-              view === t.key
-                ? "bg-white dark:bg-[#18181b] text-[#18181b] dark:text-[#fafafa] shadow-sm"
-                : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex gap-1 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
+          {(
+            [
+              { key: "statement", label: "Income Statement" },
+              { key: "budget", label: "Budget vs Actuals" },
+              { key: "debt", label: "Debt & DSCR" },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setView(t.key)}
+              className={`text-[12px] font-medium px-3 py-1.5 rounded cursor-pointer transition-colors ${
+                view === t.key
+                  ? "bg-white dark:bg-[#18181b] text-[#18181b] dark:text-[#fafafa] shadow-sm"
+                  : "text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {showPeriodSelector && (
+          <div className="flex items-center gap-1.5">
+            <label className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] font-medium uppercase tracking-wide">
+              Period
+            </label>
+            <select
+              value={selectedPeriod || ""}
+              onChange={(e) => onChangeSelectedPeriod(e.target.value || null)}
+              className="text-[12px] px-2 py-1 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
+            >
+              {[...periods].sort().reverse().map((p) => (
+                <option key={p} value={p}>
+                  {formatPeriodLabel(p)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {view === "statement" && (
@@ -391,10 +428,16 @@ function BudgetRow({ row }: { row: Row }) {
   // subtotals reach here.
   const indent = 0;
 
+  // Grand totals (Total Income, Total Operating Expense, NOI, Net Income (Loss))
+  // get the same uppercase + bold + tinted bg treatment as the IS table so
+  // both tabs surface the headline numbers identically.
+  const isGrandTotal = kind === "subtotal" && !/\d{4}-\d{3}/.test(li);
   const rowClass = [
     "grid grid-cols-[1fr_140px_140px_90px_140px_140px_90px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center",
     kind === "header"
       ? "bg-[#f4f4f5] dark:bg-[#27272a] uppercase tracking-wide font-semibold text-[#18181b] dark:text-[#fafafa]"
+      : isGrandTotal
+      ? "bg-[#f4f4f5] dark:bg-[#27272a] uppercase tracking-wide font-bold text-[#18181b] dark:text-[#fafafa]"
       : "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]",
   ].join(" ");
 
@@ -704,6 +747,9 @@ function SummaryPanel({
   // headline. Negative values render red, positives green; expense direction
   // is interpreted as "over budget = bad" (handled by the consumer).
   const t = totals as any;
+  // `highlight: true` flags grand-total rows the asset manager should land on
+  // first — NOI and Net Income — rendered with a tinted bg so they read as
+  // headline numbers, matching the Belgold IS look.
   const rows = [
     {
       label: "Total Income",
@@ -711,8 +757,8 @@ function SummaryPanel({
       budget: t.incomeBudget,
       ytd: t.incomeYtd,
       ytdBudget: t.incomeYtdBudget,
-      // For income, exceeding budget is good (positive variance is green)
       goodWhenPositive: true,
+      highlight: false,
     },
     {
       label: "Total Operating Expense",
@@ -720,8 +766,8 @@ function SummaryPanel({
       budget: t.expenseBudget,
       ytd: t.expenseYtd,
       ytdBudget: t.expenseYtdBudget,
-      // For expense, exceeding budget is bad (positive variance is red)
       goodWhenPositive: false,
+      highlight: false,
     },
     {
       label: "NOI (Net Operating Income)",
@@ -730,6 +776,7 @@ function SummaryPanel({
       ytd: t.noiYtd,
       ytdBudget: t.noiYtdBudget,
       goodWhenPositive: true,
+      highlight: true,
     },
     {
       label: "Net Income (Loss)",
@@ -738,6 +785,7 @@ function SummaryPanel({
       ytd: t.noiYtd,
       ytdBudget: t.noiYtdBudget,
       goodWhenPositive: true,
+      highlight: true,
     },
   ];
 
@@ -761,12 +809,14 @@ function SummaryPanel({
           const isGood = r.goodWhenPositive ? positive : !positive;
           return isGood ? "text-[#16a34a]" : "text-[#dc2626]";
         };
+        const rowBg = r.highlight ? "bg-[#fafafa] dark:bg-[#27272a]/60" : "";
+        const labelClass = r.highlight ? "font-semibold" : "font-medium";
         return (
           <div
             key={idx}
-            className="grid grid-cols-[1fr_120px_120px_90px_120px_120px_90px] px-4 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-[#18181b] dark:text-[#fafafa]"
+            className={`grid grid-cols-[1fr_120px_120px_90px_120px_120px_90px] px-4 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-[#18181b] dark:text-[#fafafa] ${rowBg}`}
           >
-            <span className="font-medium">{r.label}</span>
+            <span className={labelClass}>{r.label}</span>
             <span className="text-right tabular-nums">{formatCurrency(r.mtd)}</span>
             <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
               {formatCurrency(r.budget)}
@@ -1041,6 +1091,12 @@ function ISRow({
   // Block headers are at root with the chevron drawn alongside.
   const indent = isBlockHeader ? 0 : kind === "leaf" ? 24 : kind === "subgroup" ? 12 : 0;
 
+  // Grand totals (Total Income, Total Operating Expense, NOI, Net Income (Loss))
+  // come through as `kind === "subtotal"` but lack the NNNN-NNN account-code
+  // prefix that section closers carry — those four rows get the heaviest
+  // treatment so they read as headline numbers, matching Belgold's IS.
+  const isGrandTotal = kind === "subtotal" && !/\d{4}-\d{3}/.test(li);
+
   // Row palette mirrors Belgold's IS: top-level sections + closing subtotals
   // sit on tinted backgrounds with uppercase labels; subgroup headers are
   // bold black; LEAF rows are tinted blue (the same #2563eb the Yardi-fed
@@ -1052,6 +1108,8 @@ function ISRow({
       ? "uppercase tracking-wide font-medium text-[#18181b] dark:text-[#fafafa]"
       : kind === "header"
       ? "bg-[#f4f4f5] dark:bg-[#27272a] uppercase tracking-wide font-semibold text-[#18181b] dark:text-[#fafafa]"
+      : isGrandTotal
+      ? "bg-[#f4f4f5] dark:bg-[#27272a] uppercase tracking-wide font-bold text-[#18181b] dark:text-[#fafafa]"
       : kind === "subtotal"
       ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]"
       : kind === "subgroup"

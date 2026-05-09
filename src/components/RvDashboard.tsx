@@ -5,8 +5,11 @@ import Link from "next/link";
 import { Wrench } from "lucide-react";
 import KPICard from "@/components/KPICard";
 import PageHeader from "@/components/PageHeader";
-import { useRvData, useMaintenance, formatCurrency } from "@/hooks/useConvexData";
+import { useRvData, useMaintenance, useAlerts, formatCurrency } from "@/hooks/useConvexData";
+import { useUser } from "@clerk/nextjs";
 import { useTheme } from "@/components/ThemeProvider";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 // RV park dashboard — same KPI strip + revenue chart shape Hollister/Belgold
 // use, just sourced from rv_* tables (latest monthly bundle) instead of
@@ -250,10 +253,110 @@ export default function RvDashboard({
         )}
       </div>
 
+      {/* AI insights — surfaces the income_insight alerts that the
+          rvInsights action generates after every monthly bundle commit.
+          Same shape as the commercial dashboard's Latest AI Insights. */}
+      <LatestRvInsights propertyId={propertyId} />
+
       {/* Maintenance widget — same shape commercial dashboards render under
           the chart. Pulls open / overdue / routine counts from
           maintenance_log and lists the next 5 actionable items. */}
       <MaintenanceSummary propertyId={propertyId} />
+    </div>
+  );
+}
+
+function LatestRvInsights({ propertyId }: { propertyId: string }) {
+  const { alerts, loading } = useAlerts();
+  const { user } = useUser();
+  const updateStatus = useMutation(api.alerts.updateStatus);
+  const active = useMemo(() => {
+    return (alerts as any[])
+      .filter(
+        (a) =>
+          a.alertType === "income_insight" &&
+          a.propertyId === propertyId &&
+          a.status !== "false_flag" &&
+          a.status !== "resolved" &&
+          a.status !== "dismissed",
+      )
+      .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
+      .slice(0, 6);
+  }, [alerts, propertyId]);
+
+  if (loading) {
+    return (
+      <div className="mt-6">
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-3">
+          Latest AI Insights
+        </p>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46]">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3 px-3 py-2.5 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#e4e4e7] dark:bg-[#3f3f46]" />
+              <span className="flex-1 h-3 bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+              <span className="h-3 w-12 bg-[#f4f4f5] dark:bg-[#27272a] rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (active.length === 0) return null;
+
+  const sevDot: Record<string, string> = {
+    critical: "bg-[#dc2626]",
+    warning: "bg-[#d97706]",
+    info: "bg-[#2563eb]",
+  };
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">
+          Latest AI Insights
+        </p>
+        <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">
+          From most recent monthly bundle
+        </p>
+      </div>
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded divide-y divide-[#e4e4e7] dark:divide-[#3f3f46] max-h-[360px] overflow-y-auto">
+        {active.map((ins: any) => (
+          <div
+            key={ins._id}
+            className="flex items-start gap-3 px-3 py-2.5 hover:bg-[#fafafa] dark:hover:bg-[#27272a] transition-colors"
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${sevDot[ins.severity] || sevDot.info}`}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate">
+                {ins.title}
+              </p>
+              <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5 line-clamp-2">
+                {ins.body}
+              </p>
+            </div>
+            <span className="text-[9px] uppercase tracking-wide font-medium text-[#a1a1aa] dark:text-[#71717a] flex-shrink-0 mt-0.5">
+              {ins.severity}
+            </span>
+            <button
+              onClick={() =>
+                updateStatus({
+                  id: ins._id,
+                  status: "resolved",
+                  resolvedBy: user?.fullName || user?.firstName || "User",
+                })
+              }
+              className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] hover:text-[#16a34a] cursor-pointer flex-shrink-0 mt-0.5"
+              title="Mark as resolved"
+            >
+              ✓
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

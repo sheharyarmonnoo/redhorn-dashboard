@@ -1,7 +1,7 @@
 "use node";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import * as XLSX from "xlsx";
 
 // ---------- Tiny RFC-4180-ish CSV parser ----------
@@ -71,10 +71,29 @@ function str(s: any): string {
 function isoDate(s: string): string {
   const t = str(s);
   if (!t) return "";
+  // MM-DD-YYYY (some legacy uploads)
   const m1 = t.match(/^(\d{2})-(\d{2})-(\d{4})$/);
   if (m1) return `${m1[3]}-${m1[1]}-${m1[2]}`;
+  // YYYY-MM-DD (already ISO)
   const m2 = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
+  // M/D/YYYY or MM/DD/YYYY (Campspot exports — what we were missing).
+  // Without this, dates like "4/21/2026" fell through unchanged and broke
+  // string-comparison filters in the rent-roll Ledger drawer (Past stays
+  // leaked into Upcoming).
+  const m3 = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m3) {
+    const mm = m3[1].padStart(2, "0");
+    const dd = m3[2].padStart(2, "0");
+    return `${m3[3]}-${mm}-${dd}`;
+  }
+  // YYYY/MM/DD with slashes
+  const m4 = t.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (m4) {
+    const mm = m4[2].padStart(2, "0");
+    const dd = m4[3].padStart(2, "0");
+    return `${m4[1]}-${mm}-${dd}`;
+  }
   return t;
 }
 
@@ -718,6 +737,38 @@ export const commitBundle = action({
       bundleId: args.bundleId,
       committedBy: args.committedBy,
     });
+
+    // Single umbrella activity entry per bundle commit so the /activity
+    // feed gets one "Bundle committed" line — the commercial Yardi sync
+    // logs a single "sync" event the same way. The per-alert entries
+    // alerts.create writes downstream are still useful but they shouldn't
+    // be the only signal that a monthly load happened.
+    try {
+      const totals =
+        `${totalReservations} reservations, ${totalBalances} balances, ` +
+        `${totalPos} POS lines, ${totalPayments} payments, ${totalFinancials} financial rows`;
+      await ctx.runMutation(api.activityLog.log, {
+        type: "sync",
+        description: `RV bundle committed for ${period} — ${totals}`,
+        user: args.committedBy || "System",
+      });
+    } catch {
+      // No-op: activity logging failure shouldn't break the commit response.
+    }
+
+    // Kick off Claude-powered insights generation in the background. Done
+    // async so the commit returns fast even if the Anthropic call is slow;
+    // surfaced failures land in the action's own return value (logged but
+    // not bubbled to the user — the bundle is already committed).
+    try {
+      await ctx.scheduler.runAfter(0, api.rvInsights.extractInsightsForBundle, {
+        bundleId: args.bundleId,
+        propertyId: bundle.propertyId,
+        period,
+      });
+    } catch {
+      // No-op: scheduling failure shouldn't break the commit response.
+    }
 
     return {
       reservations: totalReservations,

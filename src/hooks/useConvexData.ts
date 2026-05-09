@@ -562,14 +562,24 @@ export function useRvData(propertyId: string | undefined) {
 }
 
 // Same as useRvData but only loads financials — used by the financials page
-// to avoid pulling reservations/POS when only the package is needed.
-export function useRvFinancials(propertyId: string | undefined) {
+// to avoid pulling reservations/POS when only the package is needed. When a
+// `period` is passed, returns that historical snapshot; otherwise returns the
+// most recent snapshot. `periods` is the full list of months the user can
+// pick from in the Period dropdown.
+export function useRvFinancials(propertyId: string | undefined, period?: string | null) {
   const financials = useQuery(
-    api.rv.listFinancials,
+    api.rv.listFinancialsForPeriod,
+    propertyId
+      ? { propertyId: propertyId as any, period: period || undefined }
+      : "skip",
+  );
+  const periods = useQuery(
+    api.rv.listFinancialPeriods,
     propertyId ? { propertyId: propertyId as any } : "skip",
   );
   return {
     financials: financials ?? [],
+    periods: periods ?? [],
     loading: !!propertyId && financials === undefined,
   };
 }
@@ -627,9 +637,15 @@ export function useTenantMutations() {
 // ===== HELPER: format currency =====
 
 export function formatCurrency(amount: number): string {
+  // Round to whole dollars everywhere. The RV park's Northgate financial
+  // package carries cents (e.g. $35,615.97) which read as noise next to the
+  // commercial Yardi feeds that already come in whole-dollar. Setting
+  // maximumFractionDigits: 0 keeps every page consistent — no decimals in
+  // financials, KPIs, drawers, or pipeline values.
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(amount);
 }
