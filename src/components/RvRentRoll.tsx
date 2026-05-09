@@ -263,15 +263,33 @@ export default function RvRentRoll({
   );
 
   // Apply ?unit=<siteCode> once the row data is in: filter the grid to that
-  // code and open its drawer. Tracked via ref so a property switch resets
-  // and a same-param re-render doesn't loop the effect.
+  // code and open its drawer. The drawer-side caller passes the value from
+  // rv_balances.campsiteNames, which may be a long display string like
+  // "Seasonal Premium RV Site 098" rather than a bare code. Match strategy:
+  //   1. exact siteCode match (case-insensitive)
+  //   2. target ends with " <siteCode>" (handles long Campspot display strings)
+  //   3. target contains the siteCode token
+  // First-match wins.
   useEffect(() => {
     if (!deepLinkUnit || allRows.length === 0) return;
     if (deepLinkAppliedRef.current === deepLinkUnit) return;
-    const target = String(deepLinkUnit).trim();
-    const match = allRows.find(
-      (r) => r.siteCode.toLowerCase() === target.toLowerCase(),
-    );
+    const target = String(deepLinkUnit).trim().toLowerCase();
+    if (!target) return;
+    let match = allRows.find((r) => r.siteCode.toLowerCase() === target);
+    if (!match) {
+      match = allRows.find((r) => {
+        const code = r.siteCode.toLowerCase();
+        return target.endsWith(` ${code}`) || target.endsWith(`/${code}`);
+      });
+    }
+    if (!match) {
+      match = allRows.find((r) => {
+        const code = r.siteCode.toLowerCase();
+        // Token boundary so "98" doesn't accidentally match "098"/"198".
+        const re = new RegExp(`(?:^|[\\s/-])${code.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}(?:[\\s/-]|$)`);
+        return re.test(target);
+      });
+    }
     if (match) {
       deepLinkAppliedRef.current = deepLinkUnit;
       setSelectedCode(match.siteCode);
