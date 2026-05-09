@@ -3,18 +3,19 @@ import { useMemo } from "react";
 import PageHeader from "@/components/PageHeader";
 import { useRvFinancials, formatCurrency } from "@/hooks/useConvexData";
 
-// RV park income statement — mirrors the commercial Hollister/Belgold
-// /financials layout: KPI strip + single IS table. Sourced from the monthly
-// Northgate xlsx (rv_financials.kind === "isBudget"). Cash Flow / Balance
-// Sheet / GL parsed data still lives in Convex but isn't surfaced here per
-// the user's directive to keep this page focused on P&L performance.
+// RV park income statement — visually mirrors the commercial Hollister/
+// Belgold /financials layout: KPI strip + Summary panel + IS table with
+// LINE ITEM / period / Budget / VARIANCE $ / VAR % / % INCOME columns.
+// Sourced from the monthly Northgate xlsx (rv_financials.kind === "isBudget").
+// Cash Flow / Balance Sheet / GL parsed data still lives in Convex but isn't
+// surfaced here per the user's directive to focus this page on P&L.
 
 type Row = any;
 
 type LineKind = "header" | "subgroup" | "leaf" | "subtotal" | "skip";
 
-// Line classification based on the lineItem text. The Northgate xlsx doesn't
-// carry an explicit hierarchy level, so we derive one from naming convention:
+// Line classification derived from naming convention since the Northgate
+// xlsx doesn't carry an explicit hierarchyLevel:
 //   "Income" / "Expense" / generic capitalized words → section header
 //   "NNNN-000 - Total X" without amounts → subgroup header
 //   "Total - X" → subtotal (bold)
@@ -23,9 +24,7 @@ function classifyLine(r: Row): LineKind {
   const li = String(r.lineItem || "").trim();
   if (!li) return "skip";
   if (/^Total\s*-/i.test(li)) return "subtotal";
-  // Lines like "Income" / "Expense" / "Ordinary Income/Expense" / "Net Income"
   if (!/^\d/.test(li) && !r.subsidiary) return "header";
-  // "4020-000 - Total RV Income" — header for a sub-section, has no amounts
   if (/^\d{4}-000/.test(li)) return "subgroup";
   return "leaf";
 }
@@ -37,6 +36,25 @@ function isExpenseContext(li: string): boolean {
   return /^[5-9]\d{3}-/.test(li);
 }
 
+function formatPeriodLabel(period: string | null) {
+  if (!period) return "—";
+  return new Date(`${period}-01T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).toUpperCase();
+}
+
+function formatPctSigned(p: number | null | undefined) {
+  if (p == null || !Number.isFinite(p)) return "—";
+  return `${p >= 0 ? "+" : ""}${(p * 100).toFixed(1)}%`;
+}
+
+function formatVarianceDollars(v: number) {
+  if (Math.abs(v) < 0.5) return "—";
+  return `${v >= 0 ? "+" : "−"}${formatCurrency(Math.abs(v))}`;
+}
+
 export default function RvFinancials({
   propertyName,
   propertyId,
@@ -46,33 +64,55 @@ export default function RvFinancials({
 }) {
   const { financials, loading } = useRvFinancials(propertyId);
 
-  // Filter to IS-vs-Budget rows only — BS / CF / GL parsed data isn't
-  // surfaced on this page (user feedback: keep this page focused).
+  void propertyName;
   const lines = useMemo(() => financials.filter((r: Row) => r.kind === "isBudget"), [financials]);
-
   const period = lines[0]?.snapshotPeriod || null;
+  const periodLabel = formatPeriodLabel(period);
 
-  // KPIs — sum the leaf revenue / expense lines, skipping "Total -"
-  // subtotals so we don't double-count.
-  const kpis = useMemo(() => {
+  // KPIs / summary totals — sum the LEAF revenue / expense lines, skipping
+  // "Total -" subtotals so we don't double-count.
+  const totals = useMemo(() => {
     let income = 0;
-    let expense = 0;
+    let incomeBudget = 0;
     let incomeYtd = 0;
+    let incomeYtdBudget = 0;
+    let expense = 0;
+    let expenseBudget = 0;
     let expenseYtd = 0;
+    let expenseYtdBudget = 0;
     for (const r of lines) {
       if (classifyLine(r) !== "leaf") continue;
       const li = String(r.lineItem || "");
       if (isIncomeContext(li)) {
         income += r.amountMtd || 0;
+        incomeBudget += r.budgetMtd || 0;
         incomeYtd += r.amountYtd || 0;
+        incomeYtdBudget += r.budgetYtd || 0;
       } else if (isExpenseContext(li)) {
         expense += r.amountMtd || 0;
+        expenseBudget += r.budgetMtd || 0;
         expenseYtd += r.amountYtd || 0;
+        expenseYtdBudget += r.budgetYtd || 0;
       }
     }
     const noi = income - expense;
+    const noiBudget = incomeBudget - expenseBudget;
     const noiYtd = incomeYtd - expenseYtd;
-    return { income, expense, noi, incomeYtd, expenseYtd, noiYtd };
+    const noiYtdBudget = incomeYtdBudget - expenseYtdBudget;
+    return {
+      income,
+      incomeBudget,
+      incomeYtd,
+      incomeYtdBudget,
+      expense,
+      expenseBudget,
+      expenseYtd,
+      expenseYtdBudget,
+      noi,
+      noiBudget,
+      noiYtd,
+      noiYtdBudget,
+    };
   }, [lines]);
 
   if (!propertyId) return null;
@@ -80,7 +120,7 @@ export default function RvFinancials({
   if (loading) {
     return (
       <div>
-        <PageHeader title="Financials" subtitle={`${propertyName} — loading…`} />
+        <PageHeader title="Financials" subtitle="Loading…" />
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
           {[1, 2, 3, 4].map((i) => (
             <div
@@ -95,7 +135,11 @@ export default function RvFinancials({
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6">
           <div className="space-y-2 animate-pulse">
             {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-              <div key={i} className="h-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded" style={{ opacity: 0.6 + (i % 5) * 0.08 }} />
+              <div
+                key={i}
+                className="h-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded"
+                style={{ opacity: 0.6 + (i % 5) * 0.08 }}
+              />
             ))}
           </div>
         </div>
@@ -103,18 +147,10 @@ export default function RvFinancials({
     );
   }
 
-  const periodLabel = period
-    ? new Date(`${period}-01T00:00:00Z`).toLocaleDateString("en-US", {
-        month: "long",
-        year: "numeric",
-        timeZone: "UTC",
-      })
-    : "—";
-
   if (lines.length === 0) {
     return (
       <div>
-        <PageHeader title="Financials" subtitle={propertyName} />
+        <PageHeader title="Financials" subtitle="Income Statement" />
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-10 text-center">
           <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">No financial data yet</p>
           <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1.5">
@@ -125,27 +161,43 @@ export default function RvFinancials({
     );
   }
 
+  const subtitlePeriod = period
+    ? new Date(`${period}-01T00:00:00Z`).toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      })
+    : "";
+
   return (
     <div>
-      <PageHeader title="Financials" subtitle={`Income Statement · ${periodLabel}`} />
+      <PageHeader title="Financials" subtitle={`Income Statement · ${subtitlePeriod}`} />
 
-      {/* KPI strip — same shape as commercial /financials */}
+      {/* KPI strip — matches commercial /financials shape */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
-        <KPIBox label="Total Income" value={formatCurrency(kpis.income)} />
-        <KPIBox label="Total Expense" value={formatCurrency(kpis.expense)} color="text-[#dc2626]" />
+        <KPIBox label="Total Income" value={formatCurrency(totals.income)} />
+        <KPIBox
+          label="Total Expense"
+          value={formatCurrency(totals.expense)}
+          color="text-[#dc2626]"
+        />
         <KPIBox
           label="NOI"
-          value={formatCurrency(kpis.noi)}
-          color={kpis.noi >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}
+          value={formatCurrency(totals.noi)}
+          color={totals.noi >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}
         />
         <KPIBox
           label="YTD NOI"
-          value={formatCurrency(kpis.noiYtd)}
-          color={kpis.noiYtd >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}
+          value={formatCurrency(totals.noiYtd)}
+          color={totals.noiYtd >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}
         />
       </div>
 
-      <IncomeStatementTable lines={lines} />
+      {/* Summary panel — same shape as Hollister: Total Income / Total
+          Operating Expense / NOI / Net Income across the period vs budget. */}
+      <SummaryPanel totals={totals} periodLabel={periodLabel} />
+
+      <IncomeStatementTable lines={lines} totalIncome={totals.income} periodLabel={periodLabel} />
     </div>
   );
 }
@@ -153,33 +205,142 @@ export default function RvFinancials({
 function KPIBox({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3">
-      <p className={`text-[18px] sm:text-[20px] font-semibold tracking-tight ${color || "text-[#18181b] dark:text-[#fafafa]"}`}>
+      <p
+        className={`text-[18px] sm:text-[20px] font-semibold tracking-tight ${
+          color || "text-[#18181b] dark:text-[#fafafa]"
+        }`}
+      >
         {value}
       </p>
-      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] font-medium uppercase tracking-wide mt-0.5">{label}</p>
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] font-medium uppercase tracking-wide mt-0.5">
+        {label}
+      </p>
     </div>
   );
 }
 
-function IncomeStatementTable({ lines }: { lines: Row[] }) {
+function SummaryPanel({
+  totals,
+  periodLabel,
+}: {
+  totals: ReturnType<typeof useMemo<any>> extends infer R ? any : never; // shape only
+  periodLabel: string;
+}) {
+  // Compute MTD vs Budget variance and YTD vs Budget YTD variance for each
+  // headline. Negative values render red, positives green; expense direction
+  // is interpreted as "over budget = bad" (handled by the consumer).
+  const t = totals as any;
+  const rows = [
+    {
+      label: "Total Income",
+      mtd: t.income,
+      budget: t.incomeBudget,
+      ytd: t.incomeYtd,
+      ytdBudget: t.incomeYtdBudget,
+      // For income, exceeding budget is good (positive variance is green)
+      goodWhenPositive: true,
+    },
+    {
+      label: "Total Operating Expense",
+      mtd: t.expense,
+      budget: t.expenseBudget,
+      ytd: t.expenseYtd,
+      ytdBudget: t.expenseYtdBudget,
+      // For expense, exceeding budget is bad (positive variance is red)
+      goodWhenPositive: false,
+    },
+    {
+      label: "NOI (Net Operating Income)",
+      mtd: t.noi,
+      budget: t.noiBudget,
+      ytd: t.noiYtd,
+      ytdBudget: t.noiYtdBudget,
+      goodWhenPositive: true,
+    },
+    {
+      label: "Net Income (Loss)",
+      mtd: t.noi,
+      budget: t.noiBudget,
+      ytd: t.noiYtd,
+      ytdBudget: t.noiYtdBudget,
+      goodWhenPositive: true,
+    },
+  ];
+
   return (
-    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[1fr_120px_120px_100px_120px_120px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
-        <span>Line</span>
-        <span className="text-right">MTD</span>
-        <span className="text-right">Budget MTD</span>
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden mb-4">
+      <div className="grid grid-cols-[1fr_120px_120px_90px_120px_120px_90px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2.5 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <span>Summary</span>
+        <span className="text-right">{periodLabel}</span>
+        <span className="text-right">Budget</span>
         <span className="text-right">Var %</span>
         <span className="text-right">YTD</span>
         <span className="text-right">Budget YTD</span>
+        <span className="text-right">YTD Var %</span>
+      </div>
+      {rows.map((r, idx) => {
+        const varPct = r.budget !== 0 ? (r.mtd - r.budget) / Math.abs(r.budget) : null;
+        const ytdVarPct = r.ytdBudget !== 0 ? (r.ytd - r.ytdBudget) / Math.abs(r.ytdBudget) : null;
+        const colorVar = (v: number | null) => {
+          if (v == null) return "text-[#71717a] dark:text-[#a1a1aa]";
+          const positive = v >= 0;
+          const isGood = r.goodWhenPositive ? positive : !positive;
+          return isGood ? "text-[#16a34a]" : "text-[#dc2626]";
+        };
+        return (
+          <div
+            key={idx}
+            className="grid grid-cols-[1fr_120px_120px_90px_120px_120px_90px] px-4 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center text-[#18181b] dark:text-[#fafafa]"
+          >
+            <span className="font-medium">{r.label}</span>
+            <span className="text-right tabular-nums">{formatCurrency(r.mtd)}</span>
+            <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
+              {formatCurrency(r.budget)}
+            </span>
+            <span className={`text-right tabular-nums ${colorVar(varPct)}`}>
+              {formatPctSigned(varPct)}
+            </span>
+            <span className="text-right tabular-nums">{formatCurrency(r.ytd)}</span>
+            <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
+              {formatCurrency(r.ytdBudget)}
+            </span>
+            <span className={`text-right tabular-nums ${colorVar(ytdVarPct)}`}>
+              {formatPctSigned(ytdVarPct)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function IncomeStatementTable({
+  lines,
+  totalIncome,
+  periodLabel,
+}: {
+  lines: Row[];
+  totalIncome: number;
+  periodLabel: string;
+}) {
+  return (
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
+      <div className="grid grid-cols-[1fr_120px_120px_120px_90px_90px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2.5 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+        <span>Line Item</span>
+        <span className="text-right">{periodLabel}</span>
+        <span className="text-right">Budget</span>
+        <span className="text-right">Variance $</span>
+        <span className="text-right">Var %</span>
+        <span className="text-right">% Income</span>
       </div>
       {lines.map((r: Row, i: number) => (
-        <ISRow key={`${r._id}-${i}`} row={r} />
+        <ISRow key={`${r._id}-${i}`} row={r} totalIncome={totalIncome} />
       ))}
     </div>
   );
 }
 
-function ISRow({ row }: { row: Row }) {
+function ISRow({ row, totalIncome }: { row: Row; totalIncome: number }) {
   const kind = classifyLine(row);
   if (kind === "skip") return null;
 
@@ -188,7 +349,7 @@ function ISRow({ row }: { row: Row }) {
   const indent = kind === "leaf" ? 24 : kind === "subgroup" ? 12 : 0;
 
   const rowClass = [
-    "grid grid-cols-[1fr_120px_120px_100px_120px_120px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center",
+    "grid grid-cols-[1fr_120px_120px_120px_90px_90px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center",
     kind === "header"
       ? "bg-[#f4f4f5] dark:bg-[#27272a] uppercase tracking-wide font-semibold text-[#18181b] dark:text-[#fafafa]"
       : kind === "subtotal"
@@ -200,11 +361,32 @@ function ISRow({ row }: { row: Row }) {
 
   const mtd = row.amountMtd || 0;
   const budgetMtd = row.budgetMtd || 0;
-  const ytd = row.amountYtd || 0;
-  const budgetYtd = row.budgetYtd || 0;
+  const varianceDollars = mtd - budgetMtd;
   const varPct = row.pctVarianceMtd;
-  const showVar = varPct != null && Number.isFinite(varPct) && Math.abs(varPct) > 0.0001;
+  const showVarPct = varPct != null && Number.isFinite(varPct) && Math.abs(varPct) > 0.0001;
   const isNegMtd = mtd < 0;
+  const isIncomeLine = isIncomeContext(li);
+
+  // % Income — share of Total Income for income lines; share of Total Income
+  // for expense / leaf lines too (mirrors Hollister's "% Income" column which
+  // shows expense lines as a fraction of revenue).
+  const pctIncome = totalIncome > 0 && kind === "leaf" && Math.abs(mtd) > 0.5
+    ? Math.abs(mtd) / totalIncome
+    : null;
+
+  // Color the variance: income beating budget = green; expense over budget
+  // = red. Leaf-level color matches the line's own income/expense context;
+  // for subgroup / subtotal rows we use the simpler "positive = green" rule.
+  function varColor() {
+    if (Math.abs(varianceDollars) < 0.5) return "text-[#71717a] dark:text-[#a1a1aa]";
+    if (isIncomeLine) {
+      return varianceDollars >= 0 ? "text-[#16a34a]" : "text-[#dc2626]";
+    }
+    if (isExpenseContext(li)) {
+      return varianceDollars <= 0 ? "text-[#16a34a]" : "text-[#dc2626]";
+    }
+    return varianceDollars >= 0 ? "text-[#16a34a]" : "text-[#dc2626]";
+  }
 
   return (
     <div className={rowClass}>
@@ -217,18 +399,26 @@ function ISRow({ row }: { row: Row }) {
       <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
         {kind === "header" || budgetMtd === 0 ? "—" : formatCurrency(budgetMtd)}
       </span>
+      <span className={`text-right tabular-nums ${varColor()}`}>
+        {kind === "header" || (mtd === 0 && budgetMtd === 0) ? "—" : formatVarianceDollars(varianceDollars)}
+      </span>
       <span
         className={`text-right tabular-nums text-[11px] ${
-          showVar ? (varPct >= 0 ? "text-[#16a34a]" : "text-[#dc2626]") : "text-[#71717a] dark:text-[#a1a1aa]"
+          showVarPct
+            ? varPct >= 0
+              ? isExpenseContext(li)
+                ? "text-[#dc2626]"
+                : "text-[#16a34a]"
+              : isExpenseContext(li)
+              ? "text-[#16a34a]"
+              : "text-[#dc2626]"
+            : "text-[#71717a] dark:text-[#a1a1aa]"
         }`}
       >
-        {showVar ? `${varPct >= 0 ? "+" : ""}${(varPct * 100).toFixed(1)}%` : "—"}
+        {showVarPct ? formatPctSigned(varPct) : "—"}
       </span>
-      <span className="text-right tabular-nums">
-        {kind === "header" || ytd === 0 ? "—" : formatCurrency(Math.abs(ytd))}
-      </span>
-      <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
-        {kind === "header" || budgetYtd === 0 ? "—" : formatCurrency(budgetYtd)}
+      <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa] text-[11px]">
+        {pctIncome != null ? `${(pctIncome * 100).toFixed(0)}%` : "—"}
       </span>
     </div>
   );
