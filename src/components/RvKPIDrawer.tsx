@@ -270,11 +270,11 @@ function PastDueDetail({
               key={u.siteCode}
               onClick={() => openSite(u.siteCode)}
               className="w-full text-left py-2 border-b border-[#f4f4f5] dark:border-[#27272a] last:border-0 hover:bg-[#fafafa] dark:hover:bg-[#27272a]/40 cursor-pointer transition-colors"
-              title={`Open site ${u.siteCode} in rent roll`}
+              title={`Open ${u.siteCode} in rent roll`}
             >
               <div className="flex items-start justify-between gap-3">
                 <span className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa] truncate min-w-0 flex-1">
-                  Site {u.siteCode}
+                  {u.siteCode}
                 </span>
                 <span className="text-[12px] font-medium text-[#dc2626] whitespace-nowrap flex-shrink-0">
                   {formatCurrency(u.balance)}
