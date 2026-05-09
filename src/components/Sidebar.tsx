@@ -2,12 +2,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Map, Table, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Activity, Sun, Moon, UserCircle, TrendingUp, Briefcase, Wrench, Users } from "lucide-react";
+import { LayoutDashboard, Map, Table, AlertTriangle, Database, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen, Activity, Sun, Moon, UserCircle, TrendingUp, Briefcase, Wrench, Users, Upload } from "lucide-react";
 import { UserButton, useUser } from "@clerk/nextjs";
 import { useProperties, useActivePropertyId } from "@/hooks/useConvexData";
 import { useTheme } from "@/components/ThemeProvider";
 
-type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; badge?: string | null };
+type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; badge?: string | null; rvOnly?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
@@ -31,6 +31,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/maintenance", label: "Maintenance", icon: Wrench },
       { href: "/meetings", label: "Meetings", icon: Users },
+      { href: "/uploads", label: "Monthly Uploads", icon: Upload, rvOnly: true },
       { href: "/deals", label: "Deal Pipeline", icon: Briefcase },
       { href: "/activity", label: "Activity", icon: Activity },
     ],
@@ -54,6 +55,15 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
   const firstName = user?.firstName || "";
 
   const current = properties.find(p => p.code === propId) || properties[0];
+  const isRv = current?.propertyType === "rv_park";
+
+  // Hide rvOnly items unless the active property is the RV park. Same filter
+  // is applied in both collapsed + expanded renders so the sidebar stays in
+  // sync as Max switches portfolios.
+  const visibleGroups = navGroups.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => !i.rvOnly || isRv),
+  }));
 
   function switchProperty(code: string) {
     setActiveProperty(code);
@@ -67,7 +77,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
           <span className="text-[14px] font-bold text-white">R</span>
         </div>
         <nav className="flex-1 px-2 py-2 overflow-y-auto">
-          {navGroups.map((group, gIdx) => (
+          {visibleGroups.map((group, gIdx) => (
             <div key={group.label} className={gIdx > 0 ? "mt-3 pt-3 border-t border-white/[0.04]" : ""}>
               {group.items.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href;
@@ -144,7 +154,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
       </div>
 
       <nav className="flex-1 px-3 mt-4 overflow-y-auto">
-        {navGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.label} className="mb-4 last:mb-0">
             <p className="text-[9px] text-[#52525b] font-medium uppercase tracking-[0.14em] px-2.5 mb-1.5">
               {group.label}

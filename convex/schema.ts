@@ -555,4 +555,200 @@ export default defineSchema({
     createdAt: v.string(),
     dataContext: v.optional(v.any()),
   }).index("by_thread", ["threadId"]),
+
+  // ===== RV PARK: monthly upload bundles =====
+  // Max uploads the 5-file Campspot+Northgate bundle once a month. Drop-zone is
+  // gated to once-a-month: locked until the 1st of the month, unlocks for one
+  // bundle, then locks again until next 1st. Period derived from the file
+  // contents (filenames + sheet titles), NOT the upload timestamp — Max may
+  // be backdating Jan/Feb/Mar even though it's May.
+  rv_upload_bundles: defineTable({
+    propertyId: v.id("properties"),
+    period: v.string(),                          // "YYYY-MM" — period the bundle represents
+    status: v.string(),                          // "draft" (files uploading) | "committed" (parsed + locked)
+    files: v.array(v.object({
+      id: v.string(),
+      storageId: v.id("_storage"),
+      name: v.string(),
+      size: v.number(),
+      fileType: v.string(),                      // "rentRoll" | "balances" | "pos" | "payments" | "financial" | "unknown"
+      rowsParsed: v.optional(v.number()),
+      parseError: v.optional(v.string()),
+      uploadedAt: v.number(),
+    })),
+    uploadedBy: v.optional(v.string()),
+    committedAt: v.optional(v.number()),
+    committedBy: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_property_period", ["propertyId", "period"])
+    .index("by_property_status", ["propertyId", "status"])
+    .index("by_property", ["propertyId"]),
+
+  // ===== RV SITES =====
+  // Physical RV sites. Discovered from rent-roll uploads and persisted so the
+  // site plan / rent roll views can render even between reservation snapshots.
+  rv_sites: defineTable({
+    propertyId: v.id("properties"),
+    siteCode: v.string(),                        // "208", "059B", "Glamping A/409"
+    displayName: v.string(),                     // "Seasonal Premium RV Site 208"
+    siteType: v.string(),                        // "Seasonal Premium RV", "Lakeside", "Cabin", "Glamping"
+    siteClass: v.optional(v.string()),           // "RV Sites" | "Cabins" | etc
+    firstSeen: v.string(),                       // YYYY-MM-DD when first observed in any bundle
+    lastSeen: v.string(),                        // YYYY-MM-DD most recent snapshot containing this site
+  })
+    .index("by_property_code", ["propertyId", "siteCode"])
+    .index("by_property", ["propertyId"]),
+
+  // ===== RV RESERVATIONS (snapshots) =====
+  // Append-only by snapshotPeriod. Same reservation (same confirmation #) may
+  // appear in multiple monthly snapshots with different paid % / balance —
+  // that's the time series. isLatest flags rows from the most recent snapshot
+  // for live views.
+  rv_reservations: defineTable({
+    bundleId: v.id("rv_upload_bundles"),
+    propertyId: v.id("properties"),
+    snapshotPeriod: v.string(),                  // "YYYY-MM"
+    isLatest: v.boolean(),
+    confirmation: v.string(),                    // R00000004616 — natural key
+    siteCode: v.string(),
+    siteName: v.string(),
+    siteType: v.string(),
+    siteClass: v.optional(v.string()),
+    firstName: v.string(),
+    lastName: v.string(),
+    email: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    arrivalDate: v.string(),                     // YYYY-MM-DD
+    departureDate: v.string(),
+    nights: v.number(),
+    reservationCharges: v.number(),
+    occupancyCharges: v.number(),
+    surcharges: v.number(),
+    discounts: v.number(),
+    tax: v.number(),
+    total: v.number(),
+    totalChargesOnInvoice: v.number(),
+    totalPaymentsOnInvoice: v.number(),
+    percentPaid: v.number(),
+    balanceOnReservation: v.number(),
+    balanceOnInvoice: v.number(),
+    utilityCharges: v.number(),
+    posCharges: v.number(),
+    packageApplied: v.optional(v.string()),
+    promoCode: v.optional(v.string()),
+    reservationSource: v.optional(v.string()),
+    createdBy: v.optional(v.string()),
+    invoiceLink: v.optional(v.string()),
+  })
+    .index("by_property_latest", ["propertyId", "isLatest"])
+    .index("by_property_period", ["propertyId", "snapshotPeriod"])
+    .index("by_confirmation", ["propertyId", "confirmation"])
+    .index("by_bundle", ["bundleId"]),
+
+  // ===== RV BALANCES (Guests with Balance report) =====
+  // Per-guest A/R as of the snapshot date. Mirrors the commercial aging table.
+  rv_balances: defineTable({
+    bundleId: v.id("rv_upload_bundles"),
+    propertyId: v.id("properties"),
+    snapshotPeriod: v.string(),
+    isLatest: v.boolean(),
+    firstName: v.string(),
+    lastName: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    totalCharges: v.number(),
+    totalPayments: v.number(),
+    balance: v.number(),
+    campsiteType: v.optional(v.string()),
+    campsiteNames: v.optional(v.string()),
+    arrivalDate: v.optional(v.string()),
+    departureDate: v.optional(v.string()),
+    confirmation: v.optional(v.string()),
+    status: v.optional(v.string()),
+    invoiceNumber: v.optional(v.string()),
+  })
+    .index("by_property_latest", ["propertyId", "isLatest"])
+    .index("by_property_period", ["propertyId", "snapshotPeriod"]),
+
+  // ===== RV POS SALES =====
+  // Daily camp-store revenue lines. Granularity = day × financial account ×
+  // product category. saleMonth duplicated for fast monthly rollups.
+  rv_pos_sales: defineTable({
+    bundleId: v.id("rv_upload_bundles"),
+    propertyId: v.id("properties"),
+    snapshotPeriod: v.string(),
+    isLatest: v.boolean(),
+    saleDate: v.string(),                        // YYYY-MM-DD
+    saleMonth: v.string(),                       // YYYY-MM
+    financialAccount: v.string(),                // "Merchandise Revenue", "Grocery Revenue", "Additional Person Fees"
+    productCategory: v.string(),                 // "Hardware", "Beverage", "Day Passes", etc
+    netQuantitySold: v.number(),
+    subTotal: v.number(),
+    totalDiscount: v.number(),
+    totalTax: v.number(),
+    total: v.number(),
+    defaultCost: v.number(),
+  })
+    .index("by_property_date", ["propertyId", "saleDate"])
+    .index("by_property_month", ["propertyId", "saleMonth"])
+    .index("by_property_latest", ["propertyId", "isLatest"]),
+
+  // ===== RV PAYMENTS (payment-mix summary) =====
+  rv_payments: defineTable({
+    bundleId: v.id("rv_upload_bundles"),
+    propertyId: v.id("properties"),
+    snapshotPeriod: v.string(),
+    isLatest: v.boolean(),
+    paymentType: v.string(),                     // "Cash" | "Credit" | "Credit Terminal" | "Check" | "ACH" | "Certificate" | "Transfer Internal"
+    cardType: v.optional(v.string()),            // "Visa", "Mastercard" — empty for non-card
+    reservationSystem: v.number(),
+    posSystem: v.number(),
+    totalPayments: v.number(),
+  })
+    .index("by_property_latest", ["propertyId", "isLatest"])
+    .index("by_property_period", ["propertyId", "snapshotPeriod"]),
+
+  // ===== RV FINANCIALS (Northgate xlsx package) =====
+  // One row per financial-statement line. kind discriminates which sheet:
+  // "isBudget" (P&L vs budget MTD/YTD), "balanceSheet", "cashFlow", "generalLedger".
+  rv_financials: defineTable({
+    bundleId: v.id("rv_upload_bundles"),
+    propertyId: v.id("properties"),
+    snapshotPeriod: v.string(),                  // "YYYY-MM" of the financial package
+    isLatest: v.boolean(),
+    kind: v.string(),                            // "isBudget" | "balanceSheet" | "cashFlow" | "generalLedger"
+    lineItem: v.optional(v.string()),
+    hierarchyLevel: v.optional(v.number()),
+    parentLine: v.optional(v.string()),
+    // IS vs Budget
+    subsidiary: v.optional(v.string()),
+    amountMtd: v.optional(v.number()),
+    budgetMtd: v.optional(v.number()),
+    varianceMtd: v.optional(v.number()),
+    pctVarianceMtd: v.optional(v.number()),
+    amountYtd: v.optional(v.number()),
+    budgetYtd: v.optional(v.number()),
+    // Balance sheet
+    balanceAmount: v.optional(v.number()),
+    // Cash flow (per-month column)
+    cashFlowMonth: v.optional(v.string()),       // "YYYY-MM"
+    cashFlowAmount: v.optional(v.number()),
+    // GL
+    glAccountCode: v.optional(v.string()),
+    glAccountName: v.optional(v.string()),
+    glDate: v.optional(v.string()),
+    glDocumentNumber: v.optional(v.string()),
+    glName: v.optional(v.string()),
+    glDebit: v.optional(v.number()),
+    glCredit: v.optional(v.number()),
+    glBalance: v.optional(v.number()),
+    glType: v.optional(v.string()),              // "Journal" | "Bill Payment" | etc
+  })
+    .index("by_property_latest", ["propertyId", "isLatest"])
+    .index("by_property_kind_latest", ["propertyId", "kind", "isLatest"])
+    .index("by_property_period", ["propertyId", "snapshotPeriod"]),
 });

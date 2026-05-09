@@ -30,6 +30,8 @@ import type * as monthlyRevenue from "../monthlyRevenue.js";
 import type * as properties from "../properties.js";
 import type * as propertyDebt from "../propertyDebt.js";
 import type * as receivableDetails from "../receivableDetails.js";
+import type * as rv from "../rv.js";
+import type * as rvParsers from "../rvParsers.js";
 import type * as syncJobs from "../syncJobs.js";
 import type * as tenantOverrides from "../tenantOverrides.js";
 import type * as tenants from "../tenants.js";
@@ -65,6 +67,8 @@ declare const fullApi: ApiFromModules<{
   properties: typeof properties;
   propertyDebt: typeof propertyDebt;
   receivableDetails: typeof receivableDetails;
+  rv: typeof rv;
+  rvParsers: typeof rvParsers;
   syncJobs: typeof syncJobs;
   tenantOverrides: typeof tenantOverrides;
   tenants: typeof tenants;
