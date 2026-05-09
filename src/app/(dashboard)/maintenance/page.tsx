@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 import { Plus, Check, Trash2, RotateCcw, Pencil } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
-import ComingSoonBanner from "@/components/ComingSoonBanner";
 import MaintenanceDrawer from "@/components/MaintenanceDrawer";
 import { useActiveProperty, useUnits, useMaintenance, formatCurrency } from "@/hooks/useConvexData";
 
@@ -148,9 +147,9 @@ export default function MaintenancePage() {
 
   if (!property) return null;
 
-  if (property.propertyType === "rv_park") {
-    return <ComingSoonBanner propertyName={property.name} />;
-  }
+  // RV park uses the same maintenance_log table as commercial — no need
+  // for a separate "Coming Soon" gate. Empty state renders naturally
+  // until the first task is logged for the property.
 
   return (
     <div>

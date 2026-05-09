@@ -3,7 +3,6 @@ import { useState, useRef } from "react";
 import { Plus, X, Trash2, Pencil, Paperclip, Download } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import PageHeader from "@/components/PageHeader";
-import ComingSoonBanner from "@/components/ComingSoonBanner";
 import { useActiveProperty, useMeetings } from "@/hooks/useConvexData";
 
 const FILE_CATEGORIES = ["general", "marketing", "finance", "maintenance", "legal", "other"] as const;
@@ -61,9 +60,8 @@ export default function MeetingsPage() {
   }
 
   if (!property) return null;
-  if (property.propertyType === "rv_park") {
-    return <ComingSoonBanner propertyName={property.name} />;
-  }
+  // Meetings work the same for any property type — RV park uses the same
+  // table the commercial pages do.
 
   return (
     <div>
