@@ -233,7 +233,15 @@ export default function RvDashboard({
                   theme: isDark ? "dark" : "light",
                   y: { formatter: (val: number) => formatCurrency(val) },
                 },
-                plotOptions: { bar: { borderRadius: 3, columnWidth: "40%" } },
+                plotOptions: {
+                  bar: {
+                    borderRadius: 3,
+                    // Narrow column so a single-month chart doesn't render as
+                    // one comically wide block. Capped at 60px so multi-month
+                    // bars stay visually grouped.
+                    columnWidth: posSeries.length === 1 ? "12%" : "32%",
+                  },
+                },
               }}
             />
           </div>
