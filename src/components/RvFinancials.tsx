@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import { useRvFinancials, formatCurrency } from "@/hooks/useConvexData";
 
@@ -314,6 +314,62 @@ function SummaryPanel({
   );
 }
 
+// Block parser — groups rows into collapsible "subsection" blocks. A block
+// opens on a "NNNN-000 - Total X" header that carries no amounts and closes
+// on the matching "Total - NNNN-000 - Total X" subtotal. Anything between is
+// rendered as the block's children (including nested NNNN-100 subgroups,
+// leaves, and X-100 subtotals). Top-level rows (Income, Expense, GROSS
+// PROFIT, Total Income, etc.) sit outside any block and render as bare rows.
+type Block = { header: Row; children: Row[]; closingTotal: Row | null };
+
+function isBlock(x: any): x is Block {
+  return x && typeof x === "object" && "children" in x && "header" in x;
+}
+
+function parseBlocks(lines: Row[]): (Block | Row)[] {
+  const out: (Block | Row)[] = [];
+  let current: Block | null = null;
+  let currentCode: string | null = null;
+
+  for (const r of lines) {
+    const li = String(r.lineItem || "").trim();
+    const hasAmounts =
+      Math.abs(r.amountMtd || 0) > 0.0001 ||
+      Math.abs(r.amountYtd || 0) > 0.0001 ||
+      Math.abs(r.budgetMtd || 0) > 0.0001 ||
+      Math.abs(r.budgetYtd || 0) > 0.0001;
+
+    // Block-opening header: NNNN-000 prefix + no amounts + not a "Total -" row.
+    const openMatch = li.match(/^(\d{4}-000)\s*-/);
+    if (openMatch && !hasAmounts && !/^Total\s*-/i.test(li)) {
+      if (current) out.push(current);
+      current = { header: r, children: [], closingTotal: null };
+      currentCode = openMatch[1];
+      continue;
+    }
+
+    // Block-closing subtotal: "Total - NNNN-000 - ..." matching the open code.
+    if (current && currentCode) {
+      const closeMatch = li.match(/^Total\s*-\s*(\d{4}-000)/i);
+      if (closeMatch && closeMatch[1] === currentCode) {
+        current.closingTotal = r;
+        out.push(current);
+        current = null;
+        currentCode = null;
+        continue;
+      }
+    }
+
+    if (current) {
+      current.children.push(r);
+    } else {
+      out.push(r);
+    }
+  }
+  if (current) out.push(current);
+  return out;
+}
+
 function IncomeStatementTable({
   lines,
   totalIncome,
@@ -323,6 +379,14 @@ function IncomeStatementTable({
   totalIncome: number;
   periodLabel: string;
 }) {
+  const blocks = useMemo(() => parseBlocks(lines), [lines]);
+  // Per-block expansion state, default collapsed. Keyed by the header lineItem
+  // since the X-000 prefix is unique within the IS.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  function toggle(key: string) {
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
   return (
     <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
       <div className="grid grid-cols-[1fr_120px_120px_120px_90px_90px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2.5 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
@@ -333,50 +397,135 @@ function IncomeStatementTable({
         <span className="text-right">Var %</span>
         <span className="text-right">% Income</span>
       </div>
-      {lines.map((r: Row, i: number) => (
-        <ISRow key={`${r._id}-${i}`} row={r} totalIncome={totalIncome} />
-      ))}
+      {blocks.map((item, idx) => {
+        if (isBlock(item)) {
+          const key = String(item.header.lineItem || `block-${idx}`);
+          const isOpen = !!expanded[key];
+          // Inline summary is the closing subtotal — that's where the actual
+          // roll-up values live (the header row itself has all-zero amounts).
+          const summaryRow = item.closingTotal || item.header;
+          const summaryHasValues =
+            Math.abs(summaryRow.amountMtd || 0) > 0.0001 ||
+            Math.abs(summaryRow.amountYtd || 0) > 0.0001 ||
+            Math.abs(summaryRow.budgetMtd || 0) > 0.0001;
+          return (
+            <BlockSection
+              key={`${key}-${idx}`}
+              block={item}
+              summaryRow={summaryRow}
+              isOpen={isOpen}
+              onToggle={summaryHasValues ? () => toggle(key) : undefined}
+              totalIncome={totalIncome}
+            />
+          );
+        }
+        return <ISRow key={`${item._id}-${idx}`} row={item} totalIncome={totalIncome} />;
+      })}
     </div>
   );
 }
 
-function ISRow({ row, totalIncome }: { row: Row; totalIncome: number }) {
+function BlockSection({
+  block,
+  summaryRow,
+  isOpen,
+  onToggle,
+  totalIncome,
+}: {
+  block: Block;
+  summaryRow: Row;
+  isOpen: boolean;
+  onToggle?: () => void;
+  totalIncome: number;
+}) {
+  return (
+    <>
+      {/* Block header row — uses summaryRow values when collapsed so the
+          X-000 line shows its real roll-up totals next to the chevron, the
+          way Hollister inlines RENTAL INCOME's totals. Empty blocks (no
+          values anywhere) render without a chevron per user feedback —
+          there's nothing useful to expand. */}
+      <ISRow
+        row={block.header}
+        totalIncome={totalIncome}
+        valueRow={summaryRow}
+        isBlockHeader
+        onToggle={onToggle}
+        isOpen={isOpen}
+      />
+      {isOpen &&
+        block.children.map((c, i) => (
+          <ISRow key={`${c._id}-${i}`} row={c} totalIncome={totalIncome} />
+        ))}
+      {isOpen && block.closingTotal && (
+        <ISRow row={block.closingTotal} totalIncome={totalIncome} />
+      )}
+    </>
+  );
+}
+
+function ISRow({
+  row,
+  totalIncome,
+  valueRow,
+  isBlockHeader,
+  onToggle,
+  isOpen,
+}: {
+  row: Row;
+  totalIncome: number;
+  // When supplied, the row's labels come from `row` but the displayed values
+  // come from `valueRow`. Used by collapsed block headers to show the
+  // closing-subtotal numbers inline next to the section name.
+  valueRow?: Row;
+  isBlockHeader?: boolean;
+  onToggle?: () => void;
+  isOpen?: boolean;
+}) {
   const kind = classifyLine(row);
   if (kind === "skip") return null;
 
   const li = String(row.lineItem || "").trim();
   const cleanLabel = kind === "subtotal" ? li.replace(/^Total\s*-\s*/i, "Total ") : li;
-  const indent = kind === "leaf" ? 24 : kind === "subgroup" ? 12 : 0;
+  // Indent: leaves nest deepest, X-100 subgroups one level in, headers/X-000 at root.
+  // Block headers are at root with the chevron drawn alongside.
+  const indent = isBlockHeader ? 0 : kind === "leaf" ? 24 : kind === "subgroup" ? 12 : 0;
 
   const rowClass = [
     "grid grid-cols-[1fr_120px_120px_120px_90px_90px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center",
-    kind === "header"
+    isBlockHeader
+      ? "uppercase tracking-wide font-medium text-[#18181b] dark:text-[#fafafa]"
+      : kind === "header"
       ? "bg-[#f4f4f5] dark:bg-[#27272a] uppercase tracking-wide font-semibold text-[#18181b] dark:text-[#fafafa]"
       : kind === "subtotal"
       ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]"
       : kind === "subgroup"
       ? "font-medium text-[#18181b] dark:text-[#fafafa]"
       : "text-[#18181b] dark:text-[#fafafa]",
-  ].join(" ");
+    onToggle ? "cursor-pointer hover:bg-[#fafafa]/60 dark:hover:bg-[#27272a]/40" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  const mtd = row.amountMtd || 0;
-  const budgetMtd = row.budgetMtd || 0;
+  // Pick which row's amounts to display. For a collapsed block header we use
+  // the closing subtotal's numbers so the section reads as a meaningful row
+  // even with the children hidden.
+  const valueSource = valueRow || row;
+  const mtd = valueSource.amountMtd || 0;
+  const budgetMtd = valueSource.budgetMtd || 0;
+  const ytd = valueSource.amountYtd || 0;
   const varianceDollars = mtd - budgetMtd;
-  const varPct = row.pctVarianceMtd;
-  const showVarPct = varPct != null && Number.isFinite(varPct) && Math.abs(varPct) > 0.0001;
+  const varPct = valueSource.pctVarianceMtd;
+  const showVarPct =
+    varPct != null && Number.isFinite(varPct) && Math.abs(varPct) > 0.0001;
   const isNegMtd = mtd < 0;
   const isIncomeLine = isIncomeContext(li);
 
-  // % Income — share of Total Income for income lines; share of Total Income
-  // for expense / leaf lines too (mirrors Hollister's "% Income" column which
-  // shows expense lines as a fraction of revenue).
-  const pctIncome = totalIncome > 0 && kind === "leaf" && Math.abs(mtd) > 0.5
-    ? Math.abs(mtd) / totalIncome
-    : null;
+  const pctIncome =
+    totalIncome > 0 && kind === "leaf" && Math.abs(mtd) > 0.5
+      ? Math.abs(mtd) / totalIncome
+      : null;
 
-  // Color the variance: income beating budget = green; expense over budget
-  // = red. Leaf-level color matches the line's own income/expense context;
-  // for subgroup / subtotal rows we use the simpler "positive = green" rule.
   function varColor() {
     if (Math.abs(varianceDollars) < 0.5) return "text-[#71717a] dark:text-[#a1a1aa]";
     if (isIncomeLine) {
@@ -388,19 +537,32 @@ function ISRow({ row, totalIncome }: { row: Row; totalIncome: number }) {
     return varianceDollars >= 0 ? "text-[#16a34a]" : "text-[#dc2626]";
   }
 
+  const isHeaderLikePlain = kind === "header" && !isBlockHeader;
+  const showValues = !isHeaderLikePlain;
+  void ytd;
+
   return (
-    <div className={rowClass}>
-      <span style={{ paddingLeft: indent }} className="truncate" title={cleanLabel}>
-        {cleanLabel}
+    <div className={rowClass} onClick={onToggle}>
+      <span style={{ paddingLeft: indent }} className="truncate flex items-center gap-1.5" title={cleanLabel}>
+        {/* Chevron only when there's a toggle handler (i.e. block has values). */}
+        {isBlockHeader && onToggle && (
+          <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] inline-block w-3">
+            {isOpen ? "▼" : "▶"}
+          </span>
+        )}
+        {isBlockHeader && !onToggle && <span className="inline-block w-3" />}
+        <span className="truncate">{cleanLabel}</span>
       </span>
       <span className={`text-right tabular-nums ${isNegMtd ? "text-[#dc2626]" : ""}`}>
-        {kind === "header" || mtd === 0 ? "—" : formatCurrency(Math.abs(mtd))}
+        {!showValues || mtd === 0 ? "—" : formatCurrency(Math.abs(mtd))}
       </span>
       <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
-        {kind === "header" || budgetMtd === 0 ? "—" : formatCurrency(budgetMtd)}
+        {!showValues || budgetMtd === 0 ? "—" : formatCurrency(budgetMtd)}
       </span>
       <span className={`text-right tabular-nums ${varColor()}`}>
-        {kind === "header" || (mtd === 0 && budgetMtd === 0) ? "—" : formatVarianceDollars(varianceDollars)}
+        {!showValues || (mtd === 0 && budgetMtd === 0)
+          ? "—"
+          : formatVarianceDollars(varianceDollars)}
       </span>
       <span
         className={`text-right tabular-nums text-[11px] ${
