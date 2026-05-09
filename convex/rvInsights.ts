@@ -415,3 +415,28 @@ Return ONLY a JSON object — no prose, no markdown fences. Shape:
     return { ok: true, written };
   },
 });
+
+// Regenerate insights for the latest committed bundle on a property.
+// Useful when the prompt or summary shape changes — wipes existing
+// income_insight alerts for the property and runs a fresh extraction
+// against the most-recent bundle so the dashboard SummaryCard picks up
+// real content without forcing a re-upload of the same files.
+export const regenerateLatestInsights = action({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args): Promise<{ ok: boolean; written: number; reason?: string }> => {
+    const latest: any = await ctx.runQuery(api.rv.latestBundleForProperty, {
+      propertyId: args.propertyId,
+    });
+    if (!latest?.bundleId) {
+      return { ok: false, written: 0, reason: "No committed bundle for this property" };
+    }
+    await ctx.runMutation(api.alerts.deleteIncomeInsightsForProperty, {
+      propertyId: args.propertyId,
+    });
+    return await ctx.runAction(api.rvInsights.extractInsightsForBundle, {
+      bundleId: latest.bundleId,
+      propertyId: args.propertyId,
+      period: latest.period,
+    });
+  },
+});

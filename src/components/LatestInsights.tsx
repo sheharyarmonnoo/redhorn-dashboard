@@ -48,9 +48,19 @@ export default function LatestInsights({
       )
       .slice(0, 6);
     const top = active[0] ?? all[0];
+    // The RV insights pipeline emits a legacy one-liner ("Generated from
+    // monthly bundle YYYY-MM.") on alerts that predate the {summary,
+    // insights} envelope upgrade. Treat that as no-summary-available so
+    // the card doesn't render with placeholder text.
+    const rawSummary = top?.aiAnalysis as string | undefined;
+    const summary = rawSummary && /^Generated from monthly bundle \d{4}-\d{2}\.?$/i.test(
+      rawSummary.trim(),
+    )
+      ? undefined
+      : rawSummary;
     return {
       active,
-      latestSummary: top?.aiAnalysis as string | undefined,
+      latestSummary: summary,
       latestSummaryAt: top?._creationTime as number | undefined,
       hasAnyHistory: all.length > 0,
     };

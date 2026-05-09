@@ -162,9 +162,14 @@ function PastDueDetail({ onClose }: { onClose: () => void }) {
                 </span>
                 <span className="text-[12px] font-medium text-[#dc2626] whitespace-nowrap flex-shrink-0">{formatCurrency(t.pastDueAmount)}</span>
               </div>
-              <p className="text-[10px] text-[#a1a1aa] mt-0.5">
-                Last paid: {t.lastPaymentDate || "—"} · {t.delinquencyStage || "past_due"}
-              </p>
+              {/* Hide the entire Last paid line when we don't have a real
+                  payment date — "Last paid: — · past_due" is just noise.
+                  When a date exists, render the line with stage tag. */}
+              {t.lastPaymentDate && t.lastPaymentDate !== "—" && (
+                <p className="text-[10px] text-[#a1a1aa] mt-0.5">
+                  Last paid: {t.lastPaymentDate} · {t.delinquencyStage || "past_due"}
+                </p>
+              )}
               {t.leaseTo && (
                 <p className={`text-[10px] mt-0.5 ${leaseExpiringSoon ? "text-[#d97706] font-medium" : "text-[#a1a1aa]"}`}>
                   Lease expires {formatLeaseDate(t.leaseTo)}
