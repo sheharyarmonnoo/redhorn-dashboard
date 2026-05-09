@@ -402,25 +402,37 @@ function BudgetRow({ row }: { row: Row }) {
     varPctYtd != null && Number.isFinite(varPctYtd) && Math.abs(varPctYtd) > 0.0001;
   const showValues = kind !== "header";
 
+  // Render with sign preserved — Net Income / Net Operating Income can be
+  // negative when the property's losing money, and stripping the sign with
+  // Math.abs flipped a loss into a positive figure ("$8,643" displayed for
+  // an actual −$8,643 NOI). Negative actuals now also colour red.
+  function fmtSigned(v: number): string {
+    if (v === 0) return "—";
+    return v < 0 ? `−${formatCurrency(Math.abs(v))}` : formatCurrency(v);
+  }
+  function actualClass(v: number) {
+    return v < 0 ? "text-[#dc2626]" : "text-[#18181b] dark:text-[#fafafa]";
+  }
+
   return (
     <div className={rowClass}>
       <span style={{ paddingLeft: indent }} className="truncate" title={displayLabel}>
         {displayLabel}
       </span>
-      <span className="text-right tabular-nums">
-        {!showValues || mtd === 0 ? "—" : formatCurrency(Math.abs(mtd))}
+      <span className={`text-right tabular-nums ${actualClass(mtd)}`}>
+        {!showValues ? "—" : fmtSigned(mtd)}
       </span>
       <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
-        {!showValues || budgetMtd === 0 ? "—" : formatCurrency(budgetMtd)}
+        {!showValues || budgetMtd === 0 ? "—" : fmtSigned(budgetMtd)}
       </span>
       <span className={`text-right tabular-nums text-[11px] ${pctColor(varPctMtd)}`}>
         {showPctMtd ? formatPctSigned(varPctMtd) : "—"}
       </span>
-      <span className="text-right tabular-nums">
-        {!showValues || ytd === 0 ? "—" : formatCurrency(Math.abs(ytd))}
+      <span className={`text-right tabular-nums ${actualClass(ytd)}`}>
+        {!showValues ? "—" : fmtSigned(ytd)}
       </span>
       <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
-        {!showValues || budgetYtd === 0 ? "—" : formatCurrency(budgetYtd)}
+        {!showValues || budgetYtd === 0 ? "—" : fmtSigned(budgetYtd)}
       </span>
       <span className={`text-right tabular-nums text-[11px] ${pctColor(varPctYtd)}`}>
         {showPctYtd ? formatPctSigned(varPctYtd) : "—"}
@@ -1075,7 +1087,11 @@ function ISRow({
         <span className="truncate">{displayLabel}</span>
       </span>
       <span className={`text-right tabular-nums ${isNegMtd ? "text-[#dc2626]" : ""}`}>
-        {!showValues || mtd === 0 ? "—" : formatCurrency(Math.abs(mtd))}
+        {!showValues || mtd === 0
+          ? "—"
+          : mtd < 0
+          ? `−${formatCurrency(Math.abs(mtd))}`
+          : formatCurrency(mtd)}
       </span>
       <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
         {!showValues || budgetMtd === 0 ? "—" : formatCurrency(budgetMtd)}
