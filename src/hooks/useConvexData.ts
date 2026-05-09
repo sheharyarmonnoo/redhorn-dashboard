@@ -517,6 +517,45 @@ export function useMeetings(propertyId: string | undefined) {
   };
 }
 
+// ===== RV PARK DATA =====
+// Latest-snapshot reservations / balances / POS / payments / financials.
+// `loading` true while Convex resolves the queries, so the UI can render
+// skeletons rather than flashing zero-state stats.
+export function useRvData(propertyId: string | undefined) {
+  const reservations = useQuery(
+    api.rv.listLatestReservations,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  const balances = useQuery(
+    api.rv.listLatestBalances,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  const sites = useQuery(
+    api.rv.listSites,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  const pos = useQuery(
+    api.rv.listLatestPos,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  const payments = useQuery(
+    api.rv.listLatestPayments,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  return {
+    reservations: reservations ?? [],
+    balances: balances ?? [],
+    sites: sites ?? [],
+    pos: pos ?? [],
+    payments: payments ?? [],
+    loading:
+      !!propertyId &&
+      (reservations === undefined ||
+        balances === undefined ||
+        sites === undefined),
+  };
+}
+
 // ===== RV PARK UPLOADS =====
 
 export function useRvUploads(propertyId: string | undefined) {

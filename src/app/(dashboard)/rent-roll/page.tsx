@@ -8,6 +8,7 @@ import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
+import RvRentRoll from "@/components/RvRentRoll";
 import { Download } from "lucide-react";
 
 type TenantStatus = "current" | "past_due" | "locked_out" | "vacant" | "expiring_soon";
@@ -477,10 +478,19 @@ export default function RentRollPage() {
     );
   }
 
-  // RV park has no Yardi feed — Campspot integration is pending. Render the
-  // coming-soon card in place of the empty grid + zero-state stats.
+  // RV park has no Yardi feed; data comes from the monthly Campspot bundle
+  // upload. RvRentRoll consumes rv_reservations + rv_balances and rolls them
+  // up per site (per the user's directive: lead with site/unit data, treat
+  // guests as ephemeral context since RV stays churn fast).
   if (activeProperty?.propertyType === "rv_park") {
-    return <ComingSoonBanner propertyName={activeProperty.name} />;
+    const diamondMaps = "https://diamondmaps.com/map.ashx?key=36746260305125558991";
+    return (
+      <RvRentRoll
+        propertyName={activeProperty.name}
+        propertyId={activeProperty._id as string}
+        diamondMapsUrl={diamondMaps}
+      />
+    );
   }
 
   // No leases AND no units = property hasn't been onboarded into Yardi.
