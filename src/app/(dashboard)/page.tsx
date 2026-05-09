@@ -5,6 +5,7 @@ import KPIDrawer from "@/components/KPIDrawer";
 import PageHeader from "@/components/PageHeader";
 import RevenueFilter from "@/components/RevenueFilter";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
+import RvDashboard from "@/components/RvDashboard";
 import Link from "next/link";
 import { Wrench } from "lucide-react";
 import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, useMaintenance, formatCurrency, useDashboardLoading, isExpiringWithin, isExpired, leasedUnitKeys, useReceivableDetails, normalizeTenantName } from "@/hooks/useConvexData";
@@ -54,11 +55,12 @@ export default function DashboardPage() {
     return <DashboardSkeleton />;
   }
 
-  // RV park has no Yardi feed — data will integrate from Campspot later.
-  // Render a coming-soon card instead of zero-state KPIs that read like a
-  // broken sync.
+  // RV park is fed from the monthly Campspot+Northgate bundle (rv_* tables),
+  // not the Yardi tenants/income_lines tables the commercial dashboard
+  // consumes. RvDashboard renders an RV-flavored KPI strip + POS chart so
+  // the page reads with the same shape as Hollister/Belgold.
   if (property.propertyType === "rv_park") {
-    return <ComingSoonBanner propertyName={property.name} />;
+    return <RvDashboard propertyName={property.name} propertyId={property._id as string} />;
   }
 
   const occupied = tenants.filter(t => t.status !== "vacant");
