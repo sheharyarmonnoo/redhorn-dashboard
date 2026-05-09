@@ -24,14 +24,14 @@ const navGroups: NavGroup[] = [
       { href: "/rent-roll", label: "Rent Roll", icon: Table },
       { href: "/financials", label: "Financials", icon: TrendingUp },
       { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+      { href: "/maintenance", label: "Maintenance", icon: Wrench },
+      { href: "/meetings", label: "Meetings", icon: Users },
+      { href: "/uploads", label: "Monthly Uploads", icon: Upload, rvOnly: true },
     ],
   },
   {
     label: "Workspace",
     items: [
-      { href: "/maintenance", label: "Maintenance", icon: Wrench },
-      { href: "/meetings", label: "Meetings", icon: Users },
-      { href: "/uploads", label: "Monthly Uploads", icon: Upload, rvOnly: true },
       { href: "/deals", label: "Deal Pipeline", icon: Briefcase },
       { href: "/activity", label: "Activity", icon: Activity },
     ],
