@@ -204,30 +204,8 @@ export default function RvRentRoll({
     [allRows, selectedCode],
   );
 
-  // KPI strip — high-level occupancy and A/R counts above the grid.
-  const stats = useMemo(() => {
-    const today = todayIso();
-    let occupied = 0;
-    for (const r of allRows) {
-      if (
-        r.currentRes &&
-        r.currentRes.arrivalDate <= today &&
-        today <= r.currentRes.departureDate
-      ) {
-        occupied += 1;
-      }
-    }
-    const vacant = allRows.filter((r) => r.status === "vacant").length;
-    const pastDueRows = allRows.filter((r) => r.hasOpenBalance);
-    const totalAr = pastDueRows.reduce((s, r) => s + r.totalBalance, 0);
-    return {
-      total: allRows.length,
-      occupied,
-      vacant,
-      pastDueCount: pastDueRows.length,
-      totalAr,
-    };
-  }, [allRows]);
+  // KPI strip intentionally omitted — commercial rent rolls lead with the
+  // grid and aggregate counts live on Dashboard / Site Plan, not Rent Roll.
 
   // All financial columns visible by default — Balance, Paid %, Charges,
   // Payments, POS, Utility, Stays. The drawer still carries the per-stay
@@ -243,7 +221,7 @@ export default function RvRentRoll({
         comparator: (a: string, b: string) =>
           a.localeCompare(b, undefined, { numeric: true }),
       },
-      { field: "siteType", headerName: "Type", minWidth: 220, flex: 1 },
+      { field: "siteType", headerName: "Unit Name", minWidth: 220, flex: 1 },
       {
         field: "status",
         headerName: "Current Status",
@@ -375,19 +353,6 @@ export default function RvRentRoll({
           <Download size={14} />
         </button>
       </PageHeader>
-
-      {/* KPI strip — Total Sites / Occupied / Vacant / Past Due ($ A/R) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
-        <StatCard label="Total Sites" value={stats.total} />
-        <StatCard label="Occupied" value={stats.occupied} valueClass="text-[#16a34a]" />
-        <StatCard label="Vacant" value={stats.vacant} valueClass="text-[#71717a] dark:text-[#a1a1aa]" />
-        <StatCard
-          label="Past Due"
-          value={stats.pastDueCount}
-          valueClass="text-[#dc2626]"
-          sub={stats.totalAr > 0 ? `${formatCurrency(stats.totalAr)} A/R` : undefined}
-        />
-      </div>
 
       {/* Search + Clear filters — matches the commercial rent roll layout */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-3 text-[12px]">
