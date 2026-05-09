@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Download, X } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
@@ -144,26 +144,21 @@ function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
   return rows;
 }
 
-// Status cell mirrors the commercial rent roll: dot + label for the everyday
-// states (Occupied, Departing, Vacant). Past Due gets a stronger pill-style
-// badge — same red treatment commercial uses for EXPIRED leases — so it
-// reads as actionable across a long list.
+// Status cell mirrors the commercial rent roll exactly: dot + label, same
+// palette commercial uses for past_due/current/vacant. The dot keeps the
+// row scan-able without the full-bleed pill that previously dominated the
+// column.
 function StatusCellRenderer(props: { value: string }) {
   const status = props.value;
-  if (status === "past_due") {
-    return (
-      <span className="inline-flex items-center font-semibold text-[10px] px-1.5 py-0.5 rounded bg-[#dc2626] text-white whitespace-nowrap">
-        PAST DUE
-      </span>
-    );
-  }
   const dot: Record<string, string> = {
     occupied: "bg-[#16a34a]",
+    past_due: "bg-[#dc2626]",
     departing: "bg-[#d97706]",
     vacant: "bg-[#a1a1aa]",
   };
   const label: Record<string, string> = {
     occupied: "Occupied",
+    past_due: "Past Due",
     departing: "Departing",
     vacant: "Vacant",
   };
@@ -209,24 +204,9 @@ export default function RvRentRoll({
     [allRows, selectedCode],
   );
 
-  const stats = useMemo(() => {
-    // Past Due wins over Occupied in the status column, so re-derive the
-    // occupancy count from raw current/departing reservations rather than the
-    // status string. Otherwise a site that's both occupied AND past due
-    // would only show up in the Past Due bucket and the Occupied stat
-    // would under-report.
-    const today = todayIso();
-    let occupied = 0;
-    for (const r of allRows) {
-      if (r.currentRes && r.currentRes.arrivalDate <= today && today <= r.currentRes.departureDate) {
-        occupied += 1;
-      }
-    }
-    const vacant = allRows.filter((r) => r.status === "vacant").length;
-    const pastDueRows = allRows.filter((r) => r.hasOpenBalance);
-    const totalAr = pastDueRows.reduce((s, r) => s + r.totalBalance, 0);
-    return { total: allRows.length, occupied, vacant, pastDueCount: pastDueRows.length, totalAr };
-  }, [allRows]);
+  // Stats strip removed to match the commercial rent roll, which leads with
+  // the grid and surfaces aggregate counts in the Dashboard / Site Plan
+  // pages instead. Total site count moves to the page subtitle/header.
 
   // All financial columns visible by default — Balance, Paid %, Charges,
   // Payments, POS, Utility, Stays. The drawer still carries the per-stay
@@ -329,15 +309,7 @@ export default function RvRentRoll({
   if (loading) {
     return (
       <div>
-        <PageHeader title="Rent Roll" subtitle={`${propertyName} — loading…`} />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 animate-pulse h-[68px]"
-            />
-          ))}
-        </div>
+        <PageHeader title="Rent Roll" subtitle="Loading…" />
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6 h-96 animate-pulse" />
       </div>
     );
@@ -357,24 +329,33 @@ export default function RvRentRoll({
     );
   }
 
+  function exportCsv() {
+    const fileName = `rent-roll-${propertyName.replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+    gridRef.current?.api?.exportDataAsCsv({ fileName });
+  }
+
+  function clearFilters() {
+    const api = gridRef.current?.api;
+    if (!api) return;
+    api.setFilterModel(null);
+    setQuickSearch("");
+  }
+
   return (
     <div>
-      <PageHeader title="Rent Roll" subtitle={`${propertyName} — ${stats.total} sites`} />
+      <PageHeader title="Rent Roll" subtitle={`${propertyName} — Tap any row for details`}>
+        <button
+          onClick={exportCsv}
+          disabled={allRows.length === 0}
+          title="Export .csv"
+          aria-label="Export .csv"
+          className="flex items-center justify-center bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] hover:border-[#4f6ef7] text-[#5a5e73] dark:text-[#a1a1aa] hover:text-[#4f6ef7] w-8 h-8 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Download size={14} />
+        </button>
+      </PageHeader>
 
-      {/* Stats — mirrors the Hollister/Belgold KPI strip: 4 cards, no Arriving */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
-        <StatCard label="Total Sites" value={stats.total} />
-        <StatCard label="Occupied" value={stats.occupied} valueClass="text-[#16a34a]" />
-        <StatCard label="Vacant" value={stats.vacant} valueClass="text-[#71717a] dark:text-[#a1a1aa]" />
-        <StatCard
-          label="Past Due"
-          value={stats.pastDueCount}
-          valueClass="text-[#dc2626]"
-          sub={stats.totalAr > 0 ? `${formatCurrency(stats.totalAr)} A/R` : undefined}
-        />
-      </div>
-
-      {/* Search */}
+      {/* Search + Clear filters — matches the commercial rent roll layout */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-3 text-[12px]">
         <div className="sm:ml-auto w-full sm:w-auto flex items-center gap-2">
           <input
@@ -384,6 +365,12 @@ export default function RvRentRoll({
             onChange={(e) => setQuickSearch(e.target.value)}
             className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded px-3 py-1.5 text-[#18181b] dark:text-[#fafafa] w-full sm:w-72"
           />
+          <button
+            onClick={clearFilters}
+            className="text-[12px] text-[#5a5e73] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded px-3 py-1.5 cursor-pointer whitespace-nowrap"
+          >
+            Clear filters
+          </button>
         </div>
       </div>
 
@@ -409,28 +396,6 @@ export default function RvRentRoll({
       {selectedRow && (
         <ReservationDrawer row={selectedRow} onClose={() => setSelectedCode(null)} />
       )}
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  valueClass = "text-[#18181b] dark:text-[#fafafa]",
-  sub,
-}: {
-  label: string;
-  value: number | string;
-  valueClass?: string;
-  sub?: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 text-center">
-      <p className={`text-[20px] sm:text-[24px] font-semibold ${valueClass}`}>{value}</p>
-      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] font-medium uppercase tracking-wide mt-0.5">
-        {label}
-      </p>
-      {sub && <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">{sub}</p>}
     </div>
   );
 }
