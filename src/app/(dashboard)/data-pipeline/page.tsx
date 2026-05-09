@@ -754,7 +754,7 @@ export default function DataPipelinePage() {
         />
       </div>
 
-      <FileVolumeChart syncJobs={syncJobs} loading={syncJobsLoading} />
+      <FileVolumeChart syncJobs={syncJobs} rvBundles={rvBundles} loading={syncJobsLoading} />
 
       {selectedFile && (
         <DetailPanel file={selectedFile} onClose={() => setSelectedFile(null)} />
@@ -764,19 +764,22 @@ export default function DataPipelinePage() {
 }
 
 // File-volume chart — counts files per property per bucket (day or week).
-// Sources from sync_jobs.files[].fileName ("hol-...", "bel-...") since the
-// files array entries don't carry a propertyCode field of their own.
-function FileVolumeChart({ syncJobs, loading }: { syncJobs: any[]; loading?: boolean }) {
+// Sources from sync_jobs.files[].fileName ("hol-...", "bel-...") for commercial
+// + rv_upload_bundles.files for RV park, since RV files come in via the
+// monthly Manual Upload pipeline rather than Yardi sync.
+function FileVolumeChart({ syncJobs, rvBundles, loading }: { syncJobs: any[]; rvBundles: any[]; loading?: boolean }) {
   const [bucket, setBucket] = useState<"day" | "week">("day");
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
   const { categories, series } = useMemo(() => {
-    if (!syncJobs || syncJobs.length === 0) return { categories: [] as string[], series: [] as any[] };
-    const propNames: Record<string, string> = { hol: "Hollister", bel: "Belgold" };
+    const hasSync = syncJobs && syncJobs.length > 0;
+    const hasRv = rvBundles && rvBundles.length > 0;
+    if (!hasSync && !hasRv) return { categories: [] as string[], series: [] as any[] };
+    const propNames: Record<string, string> = { hol: "Hollister", bel: "Belgold", brad: "RV Park" };
     const buckets: Record<string, Record<string, number>> = {}; // propCode -> bucketKey -> count
 
-    for (const job of syncJobs) {
+    for (const job of syncJobs ?? []) {
       const date = new Date(job._creationTime ?? Date.now());
       const key = bucket === "day" ? toDayKey(date) : toWeekKey(date);
       for (const f of (job.files ?? []) as Array<{ fileName?: string }>) {
@@ -785,6 +788,20 @@ function FileVolumeChart({ syncJobs, loading }: { syncJobs: any[]; loading?: boo
         if (!buckets[prefix]) buckets[prefix] = {};
         buckets[prefix][key] = (buckets[prefix][key] || 0) + 1;
       }
+    }
+
+    // RV bundles bucket against committedAt so the chart reflects when Max
+    // actually loaded the month, not when the bundle was first staged. Each
+    // bundle's files[] is the user-attached payload (rent roll, balances,
+    // POS, payments, financial package).
+    for (const b of rvBundles ?? []) {
+      const ts = b.committedAt ? new Date(b.committedAt) : new Date(b._creationTime ?? Date.now());
+      const key = bucket === "day" ? toDayKey(ts) : toWeekKey(ts);
+      const code = (b.propertyCode || "brad").toLowerCase();
+      const fileCount = Array.isArray(b.files) ? b.files.length : 0;
+      if (fileCount === 0) continue;
+      if (!buckets[code]) buckets[code] = {};
+      buckets[code][key] = (buckets[code][key] || 0) + fileCount;
     }
 
     const allKeys = new Set<string>();
@@ -797,7 +814,7 @@ function FileVolumeChart({ syncJobs, loading }: { syncJobs: any[]; loading?: boo
         data: categories.map(c => counts[c] || 0),
       }));
     return { categories, series };
-  }, [syncJobs, bucket]);
+  }, [syncJobs, rvBundles, bucket]);
 
   const axisColor = isDark ? "#71717a" : "#a1a1aa";
   const gridColor = isDark ? "#27272a" : "#f4f4f5";
@@ -805,7 +822,7 @@ function FileVolumeChart({ syncJobs, loading }: { syncJobs: any[]; loading?: boo
   const options: ApexCharts.ApexOptions = {
     chart: { type: "line", toolbar: { show: false }, fontFamily: "'Inter', -apple-system, system-ui, sans-serif", background: "transparent" },
     theme: { mode: isDark ? "dark" : "light" },
-    colors: isDark ? ["#fafafa", "#a1a1aa"] : ["#18181b", "#71717a"],
+    colors: isDark ? ["#fafafa", "#a1a1aa", "#71717a"] : ["#18181b", "#71717a", "#a1a1aa"],
     stroke: { curve: "smooth", width: 2 },
     markers: { size: 4, strokeWidth: 2, hover: { sizeOffset: 2 } },
     xaxis: {
@@ -822,7 +839,7 @@ function FileVolumeChart({ syncJobs, loading }: { syncJobs: any[]; loading?: boo
   return (
     <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4 mt-6">
       <div className="flex items-center justify-between mb-1">
-        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Files Downloaded</p>
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">Files Loaded</p>
         <div className="inline-flex border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden text-[11px] font-medium">
           {(["day", "week"] as const).map(b => (
             <button

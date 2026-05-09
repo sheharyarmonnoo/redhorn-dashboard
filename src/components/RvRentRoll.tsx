@@ -4,7 +4,7 @@ import { Download, X } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
-import { useRvData, formatCurrency } from "@/hooks/useConvexData";
+import { useRvData, useRvLastUpdated, formatCurrency, formatLastUpdated } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -48,6 +48,30 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Normalize whatever date string the parser stored back into "YYYY-MM-DD"
+// for safe lexicographic comparison. Older bundles ingested before the
+// rvParsers fix accepted "M/D/YYYY" raw — this catches those at read time
+// so the rent-roll filters work without a re-ingest.
+function normalizeDate(d: string | undefined): string {
+  if (!d) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+  const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) {
+    const mm = m[1].padStart(2, "0");
+    const dd = m[2].padStart(2, "0");
+    return `${m[3]}-${mm}-${dd}`;
+  }
+  const m2 = d.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (m2) {
+    const mm = m2[2].padStart(2, "0");
+    const dd = m2[3].padStart(2, "0");
+    return `${m2[1]}-${mm}-${dd}`;
+  }
+  const m3 = d.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (m3) return `${m3[3]}-${m3[1]}-${m3[2]}`;
+  return d;
+}
+
 function formatShortDate(iso?: string): string {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-").map((s) => parseInt(s, 10));
@@ -65,8 +89,16 @@ function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
   const siteByCode = new Map<string, Row>();
   for (const s of sites) siteByCode.set(s.siteCode, s);
 
+  // Normalize once so every comparison runs against canonical YYYY-MM-DD,
+  // immune to whatever format Campspot emitted in the original CSV.
+  const reservationsN = reservations.map((r) => ({
+    ...r,
+    _arrival: normalizeDate(r.arrivalDate),
+    _departure: normalizeDate(r.departureDate),
+  }));
+
   const byCode = new Map<string, Row[]>();
-  for (const r of reservations) {
+  for (const r of reservationsN) {
     const code = r.siteCode;
     if (!byCode.has(code)) byCode.set(code, []);
     byCode.get(code)!.push(r);
@@ -84,17 +116,17 @@ function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
   for (const [code, site] of Array.from(siteByCode.entries())) {
     const rs = (byCode.get(code) || [])
       .slice()
-      .sort((a, b) => (a.arrivalDate || "").localeCompare(b.arrivalDate || ""));
+      .sort((a, b) => (a._arrival || "").localeCompare(b._arrival || ""));
 
     let currentRes: Row | null = null;
     let nextRes: Row | null = null;
     for (const r of rs) {
-      if (r.arrivalDate <= today && today <= r.departureDate) {
+      if (r._arrival && r._departure && r._arrival <= today && today <= r._departure) {
         currentRes = r;
         break;
       }
-      if (r.arrivalDate > today) {
-        if (!nextRes || r.arrivalDate < nextRes.arrivalDate) nextRes = r;
+      if (r._arrival && r._arrival > today) {
+        if (!nextRes || r._arrival < (nextRes as any)._arrival) nextRes = r;
       }
     }
 
@@ -113,7 +145,7 @@ function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
       status = "past_due";
     } else if (currentRes) {
       const departInDays =
-        (Date.parse(currentRes.departureDate) - Date.parse(today)) / 86400000;
+        (Date.parse((currentRes as any)._departure) - Date.parse(today)) / 86400000;
       status = departInDays <= 1 ? "departing" : "occupied";
     }
 
@@ -194,6 +226,8 @@ export default function RvRentRoll({
   propertyId: string | undefined;
 }) {
   const { reservations, sites, loading } = useRvData(propertyId);
+  const { committedAt, period: lastBundlePeriod } = useRvLastUpdated(propertyId);
+  const lastUpdated = formatLastUpdated(committedAt, lastBundlePeriod);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [quickSearch, setQuickSearch] = useState("");
   const gridRef = useRef<AgGridReact>(null);
@@ -321,7 +355,7 @@ export default function RvRentRoll({
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-10 text-center">
           <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">No data yet</p>
           <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1.5">
-            Drop the monthly bundle in <span className="font-medium">Monthly Uploads</span> to populate the rent roll.
+            Drop the monthly bundle in <span className="font-medium">Pipeline Uploads</span> to populate the rent roll.
           </p>
         </div>
       </div>
@@ -342,7 +376,12 @@ export default function RvRentRoll({
 
   return (
     <div>
-      <PageHeader title="Rent Roll" subtitle={`${propertyName} — Tap any row for details`}>
+      <PageHeader
+        title="Rent Roll"
+        subtitle={`${propertyName} — Tap any row for details${
+          lastUpdated ? ` · ${lastUpdated}` : ""
+        }`}
+      >
         <button
           onClick={exportCsv}
           disabled={allRows.length === 0}
@@ -373,8 +412,14 @@ export default function RvRentRoll({
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="ag-theme-quartz" style={{ height: "calc(100vh - 320px)", minHeight: 480 }}>
+      {/* Grid — alpine theme + bordered wrapper match the commercial Hollister/
+          Belgold rent roll exactly. Earlier draft used the quartz theme which
+          renders lighter/whiter cell borders and didn't sit consistently next
+          to the other pages. */}
+      <div
+        className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46]"
+        style={{ height: "calc(100vh - 320px)", minHeight: 480 }}
+      >
         <AgGridReact
           ref={gridRef}
           rowData={allRows}
@@ -467,18 +512,9 @@ function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void
       cls: "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] border-[#e4e4e7] dark:border-[#3f3f46]",
     };
 
-  // Pick the focus reservation surfaced on the Details tab. Past-due sites
-  // surface their delinquent stay; otherwise the in-house or next reservation.
-  const focusRes: Row | null = useMemo(() => {
-    if (row.hasOpenBalance) {
-      const overdue = row.reservations.find((r: Row) => (r.balanceOnInvoice || 0) > 0.5);
-      if (overdue) return overdue;
-    }
-    return row.currentRes || row.nextRes || row.reservations[row.reservations.length - 1] || null;
-  }, [row]);
-  const focusGuest = focusRes
-    ? `${focusRes.firstName || ""} ${focusRes.lastName || ""}`.trim()
-    : "";
+  // Details tab is now site-level only — no per-guest fields, so the focus
+  // reservation lookup is dropped. Per-guest detail still lives in the
+  // Ledger tab where it belongs.
 
   return (
     <div
@@ -560,25 +596,9 @@ function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void
                 </p>
               </Field>
 
-              <Field label="Current Guest">
-                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
-                  {focusGuest || "—"}
-                </p>
-              </Field>
-              <Field label="Confirmation">
-                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
-                  {focusRes?.confirmation || "—"}
-                </p>
-              </Field>
-
-              <Field label="Arrival">
-                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
-                  {focusRes ? formatShortDate(focusRes.arrivalDate) : "—"}
-                </p>
-              </Field>
-              <Field label="Departure">
-                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
-                  {focusRes ? formatShortDate(focusRes.departureDate) : "—"}
+              <Field label="Unit Number">
+                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5 font-medium">
+                  {row.siteCode || "—"}
                 </p>
               </Field>
 
@@ -613,11 +633,6 @@ function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void
               <Field label="Stays on Record">
                 <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
                   {row.reservationCount}
-                </p>
-              </Field>
-              <Field label="Package">
-                <p className="text-[12px] text-[#18181b] dark:text-[#fafafa] py-1.5">
-                  {focusRes?.packageApplied || "—"}
                 </p>
               </Field>
             </div>
@@ -691,21 +706,40 @@ function ReservationLedger({
     setPage(0);
   }, [filter]);
 
-  const sorted = useMemo(
+  // Pre-normalize each reservation's arrival/departure once so every
+  // comparison and sort runs against canonical YYYY-MM-DD strings. Without
+  // this, bundles ingested before the parser fix stored "M/D/YYYY" raw and
+  // string comparisons like "4/21/2026" >= "2026-05-09" returned true,
+  // pulling already-departed stays into the Upcoming filter.
+  const normalized = useMemo(
     () =>
-      [...reservations].sort((a, b) =>
-        (b.arrivalDate || "").localeCompare(a.arrivalDate || ""),
-      ),
+      reservations.map((r) => ({
+        ...r,
+        _arrival: normalizeDate(r.arrivalDate),
+        _departure: normalizeDate(r.departureDate),
+      })),
     [reservations],
   );
+  const sorted = useMemo(
+    () =>
+      [...normalized].sort((a, b) =>
+        (b._arrival || "").localeCompare(a._arrival || ""),
+      ),
+    [normalized],
+  );
+  // Past Due is strict: balance must be at least $1 owed AND the row must
+  // actually display a balance value (matches the same > 0.5 threshold the
+  // Balance column uses, so the filter never includes a row whose balance
+  // shows as "—"). Past stays that ended fully paid drop out.
+  const isPastDue = (r: Row) => (r.balanceOnInvoice || 0) > 0.5;
+
   const filtered = useMemo(() => {
     return sorted.filter((r) => {
-      const isPast = r.departureDate < today;
-      const isUpcomingOrCurrent = r.departureDate >= today; // covers both
-      const balance = r.balanceOnInvoice || 0;
+      const isPast = !!r._departure && r._departure < today;
+      const isUpcomingOrCurrent = !!r._departure && r._departure >= today;
       if (filter === "upcoming") return isUpcomingOrCurrent;
       if (filter === "past") return isPast;
-      if (filter === "past_due") return balance > 0.5;
+      if (filter === "past_due") return isPastDue(r);
       return true;
     });
   }, [sorted, filter, today]);
@@ -725,8 +759,8 @@ function ReservationLedger({
     let past = 0;
     let pastDue = 0;
     for (const r of sorted) {
-      if (r.departureDate < today) past += 1;
-      else upcoming += 1;
+      if (r._departure && r._departure < today) past += 1;
+      else if (r._departure) upcoming += 1;
       if ((r.balanceOnInvoice || 0) > 0.5) pastDue += 1;
     }
     return { upcoming, past, pastDue, all: sorted.length };
@@ -783,9 +817,11 @@ function ReservationLedger({
           ) : (
             <div className="absolute inset-0">
             {pageRows.map((r) => {
-              const isCurrent = r.arrivalDate <= today && today <= r.departureDate;
-              const isFuture = r.arrivalDate > today;
-              const isPast = r.departureDate < today;
+              const arr = r._arrival;
+              const dep = r._departure;
+              const isCurrent = !!arr && !!dep && arr <= today && today <= dep;
+              const isFuture = !!arr && arr > today;
+              const isPast = !!dep && dep < today;
               const balance = r.balanceOnInvoice || 0;
               const isSelected = r.confirmation === selectedConf;
               const guestName = `${r.firstName || ""} ${r.lastName || ""}`.trim() || "—";

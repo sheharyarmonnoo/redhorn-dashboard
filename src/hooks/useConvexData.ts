@@ -562,16 +562,68 @@ export function useRvData(propertyId: string | undefined) {
 }
 
 // Same as useRvData but only loads financials — used by the financials page
-// to avoid pulling reservations/POS when only the package is needed.
-export function useRvFinancials(propertyId: string | undefined) {
+// to avoid pulling reservations/POS when only the package is needed. When a
+// `period` is passed, returns that historical snapshot; otherwise returns the
+// most recent snapshot. `periods` is the full list of months the user can
+// pick from in the Period dropdown.
+export function useRvFinancials(propertyId: string | undefined, period?: string | null) {
   const financials = useQuery(
-    api.rv.listFinancials,
+    api.rv.listFinancialsForPeriod,
+    propertyId
+      ? { propertyId: propertyId as any, period: period || undefined }
+      : "skip",
+  );
+  const periods = useQuery(
+    api.rv.listFinancialPeriods,
     propertyId ? { propertyId: propertyId as any } : "skip",
   );
   return {
     financials: financials ?? [],
+    periods: periods ?? [],
     loading: !!propertyId && financials === undefined,
   };
+}
+
+// Returns the most-recent committed bundle's timestamp + period for the
+// active property. Powers the "Last updated · X" subtitle that appears on
+// RV-park pages (Dashboard, Rent Roll, Financials, Site Plan) so the user
+// always knows how stale the manually-uploaded data is.
+export function useRvLastUpdated(propertyId: string | undefined) {
+  const latest = useQuery(
+    api.rv.latestBundleForProperty,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  return {
+    committedAt: (latest?.committedAt as number | null | undefined) ?? null,
+    committedBy: (latest?.committedBy as string | null | undefined) ?? null,
+    period: latest?.period ?? null,
+    loading: !!propertyId && latest === undefined,
+  };
+}
+
+// "Updated 3 days ago" — short relative-time used as a subtle suffix on RV
+// page subtitles so the user always sees data freshness. Period is no
+// longer appended (the page subtitle already shows the active period and
+// repeating it reads as duplication). Returns empty string when no bundle
+// has been committed yet so callers can omit the suffix entirely.
+export function formatLastUpdated(committedAt: number | null, _period?: string | null): string {
+  void _period;
+  if (!committedAt) return "";
+  const diffMs = Date.now() - committedAt;
+  const sec = Math.floor(diffMs / 1000);
+  const min = Math.floor(sec / 60);
+  const hr = Math.floor(min / 60);
+  const day = Math.floor(hr / 24);
+  if (sec < 60) return "Updated just now";
+  if (min < 60) return `Updated ${min} min ago`;
+  if (hr < 24) return `Updated ${hr} hr ago`;
+  if (day < 7) return `Updated ${day} day${day === 1 ? "" : "s"} ago`;
+  const date = new Date(committedAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return `Updated ${date}`;
 }
 
 // Cross-property feed of committed RV bundles — joined with the property
@@ -627,9 +679,15 @@ export function useTenantMutations() {
 // ===== HELPER: format currency =====
 
 export function formatCurrency(amount: number): string {
+  // Round to whole dollars everywhere. The RV park's Northgate financial
+  // package carries cents (e.g. $35,615.97) which read as noise next to the
+  // commercial Yardi feeds that already come in whole-dollar. Setting
+  // maximumFractionDigits: 0 keeps every page consistent — no decimals in
+  // financials, KPIs, drawers, or pipeline values.
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(amount);
 }

@@ -98,7 +98,7 @@ export default function UploadsPage() {
   if (!isRvPark) {
     return (
       <div>
-        <PageHeader title="Monthly Uploads" subtitle={property.name} />
+        <PageHeader title="Pipeline Uploads" subtitle={property.name} />
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-10 text-center">
           <Lock className="w-6 h-6 text-[#a1a1aa] mx-auto mb-3" />
           <p className="text-[14px] font-medium text-[#18181b] dark:text-[#fafafa]">No upload bundle for this property</p>
@@ -223,7 +223,7 @@ export default function UploadsPage() {
   return (
     <div>
       <PageHeader
-        title="Monthly Uploads"
+        title="Pipeline Uploads"
         subtitle={`${property.name} — drop the 5-file Campspot + Northgate bundle`}
       />
 

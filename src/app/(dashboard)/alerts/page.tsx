@@ -395,11 +395,14 @@ export default function AlertsPage() {
       ];
     }
     // Mirrors the Add Alert modal fields: severity / category / unit / details.
+    // Details gets flex:2 + a min-width so the AI insight body (the long
+    // sentence with numbers) consumes the remaining horizontal space and
+    // doesn't get crushed by short Severity/Category/Unit columns.
     return [
       { field: "severity", headerName: "Severity", width: 110, cellRenderer: SeverityCellRenderer, filter: true },
       { field: "category", headerName: "Category", width: 160, cellRenderer: CategoryCellRenderer, filter: true },
       { field: "unit", headerName: "Unit", width: 100 },
-      { field: "detail", headerName: "Details", flex: 1, autoHeight: true, wrapText: true, cellRenderer: DetailCellRenderer },
+      { field: "detail", headerName: "Details", flex: 2, minWidth: 480, autoHeight: true, wrapText: true, cellRenderer: DetailCellRenderer },
     ];
   }, [isMobile]);
 

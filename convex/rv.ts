@@ -77,6 +77,29 @@ export const listBundles = query({
   },
 });
 
+// Most recent committed bundle for a property — drives the "Last updated"
+// subtitle that appears on RV-park pages so the user always knows how
+// fresh the manually-uploaded data is.
+export const latestBundleForProperty = query({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    const bundles = await ctx.db
+      .query("rv_upload_bundles")
+      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const committed = bundles.filter((b) => b.status === "committed");
+    if (committed.length === 0) return null;
+    committed.sort((a, b) => (b.committedAt || 0) - (a.committedAt || 0));
+    const latest = committed[0];
+    return {
+      committedAt: latest.committedAt || null,
+      committedBy: latest.committedBy || null,
+      period: latest.period,
+      bundleId: latest._id,
+    };
+  },
+});
+
 // Cross-property feed for the Data Pipeline page — every committed bundle
 // across the portfolio so RV park's monthly uploads appear in the same
 // file-history grid as Yardi sync jobs. Joins each bundle to its property
@@ -396,11 +419,22 @@ export const _commitBundleStatus = internalMutation({
     committedBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const bundle = await ctx.db.get(args.bundleId);
     await ctx.db.patch(args.bundleId, {
       status: "committed",
       committedAt: Date.now(),
       committedBy: args.committedBy,
     });
+    // Flip property.hasData=true on the RV park's first successful commit so
+    // the sidebar's "No data" badge clears. Commercial properties get this
+    // via incomeLines.upsert; RV's never wrote it because RV financials
+    // live in rv_financials, not income_lines.
+    if (bundle?.propertyId) {
+      const property = await ctx.db.get(bundle.propertyId);
+      if (property && !property.hasData) {
+        await ctx.db.patch(bundle.propertyId, { hasData: true });
+      }
+    }
   },
 });
 
@@ -554,4 +588,59 @@ export const listSites = query({
       .query("rv_sites")
       .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
       .collect(),
+});
+
+// Distinct months (YYYY-MM) for which a financial package has been ingested.
+// Powers the Period dropdown on the IS / Budget vs Actuals tabs so the user
+// can pick which historical snapshot to view.
+export const listFinancialPeriods = query({
+  args: { propertyId: v.id("properties"), kind: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("rv_financials")
+      .withIndex("by_property_period", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const set = new Set<string>();
+    for (const r of rows) {
+      if (args.kind && r.kind !== args.kind) continue;
+      if (r.snapshotPeriod) set.add(r.snapshotPeriod);
+    }
+    return Array.from(set).sort();
+  },
+});
+
+// Pull a specific historical snapshot of financial rows for the period the
+// user picked. Falls back to the latest snapshot when `period` is omitted so
+// existing callers keep their behavior.
+export const listFinancialsForPeriod = query({
+  args: {
+    propertyId: v.id("properties"),
+    period: v.optional(v.string()),
+    kind: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (args.period) {
+      const rows = await ctx.db
+        .query("rv_financials")
+        .withIndex("by_property_period", (q) =>
+          q.eq("propertyId", args.propertyId).eq("snapshotPeriod", args.period!),
+        )
+        .collect();
+      return args.kind ? rows.filter((r) => r.kind === args.kind) : rows;
+    }
+    if (args.kind) {
+      return await ctx.db
+        .query("rv_financials")
+        .withIndex("by_property_kind_latest", (q) =>
+          q.eq("propertyId", args.propertyId).eq("kind", args.kind!).eq("isLatest", true),
+        )
+        .collect();
+    }
+    return await ctx.db
+      .query("rv_financials")
+      .withIndex("by_property_latest", (q) =>
+        q.eq("propertyId", args.propertyId).eq("isLatest", true),
+      )
+      .collect();
+  },
 });
