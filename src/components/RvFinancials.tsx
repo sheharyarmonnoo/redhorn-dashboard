@@ -319,9 +319,30 @@ function TabbedContent({
   // Period selector only matters for the IS + Budget vs Actuals tabs. Debt &
   // DSCR is sourced from a separate property_debt feed and isn't period-aware.
   const showPeriodSelector = view !== "debt" && periods.length > 0;
+  const periodControl = showPeriodSelector ? (
+    <div className="flex items-center gap-1.5 mb-3 mt-3">
+      <label className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] font-medium uppercase tracking-wide">
+        Period
+      </label>
+      <select
+        value={selectedPeriod || ""}
+        onChange={(e) => onChangeSelectedPeriod(e.target.value || null)}
+        className="text-[12px] px-2 py-1 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
+      >
+        {[...periods].sort().reverse().map((p) => (
+          <option key={p} value={p}>
+            {formatPeriodLabel(p)}
+          </option>
+        ))}
+      </select>
+    </div>
+  ) : null;
   return (
     <>
-      {/* Tab switcher styled identically to commercial /financials */}
+      {/* Tab switcher styled identically to commercial /financials. Period
+          selector lives BELOW the Summary panel (next to / under the IS
+          headline) — matches the commercial layout where Period + Compare
+          To sit on the row above the Line Item table, not next to the tabs. */}
       <div className="flex items-center gap-3 mb-4">
         <div className="flex gap-1 bg-[#f4f4f5] dark:bg-[#27272a] rounded-md p-0.5 w-fit">
           {(
@@ -344,34 +365,20 @@ function TabbedContent({
             </button>
           ))}
         </div>
-        {showPeriodSelector && (
-          <div className="flex items-center gap-1.5">
-            <label className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] font-medium uppercase tracking-wide">
-              Period
-            </label>
-            <select
-              value={selectedPeriod || ""}
-              onChange={(e) => onChangeSelectedPeriod(e.target.value || null)}
-              className="text-[12px] px-2 py-1 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
-            >
-              {[...periods].sort().reverse().map((p) => (
-                <option key={p} value={p}>
-                  {formatPeriodLabel(p)}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
       {view === "statement" && (
         <>
           <SummaryPanel totals={totals} periodLabel={periodLabel} />
+          {periodControl}
           <IncomeStatementTable lines={lines} totalIncome={totals.income} periodLabel={periodLabel} />
         </>
       )}
       {view === "budget" && (
-        <BudgetVsActualsView lines={lines} totals={totals} periodLabel={periodLabel} />
+        <>
+          {periodControl}
+          <BudgetVsActualsView lines={lines} totals={totals} periodLabel={periodLabel} />
+        </>
       )}
       {view === "debt" && (
         <DebtAndDscrView noi={totals.noi} propertyId={propertyId} />
