@@ -353,8 +353,15 @@ function BudgetRow({ row }: { row: Row }) {
   // table reads as section / subsection / subtotal lines only. Per-line
   // detail belongs in the Income Statement tab where you can drill in.
   if (kind === "leaf") return null;
-
+  // Drop the same noise rows we filter from the IS tree:
+  //  • "Ordinary Income/Expense" generic scaffold
+  //  • intermediate "Total - NNNN-100" subtotals (only NNNN-000 closing
+  //    subtotals carry through, so the table doesn't double up).
   const li = String(row.lineItem || "").trim();
+  if (/^Ordinary\s+Income\/Expense$/i.test(li)) return null;
+  const interimMatch = li.match(/^Total\s*-\s*(\d{4}-)(\d{3})/i);
+  if (interimMatch && interimMatch[2] !== "000") return null;
+
   const displayLabel = cleanLabel(li);
   // Leaves were filtered above, so only headers / subgroups / subtotals reach here.
   const indent = kind === "subgroup" ? 12 : 0;
@@ -761,11 +768,26 @@ function isBlock(x: any): x is Block {
 }
 
 function parseBlocks(lines: Row[]): (Block | Row)[] {
+  // First pass — drop noise rows we never want to render anywhere:
+  //  • "Ordinary Income/Expense" — generic Northgate scaffold; the Income /
+  //    Expense section labels under it already convey the same grouping.
+  //  • Intermediate subtotals matching "Total - NNNN-100 - X" / "Total -
+  //    NNNN-200 - X" etc. — they roll up into the X-000 closing subtotal so
+  //    showing both reads as duplication ("Total RV Contract" and "Total
+  //    RV Income" carrying the same number).
+  const cleaned = lines.filter((r) => {
+    const li = String(r.lineItem || "").trim();
+    if (/^Ordinary\s+Income\/Expense$/i.test(li)) return false;
+    const interimMatch = li.match(/^Total\s*-\s*(\d{4}-)(\d{3})/i);
+    if (interimMatch && interimMatch[2] !== "000") return false;
+    return true;
+  });
+
   const out: (Block | Row)[] = [];
   let current: Block | null = null;
   let currentCode: string | null = null;
 
-  for (const r of lines) {
+  for (const r of cleaned) {
     const li = String(r.lineItem || "").trim();
     const hasAmounts =
       Math.abs(r.amountMtd || 0) > 0.0001 ||
@@ -801,6 +823,35 @@ function parseBlocks(lines: Row[]): (Block | Row)[] {
     }
   }
   if (current) out.push(current);
+
+  // Merge step — fold SRDE Income (4200-000) and the rest of the operating
+  // sub-blocks into Other Income (4040-000) so the user only sees three
+  // top-level income toggles: RV Income, Other Income (with SRDE inside),
+  // and Miscellaneous Income. SRDE's own header becomes a sub-section row
+  // inside Other Income's children, so expanding Other Income reveals the
+  // SRDE roll-up as one of its line items.
+  const otherIncomeIdx = out.findIndex(
+    (item) =>
+      isBlock(item) && /^4040-000/.test(String(item.header.lineItem || "")),
+  );
+  const srdeIdx = out.findIndex(
+    (item) =>
+      isBlock(item) && /^4200-000/.test(String(item.header.lineItem || "")),
+  );
+  if (otherIncomeIdx >= 0 && srdeIdx >= 0) {
+    const otherBlock = out[otherIncomeIdx] as Block;
+    const srdeBlock = out[srdeIdx] as Block;
+    // Fold the SRDE block in BEFORE the Other Income closing total so the
+    // user reads: Other Income leaves → SRDE section → SRDE leaves → Total
+    // SRDE Income → Total Other Income.
+    otherBlock.children.push(srdeBlock.header);
+    otherBlock.children.push(...srdeBlock.children);
+    if (srdeBlock.closingTotal) {
+      otherBlock.children.push(srdeBlock.closingTotal);
+    }
+    out.splice(srdeIdx, 1);
+  }
+
   return out;
 }
 
@@ -894,17 +945,10 @@ function BlockSection({
       />
       {isOpen &&
         visibleChildren.map((c, i) => (
-          <div key={`${c._id}-${i}`} className="rh-section-expand" style={{ animationDelay: `${Math.min(i, 6) * 18}ms` }}>
-            <ISRow row={c} totalIncome={totalIncome} />
-          </div>
+          <ISRow key={`${c._id}-${i}`} row={c} totalIncome={totalIncome} />
         ))}
       {isOpen && block.closingTotal && (
-        <div
-          className="rh-section-expand"
-          style={{ animationDelay: `${Math.min(visibleChildren.length, 6) * 18}ms` }}
-        >
-          <ISRow row={block.closingTotal} totalIncome={totalIncome} />
-        </div>
+        <ISRow row={block.closingTotal} totalIncome={totalIncome} />
       )}
     </>
   );
@@ -941,6 +985,11 @@ function ISRow({
   // Block headers are at root with the chevron drawn alongside.
   const indent = isBlockHeader ? 0 : kind === "leaf" ? 24 : kind === "subgroup" ? 12 : 0;
 
+  // Row palette mirrors Belgold's IS: top-level sections + closing subtotals
+  // sit on tinted backgrounds with uppercase labels; subgroup headers are
+  // bold black; LEAF rows are tinted blue (the same #2563eb the Yardi-fed
+  // page uses) so the eye reads them as the actual line items inside an
+  // expanded section.
   const rowClass = [
     "grid grid-cols-[1fr_120px_120px_120px_90px_90px] px-4 py-1.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center",
     isBlockHeader
@@ -951,7 +1000,7 @@ function ISRow({
       ? "bg-[#fafafa] dark:bg-[#27272a]/60 font-semibold text-[#18181b] dark:text-[#fafafa]"
       : kind === "subgroup"
       ? "font-medium text-[#18181b] dark:text-[#fafafa]"
-      : "text-[#18181b] dark:text-[#fafafa]",
+      : "text-[#2563eb] dark:text-[#60a5fa]",
     onToggle ? "cursor-pointer hover:bg-[#fafafa]/60 dark:hover:bg-[#27272a]/40" : "",
   ]
     .filter(Boolean)
