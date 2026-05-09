@@ -1,34 +1,41 @@
 "use client";
-import { useMemo, useState } from "react";
-import { Search, ExternalLink } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ExternalLink, X } from "lucide-react";
+import { AgGridReact } from "ag-grid-react";
+import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
 import { useRvData, formatCurrency } from "@/hooks/useConvexData";
+import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 
-// Site-rolled-up rent roll for the RV park. The user's directive: lead with
-// unit (site) info, treat guests as ephemeral context — RV stays churn fast
-// (transient bookings of 2-5 nights), so a per-reservation table would be
-// noise. We aggregate every reservation per site into one row showing the
-// current/next reservation, total revenue YTD-in-snapshot, paid %, and
-// outstanding balance.
+ModuleRegistry.registerModules([AllCommunityModule]);
 
-type Reservation = any;
-type Balance = any;
-type Site = any;
+// RV park rent roll. Per the user's directive:
+//   - lead with site / unit info, NOT guest names (RV stays churn fast —
+//     a per-guest column would be noise)
+//   - on row click, show the current/next reservation's LINE ITEMS
+//     (charges, occupancy, surcharges, tax, balance), not a ledger
+//
+// Visually matches Hollister/Belgold by reusing the AG Grid layout pattern.
 
+type Row = any;
 type SiteRow = {
   siteCode: string;
-  displayName: string;
+  siteCodeNumeric: number;
   siteType: string;
   siteClass?: string;
+  status: "occupied" | "departing" | "arriving" | "vacant";
   reservationCount: number;
-  currentRes: Reservation | null;
-  nextRes: Reservation | null;
-  status: "occupied" | "arriving" | "vacant" | "departing";
   totalCharges: number;
   totalPayments: number;
   totalBalance: number;
   percentPaid: number;
   hasOpenBalance: boolean;
+  currentRes: Row | null;
+  nextRes: Row | null;
+  arrivalDate: string;
+  departureDate: string;
+  package?: string;
+  reservations: Row[];
 };
 
 function todayIso(): string {
@@ -47,27 +54,16 @@ function formatShortDate(iso?: string): string {
   });
 }
 
-function dateBetween(target: string, from: string, to: string): boolean {
-  return target >= from && target <= to;
-}
-
-function rollupBySite(
-  reservations: Reservation[],
-  sites: Site[],
-): SiteRow[] {
+function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
   const today = todayIso();
-  // Index sites first so we always include vacant ones.
-  const siteByCode = new Map<string, Site>();
+  const siteByCode = new Map<string, Row>();
   for (const s of sites) siteByCode.set(s.siteCode, s);
 
-  // Group reservations by siteCode.
-  const byCode = new Map<string, Reservation[]>();
+  const byCode = new Map<string, Row[]>();
   for (const r of reservations) {
     const code = r.siteCode;
     if (!byCode.has(code)) byCode.set(code, []);
     byCode.get(code)!.push(r);
-    // Also surface sites only present in reservations (in case the
-    // sites table missed an upsert).
     if (!siteByCode.has(code)) {
       siteByCode.set(code, {
         siteCode: code,
@@ -84,10 +80,10 @@ function rollupBySite(
       .slice()
       .sort((a, b) => (a.arrivalDate || "").localeCompare(b.arrivalDate || ""));
 
-    let currentRes: Reservation | null = null;
-    let nextRes: Reservation | null = null;
+    let currentRes: Row | null = null;
+    let nextRes: Row | null = null;
     for (const r of rs) {
-      if (dateBetween(today, r.arrivalDate, r.departureDate)) {
+      if (r.arrivalDate <= today && today <= r.departureDate) {
         currentRes = r;
         break;
       }
@@ -98,25 +94,12 @@ function rollupBySite(
 
     let status: SiteRow["status"] = "vacant";
     if (currentRes) {
-      // Departing today / tomorrow — give an early warning so PM knows.
       const departInDays =
-        (Date.UTC(
-          ...(currentRes.departureDate.split("-").map(Number) as [number, number, number]),
-        ) -
-          Date.UTC(
-            ...(today.split("-").map(Number) as [number, number, number]),
-          )) /
-        86400000;
+        (Date.parse(currentRes.departureDate) - Date.parse(today)) / 86400000;
       status = departInDays <= 1 ? "departing" : "occupied";
     } else if (nextRes) {
       const arriveInDays =
-        (Date.UTC(
-          ...(nextRes.arrivalDate.split("-").map(Number) as [number, number, number]),
-        ) -
-          Date.UTC(
-            ...(today.split("-").map(Number) as [number, number, number]),
-          )) /
-        86400000;
+        (Date.parse(nextRes.arrivalDate) - Date.parse(today)) / 86400000;
       if (arriveInDays <= 7) status = "arriving";
     }
 
@@ -125,51 +108,67 @@ function rollupBySite(
     const totalBalance = rs.reduce((s, r) => s + (r.balanceOnInvoice || 0), 0);
     const percentPaid = totalCharges > 0 ? totalPayments / totalCharges : 1;
 
+    const focus = currentRes || nextRes;
+    const numericMatch = code.match(/^\d+/);
     rows.push({
       siteCode: code,
-      displayName: site.displayName || code,
+      siteCodeNumeric: numericMatch ? parseInt(numericMatch[0], 10) : Number.MAX_SAFE_INTEGER,
       siteType: site.siteType || "",
       siteClass: site.siteClass,
-      reservationCount: rs.length,
-      currentRes,
-      nextRes,
       status,
+      reservationCount: rs.length,
       totalCharges,
       totalPayments,
       totalBalance,
       percentPaid,
       hasOpenBalance: totalBalance > 0.5,
+      currentRes,
+      nextRes,
+      arrivalDate: focus?.arrivalDate || "",
+      departureDate: focus?.departureDate || "",
+      package: focus?.packageApplied,
+      reservations: rs,
     });
   }
-
-  // Sort: occupied first, then arriving, then vacant. Within each, by code.
-  const order: Record<SiteRow["status"], number> = {
-    occupied: 0,
-    departing: 1,
-    arriving: 2,
-    vacant: 3,
-  };
-  rows.sort((a, b) => {
-    const o = order[a.status] - order[b.status];
-    if (o !== 0) return o;
-    return a.siteCode.localeCompare(b.siteCode, undefined, { numeric: true });
-  });
   return rows;
 }
 
-const STATUS_COLORS: Record<SiteRow["status"], string> = {
-  occupied: "bg-[#16a34a]",
-  departing: "bg-[#d97706]",
-  arriving: "bg-[#2563eb]",
-  vacant: "bg-[#a1a1aa]",
-};
+function StatusCellRenderer(props: { value: string }) {
+  const dot: Record<string, string> = {
+    occupied: "bg-[#16a34a]",
+    departing: "bg-[#d97706]",
+    arriving: "bg-[#2563eb]",
+    vacant: "bg-[#a1a1aa]",
+  };
+  const label: Record<string, string> = {
+    occupied: "Occupied",
+    departing: "Departing",
+    arriving: "Arriving",
+    vacant: "Vacant",
+  };
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b] dark:text-[#fafafa]">
+      <span className={`w-1.5 h-1.5 rounded-full ${dot[props.value] || "bg-[#a1a1aa]"}`} />
+      {label[props.value] || props.value}
+    </span>
+  );
+}
 
-const STATUS_LABEL: Record<SiteRow["status"], string> = {
-  occupied: "Occupied",
-  departing: "Departing",
-  arriving: "Arriving",
-  vacant: "Vacant",
-};
+function CurrencyCellRenderer(props: { value: number }) {
+  return <span>{props.value > 0 ? formatCurrency(props.value) : "—"}</span>;
+}
+
+function BalanceCellRenderer(props: { value: number }) {
+  const v = props.value || 0;
+  if (v <= 0.5) return <span className="text-[#a1a1aa]">—</span>;
+  return <span className="text-[#dc2626] font-medium">{formatCurrency(v)}</span>;
+}
+
+function PaidPctCellRenderer(props: { value: number; data: SiteRow }) {
+  if (!props.data || props.data.totalCharges === 0) return <span className="text-[#a1a1aa]">—</span>;
+  const v = props.value || 0;
+  return <span>{(v * 100).toFixed(0)}%</span>;
+}
 
 export default function RvRentRoll({
   propertyName,
@@ -180,35 +179,16 @@ export default function RvRentRoll({
   propertyId: string | undefined;
   diamondMapsUrl?: string;
 }) {
-  const { reservations, balances, sites, loading } = useRvData(propertyId);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "occupied" | "arriving" | "vacant" | "past_due">("all");
+  const { reservations, sites, loading } = useRvData(propertyId);
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [quickSearch, setQuickSearch] = useState("");
+  const gridRef = useRef<AgGridReact>(null);
 
   const allRows = useMemo(() => rollupBySite(reservations, sites), [reservations, sites]);
-
-  // Past-due flag combines reservation balances + standalone balance report
-  // entries (some guests may show in balances but not in active reservations).
-  const balanceByConfirmation = useMemo(() => {
-    const m = new Map<string, Balance>();
-    for (const b of balances) {
-      if (b.confirmation) m.set(b.confirmation, b);
-    }
-    return m;
-  }, [balances]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return allRows.filter((r) => {
-      if (statusFilter === "past_due" && !r.hasOpenBalance) return false;
-      if (statusFilter !== "all" && statusFilter !== "past_due" && r.status !== statusFilter) return false;
-      if (!q) return true;
-      const hay =
-        `${r.siteCode} ${r.displayName} ${r.siteType} ` +
-        `${r.currentRes?.firstName || ""} ${r.currentRes?.lastName || ""} ` +
-        `${r.nextRes?.firstName || ""} ${r.nextRes?.lastName || ""}`;
-      return hay.toLowerCase().includes(q);
-    });
-  }, [allRows, search, statusFilter]);
+  const selectedRow = useMemo(
+    () => (selectedCode ? allRows.find((r) => r.siteCode === selectedCode) || null : null),
+    [allRows, selectedCode],
+  );
 
   const stats = useMemo(() => {
     const occupied = allRows.filter((r) => r.status === "occupied" || r.status === "departing").length;
@@ -216,15 +196,110 @@ export default function RvRentRoll({
     const vacant = allRows.filter((r) => r.status === "vacant").length;
     const pastDueRows = allRows.filter((r) => r.hasOpenBalance);
     const totalAr = pastDueRows.reduce((s, r) => s + r.totalBalance, 0);
-    return {
-      total: allRows.length,
-      occupied,
-      arriving,
-      vacant,
-      pastDueCount: pastDueRows.length,
-      totalAr,
-    };
+    return { total: allRows.length, occupied, arriving, vacant, pastDueCount: pastDueRows.length, totalAr };
   }, [allRows]);
+
+  // Column defs mirror the commercial rent roll pattern (sortable / filterable
+  // / resizable defaults handled at the grid level). Tenant column intentionally
+  // omitted — RV stays churn so fast that a guest name on the row is noise.
+  const columnDefs = useMemo<ColDef[]>(() => {
+    return [
+      {
+        field: "siteCode",
+        headerName: "Site",
+        width: 100,
+        pinned: "left",
+        sort: "asc",
+        comparator: (a: string, b: string) =>
+          a.localeCompare(b, undefined, { numeric: true }),
+      },
+      { field: "siteType", headerName: "Type", minWidth: 220, flex: 1 },
+      {
+        field: "status",
+        headerName: "Status",
+        width: 130,
+        cellRenderer: StatusCellRenderer,
+        filter: true,
+      },
+      {
+        field: "arrivalDate",
+        headerName: "Arrival",
+        width: 110,
+        valueFormatter: (p: { value: string }) => formatShortDate(p.value),
+      },
+      {
+        field: "departureDate",
+        headerName: "Departure",
+        width: 110,
+        valueFormatter: (p: { value: string }) => formatShortDate(p.value),
+      },
+      {
+        field: "package",
+        headerName: "Package",
+        width: 220,
+        valueFormatter: (p: { value: string }) => p.value || "—",
+      },
+      {
+        field: "totalCharges",
+        headerName: "Charges",
+        width: 120,
+        cellRenderer: CurrencyCellRenderer,
+      },
+      {
+        field: "totalPayments",
+        headerName: "Payments",
+        width: 120,
+        cellRenderer: CurrencyCellRenderer,
+      },
+      {
+        field: "totalBalance",
+        headerName: "Balance",
+        width: 120,
+        cellRenderer: BalanceCellRenderer,
+      },
+      {
+        field: "percentPaid",
+        headerName: "Paid %",
+        width: 100,
+        cellRenderer: PaidPctCellRenderer,
+      },
+      {
+        field: "reservationCount",
+        headerName: "Stays",
+        width: 90,
+      },
+    ];
+  }, []);
+
+  const defaultColDef = useMemo<ColDef>(() => ({
+    sortable: true,
+    resizable: true,
+    filter: true,
+    suppressMovable: false,
+    cellStyle: { textAlign: "left" } as any,
+    headerClass: "ag-left-aligned-header",
+  }), []);
+
+  const persistence = useAgGridPersistence({
+    storageKey: `redhorn_grid_rv_rent_roll`,
+    fallbackFit: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
+  });
+
+  function onRowClicked(event: RowClickedEvent) {
+    if (event.node?.group) return;
+    if (!event.data) return;
+    setSelectedCode((event.data as SiteRow).siteCode);
+  }
+
+  // Esc closes the drawer, mirroring the commercial RentRollDrawer behavior.
+  useEffect(() => {
+    if (!selectedRow) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedCode(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedRow]);
 
   if (!propertyId) return null;
 
@@ -232,14 +307,15 @@ export default function RvRentRoll({
     return (
       <div>
         <PageHeader title="Rent Roll" subtitle={`${propertyName} — loading…`} />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mb-4">
+          {[1, 2, 3, 4, 5].map((i) => (
             <div
               key={i}
               className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-3 animate-pulse h-[68px]"
             />
           ))}
         </div>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6 h-96 animate-pulse" />
       </div>
     );
   }
@@ -249,9 +325,7 @@ export default function RvRentRoll({
       <div>
         <PageHeader title="Rent Roll" subtitle={propertyName} />
         <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-10 text-center">
-          <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">
-            No data yet
-          </p>
+          <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">No data yet</p>
           <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1.5">
             Drop the monthly bundle in <span className="font-medium">Monthly Uploads</span> to populate the rent roll.
           </p>
@@ -290,96 +364,38 @@ export default function RvRentRoll({
         />
       </div>
 
-      {/* Filters + search */}
-      <div className="flex flex-col sm:flex-row gap-2 mb-3">
-        <div className="flex gap-1.5 flex-wrap">
-          {(["all", "occupied", "arriving", "vacant", "past_due"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setStatusFilter(f)}
-              className={`text-[11px] font-medium px-2.5 py-1 rounded-full cursor-pointer transition-colors ${
-                statusFilter === f
-                  ? "bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b]"
-                  : "bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
-              }`}
-            >
-              {f === "all" ? "All" : f === "past_due" ? "Past Due" : f.charAt(0).toUpperCase() + f.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div className="sm:ml-auto relative">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#a1a1aa]" />
+      {/* Search */}
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-3 text-[12px]">
+        <div className="sm:ml-auto w-full sm:w-auto flex items-center gap-2">
           <input
             type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search site, type, guest…"
-            className="text-[12px] bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded pl-7 pr-3 py-1.5 text-[#18181b] dark:text-[#fafafa] w-full sm:w-64"
+            placeholder="Quick search all data..."
+            value={quickSearch}
+            onChange={(e) => setQuickSearch(e.target.value)}
+            className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded px-3 py-1.5 text-[#18181b] dark:text-[#fafafa] w-full sm:w-72"
           />
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
-        <div className="grid grid-cols-[100px_1fr_110px_140px_140px_120px_100px_80px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
-          <span>Site</span>
-          <span>Type</span>
-          <span>Status</span>
-          <span>Current/Next</span>
-          <span>Arr → Dep</span>
-          <span className="text-right">Balance</span>
-          <span className="text-right">Paid %</span>
-          <span className="text-right">Stays</span>
-        </div>
-        {filtered.length === 0 ? (
-          <div className="px-5 py-10 text-center text-[12px] text-[#a1a1aa]">
-            No sites match the current filters.
-          </div>
-        ) : (
-          filtered.map((r) => {
-            const focusRes = r.currentRes || r.nextRes;
-            const guestName = focusRes
-              ? `${focusRes.firstName || ""} ${focusRes.lastName || ""}`.trim()
-              : "";
-            return (
-              <div
-                key={r.siteCode}
-                className="grid grid-cols-[100px_1fr_110px_140px_140px_120px_100px_80px] px-4 py-2.5 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] text-[#18181b] dark:text-[#fafafa] items-center"
-              >
-                <span className="font-medium tabular-nums">{r.siteCode}</span>
-                <span className="text-[#71717a] dark:text-[#a1a1aa] truncate" title={r.siteType}>
-                  {r.siteType}
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-[11px]">
-                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_COLORS[r.status]}`} />
-                  {STATUS_LABEL[r.status]}
-                </span>
-                <span className="truncate text-[11px]" title={guestName}>
-                  {guestName || <span className="text-[#a1a1aa]">—</span>}
-                </span>
-                <span className="text-[10px] text-[#71717a] dark:text-[#a1a1aa] tabular-nums">
-                  {focusRes
-                    ? `${formatShortDate(focusRes.arrivalDate)} → ${formatShortDate(focusRes.departureDate)}`
-                    : "—"}
-                </span>
-                <span
-                  className={`text-right tabular-nums ${
-                    r.hasOpenBalance ? "text-[#dc2626] font-medium" : "text-[#71717a] dark:text-[#a1a1aa]"
-                  }`}
-                >
-                  {r.totalBalance > 0.5 ? formatCurrency(r.totalBalance) : "—"}
-                </span>
-                <span className="text-right tabular-nums text-[#71717a] dark:text-[#a1a1aa]">
-                  {r.totalCharges > 0 ? `${(r.percentPaid * 100).toFixed(0)}%` : "—"}
-                </span>
-                <span className="text-right tabular-nums text-[#a1a1aa] dark:text-[#71717a]">
-                  {r.reservationCount}
-                </span>
-              </div>
-            );
-          })
-        )}
+      {/* Grid */}
+      <div className="ag-theme-quartz" style={{ height: "calc(100vh - 320px)", minHeight: 480 }}>
+        <AgGridReact
+          ref={gridRef}
+          rowData={allRows}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          onRowClicked={onRowClicked}
+          quickFilterText={quickSearch}
+          rowHeight={36}
+          headerHeight={36}
+          suppressCellFocus
+          {...persistence}
+        />
       </div>
+
+      {selectedRow && (
+        <ReservationDrawer row={selectedRow} onClose={() => setSelectedCode(null)} />
+      )}
     </div>
   );
 }
@@ -402,6 +418,190 @@ function StatCard({
         {label}
       </p>
       {sub && <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+// Replaces the commercial rent roll's ledger drawer for the RV park. Shows
+// the line items of the focused reservation (current if any, otherwise next
+// upcoming). Tabs switch between current / next when both exist.
+function ReservationDrawer({ row, onClose }: { row: SiteRow; onClose: () => void }) {
+  const tabs: { key: "current" | "next"; label: string; res: Row | null }[] = [];
+  if (row.currentRes) tabs.push({ key: "current", label: "Current", res: row.currentRes });
+  if (row.nextRes) tabs.push({ key: "next", label: "Next", res: row.nextRes });
+  const fallback = row.reservations[0] || null;
+
+  const [activeKey, setActiveKey] = useState<"current" | "next">(
+    row.currentRes ? "current" : "next",
+  );
+  const active = tabs.find((t) => t.key === activeKey)?.res ?? fallback;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 dark:bg-black/60" />
+      <div
+        className="relative bg-white dark:bg-[#18181b] border-l border-[#e4e4e7] dark:border-[#3f3f46] shadow-2xl w-full max-w-[560px] h-full overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between px-5 py-4 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
+          <div>
+            <p className="text-[16px] font-semibold text-[#18181b] dark:text-[#fafafa]">Site {row.siteCode}</p>
+            <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5">{row.siteType}</p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1 rounded hover:bg-[#71717a]/10 text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Site-level rollup summary */}
+        <div className="grid grid-cols-3 gap-2 px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a]/50">
+          <DrawerStat label="Stays" value={`${row.reservationCount}`} />
+          <DrawerStat
+            label="Total Balance"
+            value={row.totalBalance > 0.5 ? formatCurrency(row.totalBalance) : "—"}
+            valueClass={row.hasOpenBalance ? "text-[#dc2626]" : ""}
+          />
+          <DrawerStat
+            label="Paid %"
+            value={row.totalCharges > 0 ? `${(row.percentPaid * 100).toFixed(0)}%` : "—"}
+          />
+        </div>
+
+        {tabs.length > 1 && (
+          <div className="flex gap-1 px-5 pt-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setActiveKey(t.key)}
+                className={`text-[12px] font-medium px-3 py-2 cursor-pointer border-b-2 -mb-px transition-colors ${
+                  activeKey === t.key
+                    ? "border-[#18181b] dark:border-[#fafafa] text-[#18181b] dark:text-[#fafafa]"
+                    : "border-transparent text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa]"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto">
+          {active ? (
+            <ReservationLineItems res={active} />
+          ) : (
+            <div className="px-5 py-10 text-center text-[12px] text-[#a1a1aa]">
+              No active reservations on this site.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DrawerStat({
+  label,
+  value,
+  valueClass = "",
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[9px] text-[#a1a1aa] dark:text-[#71717a] font-medium uppercase tracking-wide">
+        {label}
+      </p>
+      <p className={`text-[14px] font-semibold mt-0.5 ${valueClass || "text-[#18181b] dark:text-[#fafafa]"}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function ReservationLineItems({ res }: { res: Row }) {
+  const items: { label: string; value: number; muted?: boolean; emphasize?: boolean }[] = [
+    { label: "Reservation Charges", value: res.reservationCharges || 0 },
+    { label: "Occupancy Charges", value: res.occupancyCharges || 0 },
+    { label: "Surcharges", value: res.surcharges || 0 },
+    { label: "Discounts", value: -(res.discounts || 0) },
+    { label: "Tax", value: res.tax || 0 },
+    { label: "Utility Charges", value: res.utilityCharges || 0 },
+    { label: "POS Charges", value: res.posCharges || 0 },
+    { label: "Total Charges on Invoice", value: res.totalChargesOnInvoice || 0, emphasize: true },
+    { label: "Total Payments on Invoice", value: -(res.totalPaymentsOnInvoice || 0), muted: true },
+    { label: "Balance on Invoice", value: res.balanceOnInvoice || 0, emphasize: true },
+  ];
+
+  return (
+    <div>
+      {/* Reservation header — keeps confirmation # + arrival/departure context
+          without emphasizing the guest name (de-emphasized per directive). */}
+      <div className="px-5 py-3 border-b border-[#e4e4e7] dark:border-[#3f3f46]">
+        <div className="flex items-center justify-between">
+          <p className="text-[12px] font-medium text-[#18181b] dark:text-[#fafafa]">
+            {res.confirmation}
+          </p>
+          <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] tabular-nums">
+            {formatShortDate(res.arrivalDate)} → {formatShortDate(res.departureDate)} · {res.nights} night{res.nights === 1 ? "" : "s"}
+          </p>
+        </div>
+        {res.packageApplied && (
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-0.5">{res.packageApplied}</p>
+        )}
+      </div>
+
+      <div className="divide-y divide-[#f4f4f5] dark:divide-[#27272a]">
+        {items.map((it, i) => (
+          <div
+            key={i}
+            className={`grid grid-cols-[1fr_140px] px-5 py-2.5 text-[12px] ${
+              it.emphasize ? "bg-[#fafafa]/60 dark:bg-[#27272a]/40 font-medium" : ""
+            }`}
+          >
+            <span
+              className={
+                it.emphasize
+                  ? "text-[#18181b] dark:text-[#fafafa]"
+                  : it.muted
+                  ? "text-[#71717a] dark:text-[#a1a1aa]"
+                  : "text-[#18181b] dark:text-[#fafafa]"
+              }
+            >
+              {it.label}
+            </span>
+            <span
+              className={`text-right tabular-nums ${
+                it.value === 0
+                  ? "text-[#a1a1aa]"
+                  : it.muted
+                  ? "text-[#16a34a]"
+                  : it.value < 0
+                  ? "text-[#16a34a]"
+                  : "text-[#18181b] dark:text-[#fafafa]"
+              }`}
+            >
+              {it.value === 0 ? "—" : it.value < 0 ? `(${formatCurrency(Math.abs(it.value))})` : formatCurrency(it.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 px-5 py-4 border-t border-[#e4e4e7] dark:border-[#3f3f46]">
+        <DrawerStat
+          label="Paid %"
+          value={`${((res.percentPaid || 0) * 100).toFixed(0)}%`}
+        />
+        <DrawerStat
+          label="Source"
+          value={res.reservationSource || "—"}
+        />
+      </div>
     </div>
   );
 }
