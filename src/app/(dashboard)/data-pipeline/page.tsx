@@ -2,7 +2,7 @@
 import { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
-import { useSyncJobsWithLoading } from "@/hooks/useConvexData";
+import { useSyncJobsWithLoading, useRvCommittedBundles } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 import { useTheme } from "@/components/ThemeProvider";
 import PageHeader from "@/components/PageHeader";
@@ -502,6 +502,7 @@ export default function DataPipelinePage() {
   const gridRef = useRef<AgGridReact>(null);
   const isMobile = useIsMobile();
   const { jobs: syncJobs, loading: syncJobsLoading } = useSyncJobsWithLoading();
+  const { bundles: rvBundles } = useRvCommittedBundles();
   const [selectedFile, setSelectedFile] = useState<FileSyncRow | null>(null);
   const [activeSection, setActiveSection] = useState<"workflow" | "protocol">("workflow");
   const [showUpload, setShowUpload] = useState(false);
@@ -589,8 +590,38 @@ export default function DataPipelinePage() {
         });
       }
     }
+    // Merge in committed RV monthly bundles — same row shape as Yardi
+    // sync_jobs so the grid renders them in lock-step. fileType strings from
+    // the RV pipeline get the same "friendly type" treatment Yardi reports do.
+    const friendlyRvType: Record<string, string> = {
+      rentRoll: "Rent Roll",
+      balances: "Guests with Balance",
+      pos: "POS Sales",
+      payments: "Total Payment",
+      financial: "Financial Package",
+    };
+    for (const b of (rvBundles || []) as any[]) {
+      const committedAtIso = b.committedAt ? new Date(b.committedAt).toISOString() : "";
+      const baseDetail = `Bundle ${b.period} · ${b.files.length} file${b.files.length === 1 ? "" : "s"} committed${b.committedBy ? ` by ${b.committedBy}` : ""}`;
+      for (const f of b.files || []) {
+        rows.push({
+          id: `${b._id}-${f.id}`,
+          jobId: b._id,
+          storageId: f.storageId,
+          filename: f.name,
+          property: b.propertyName || "RV Park",
+          source: "Manual Upload",
+          type: friendlyRvType[f.fileType] || f.fileType || "",
+          records: typeof f.rowsParsed === "number" ? f.rowsParsed : 0,
+          size: "",
+          status: f.parseError ? "Failed" : "Success",
+          syncedAt: committedAtIso,
+          statusDetail: f.parseError || baseDetail,
+        });
+      }
+    }
     return rows;
-  }, [syncJobs]);
+  }, [syncJobs, rvBundles]);
 
   const lastSyncLabel = useMemo(() => {
     if (syncData.length === 0) return "No syncs yet";

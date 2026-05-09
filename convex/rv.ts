@@ -77,6 +77,28 @@ export const listBundles = query({
   },
 });
 
+// Cross-property feed for the Data Pipeline page — every committed bundle
+// across the portfolio so RV park's monthly uploads appear in the same
+// file-history grid as Yardi sync jobs. Joins each bundle to its property
+// name so the grid's Property column populates without a second lookup.
+export const listAllCommittedBundles = query({
+  args: {},
+  handler: async (ctx) => {
+    const bundles = await ctx.db.query("rv_upload_bundles").collect();
+    const committed = bundles.filter((b) => b.status === "committed");
+    if (committed.length === 0) return [];
+    const properties = await ctx.db.query("properties").collect();
+    const propById = new Map(properties.map((p) => [p._id as string, p]));
+    return committed
+      .map((b) => ({
+        ...b,
+        propertyName: propById.get(b.propertyId as unknown as string)?.name || "",
+        propertyCode: propById.get(b.propertyId as unknown as string)?.code || "",
+      }))
+      .sort((a, b) => (b.committedAt || 0) - (a.committedAt || 0));
+  },
+});
+
 // ---------- File staging ----------
 export const generateUploadUrl = mutation({
   args: {},
