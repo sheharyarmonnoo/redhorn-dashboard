@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Download, X } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
@@ -243,7 +244,15 @@ export default function RvRentRoll({
   const { reservations, sites, loading } = useRvData(propertyId);
   const { committedAt, period: lastBundlePeriod } = useRvLastUpdated(propertyId);
   const lastUpdated = formatLastUpdated(committedAt, lastBundlePeriod);
+  // Deep-link support: ?unit=<siteCode> opens the rent roll filtered to that
+  // site and auto-opens the ReservationDrawer. Used by the Past Due KPI
+  // drawer on the dashboard so the user can drill from a balance row to
+  // the site detail in one click. Mirrors how the commercial rent roll
+  // handles the same param.
+  const searchParams = useSearchParams();
+  const deepLinkUnit = searchParams.get("unit");
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const deepLinkAppliedRef = useRef<string | null>(null);
   const [quickSearch, setQuickSearch] = useState("");
   const gridRef = useRef<AgGridReact>(null);
 
@@ -252,6 +261,23 @@ export default function RvRentRoll({
     () => (selectedCode ? allRows.find((r) => r.siteCode === selectedCode) || null : null),
     [allRows, selectedCode],
   );
+
+  // Apply ?unit=<siteCode> once the row data is in: filter the grid to that
+  // code and open its drawer. Tracked via ref so a property switch resets
+  // and a same-param re-render doesn't loop the effect.
+  useEffect(() => {
+    if (!deepLinkUnit || allRows.length === 0) return;
+    if (deepLinkAppliedRef.current === deepLinkUnit) return;
+    const target = String(deepLinkUnit).trim();
+    const match = allRows.find(
+      (r) => r.siteCode.toLowerCase() === target.toLowerCase(),
+    );
+    if (match) {
+      deepLinkAppliedRef.current = deepLinkUnit;
+      setSelectedCode(match.siteCode);
+      setQuickSearch(match.siteCode);
+    }
+  }, [deepLinkUnit, allRows]);
 
   // KPI strip intentionally omitted — commercial rent rolls lead with the
   // grid and aggregate counts live on Dashboard / Site Plan, not Rent Roll.
