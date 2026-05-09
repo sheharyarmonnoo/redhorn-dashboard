@@ -776,7 +776,17 @@ function FileVolumeChart({ syncJobs, rvBundles, loading }: { syncJobs: any[]; rv
     const hasSync = syncJobs && syncJobs.length > 0;
     const hasRv = rvBundles && rvBundles.length > 0;
     if (!hasSync && !hasRv) return { categories: [] as string[], series: [] as any[] };
-    const propNames: Record<string, string> = { hol: "Hollister", bel: "Belgold", brad: "RV Park" };
+    // Bucket key → display name. Includes both the legacy "brad" filename
+    // prefix path and the actual rv_upload_bundles propertyCode ("rv-ohio")
+    // so the chart legend reads cleanly regardless of which RV property
+    // committed the bundle. Anything else falls back to a humanized form
+    // of the code below.
+    const propNames: Record<string, string> = {
+      hol: "Hollister",
+      bel: "Belgold",
+      brad: "RV Park",
+      "rv-ohio": "RV Ohio",
+    };
     const buckets: Record<string, Record<string, number>> = {}; // propCode -> bucketKey -> count
 
     for (const job of syncJobs ?? []) {
@@ -807,10 +817,20 @@ function FileVolumeChart({ syncJobs, rvBundles, loading }: { syncJobs: any[]; rv
     const allKeys = new Set<string>();
     for (const m of Object.values(buckets)) for (const k of Object.keys(m)) allKeys.add(k);
     const categories = Array.from(allKeys).sort();
+    // Generic humanizer — any propertyCode like "rv-foo" or "rv_bar" that
+    // isn't in the static map renders as "RV Foo" / "RV Bar" so a new RV
+    // property doesn't ship as a raw code in the chart legend.
+    const humanize = (code: string) => {
+      const known = propNames[code];
+      if (known) return known;
+      const m = code.match(/^rv[-_]([a-z]+)$/i);
+      if (m) return `RV ${m[1].charAt(0).toUpperCase()}${m[1].slice(1).toLowerCase()}`;
+      return code;
+    };
     const series = Object.entries(buckets)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([code, counts]) => ({
-        name: propNames[code] || code,
+        name: humanize(code),
         data: categories.map(c => counts[c] || 0),
       }));
     return { categories, series };
