@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useRvData, formatCurrency } from "@/hooks/useConvexData";
+import { useRvData, formatCurrency, normalizeRvDate } from "@/hooks/useConvexData";
 
 // RV-park-specific KPI drawer. Mirrors the commercial KPIDrawer shape
 // (slide-from-right panel, sticky header, Field rows) but reads rv_*
@@ -147,8 +147,13 @@ function NoiDetail({ propertyId }: { propertyId: string | undefined }) {
 function OccupancyDetail({ propertyId }: { propertyId: string | undefined }) {
   const { reservations, sites } = useRvData(propertyId);
   const today = todayIso();
+  const reservationsN = (reservations as any[]).map((r) => ({
+    ...r,
+    _arrival: normalizeRvDate(r.arrivalDate),
+    _departure: normalizeRvDate(r.departureDate),
+  }));
   const bySite = new Map<string, any[]>();
-  for (const r of reservations as any[]) {
+  for (const r of reservationsN) {
     if (!bySite.has(r.siteCode)) bySite.set(r.siteCode, []);
     bySite.get(r.siteCode)!.push(r);
   }
@@ -160,16 +165,18 @@ function OccupancyDetail({ propertyId }: { propertyId: string | undefined }) {
     if (!byType.has(t)) byType.set(t, { occ: 0, total: 0 });
     byType.get(t)!.total += 1;
     const rs = bySite.get(s.siteCode) || [];
-    const current = rs.find((x: any) => x.arrivalDate <= today && today <= x.departureDate);
+    const current = rs.find(
+      (x: any) => x._arrival && x._departure && x._arrival <= today && today <= x._departure,
+    );
     if (current) {
       occupied += 1;
       byType.get(t)!.occ += 1;
     }
     const next = rs
-      .filter((x: any) => x.arrivalDate > today)
-      .sort((a: any, b: any) => a.arrivalDate.localeCompare(b.arrivalDate))[0];
+      .filter((x: any) => x._arrival && x._arrival > today)
+      .sort((a: any, b: any) => a._arrival.localeCompare(b._arrival))[0];
     if (next) {
-      const days = (Date.parse(next.arrivalDate) - Date.parse(today)) / 86400000;
+      const days = (Date.parse(next._arrival) - Date.parse(today)) / 86400000;
       if (days <= 7) upcomingWeek += 1;
     }
   }
@@ -265,14 +272,21 @@ function PastDueDetail({
 function VacantDetail({ propertyId }: { propertyId: string | undefined }) {
   const { reservations, sites } = useRvData(propertyId);
   const today = todayIso();
+  const reservationsN = (reservations as any[]).map((r) => ({
+    ...r,
+    _arrival: normalizeRvDate(r.arrivalDate),
+    _departure: normalizeRvDate(r.departureDate),
+  }));
   const bySite = new Map<string, any[]>();
-  for (const r of reservations as any[]) {
+  for (const r of reservationsN) {
     if (!bySite.has(r.siteCode)) bySite.set(r.siteCode, []);
     bySite.get(r.siteCode)!.push(r);
   }
   const vacantSites = (sites as any[]).filter((s) => {
     const rs = bySite.get(s.siteCode) || [];
-    return !rs.some((x: any) => x.arrivalDate <= today && today <= x.departureDate);
+    return !rs.some(
+      (x: any) => x._arrival && x._departure && x._arrival <= today && today <= x._departure,
+    );
   });
   const byType = new Map<string, number>();
   for (const s of vacantSites) {
