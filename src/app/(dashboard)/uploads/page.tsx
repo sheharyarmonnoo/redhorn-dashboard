@@ -82,7 +82,7 @@ export default function UploadsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
   const [commitResult, setCommitResult] = useState<string | null>(null);
-  const [showAdminBypass, setShowAdminBypass] = useState(false);
+  const [showFutureConfirm, setShowFutureConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!property) {
@@ -187,7 +187,20 @@ export default function UploadsPage() {
     }
   }
 
-  async function onCommit() {
+  // Click handler for the Commit button. If the period is still in the
+  // future (or current month), surface a confirmation modal instead of
+  // committing immediately. The actual commit runs through commitBundle()
+  // either way — the modal just decides whether bypassLock=true is needed.
+  function onCommitClick() {
+    if (!draft) return;
+    if (!periodValid) {
+      setShowFutureConfirm(true);
+      return;
+    }
+    void commitBundle_({ bypass: false });
+  }
+
+  async function commitBundle_({ bypass }: { bypass: boolean }) {
     if (!draft) return;
     setCommitting(true);
     setUploadError(null);
@@ -196,7 +209,7 @@ export default function UploadsPage() {
       const result: any = await commitBundle({
         bundleId: draft.id as any,
         committedBy: currentUser,
-        bypassLock: showAdminBypass,
+        bypassLock: bypass,
       });
       const total =
         (result.reservations || 0) +
@@ -209,6 +222,7 @@ export default function UploadsPage() {
       setUploadError(err?.message || "Commit failed");
     } finally {
       setCommitting(false);
+      setShowFutureConfirm(false);
     }
   }
 
@@ -227,8 +241,12 @@ export default function UploadsPage() {
         subtitle={`${property.name} — drop the 5-file Campspot + Northgate bundle`}
       />
 
-      {/* Status strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      {/* Status strip — Last committed + Current month. Dropped the
+          "Next uploadable" card per the user's request: the rule is "any
+          prior month is fair game", and the window-opens-on-the-1st copy
+          read as a hard gate even though the bypass-via-confirm flow now
+          allows future-period uploads. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         <StatusCard
           label="Last committed"
           value={lastCommitted ? formatPeriod(lastCommitted.period) : "—"}
@@ -238,11 +256,6 @@ export default function UploadsPage() {
           label="Current month"
           value={formatPeriod(currentMonth)}
           sub="Uploads available for prior months"
-        />
-        <StatusCard
-          label="Next uploadable"
-          value={formatPeriod(previousMonth())}
-          sub="Window opens on the 1st"
         />
       </div>
 
@@ -393,24 +406,62 @@ export default function UploadsPage() {
             ))}
           </div>
 
-          <div className="px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46] flex items-center justify-between gap-3">
-            <label className="flex items-center gap-1.5 text-[11px] text-[#71717a] dark:text-[#a1a1aa] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showAdminBypass}
-                onChange={(e) => setShowAdminBypass(e.target.checked)}
-                className="w-3 h-3 cursor-pointer"
-              />
-              Admin bypass (commit even if period not finished)
-            </label>
+          <div className="px-5 py-3 border-t border-[#e4e4e7] dark:border-[#3f3f46] flex items-center justify-end gap-3">
             <button
-              onClick={onCommit}
-              disabled={committing || (!showAdminBypass && !periodValid) || !allFilesParsed}
+              onClick={onCommitClick}
+              disabled={committing || !allFilesParsed}
               className="inline-flex items-center gap-2 bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] text-[12px] font-medium px-4 py-2 rounded hover:opacity-90 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {committing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
               {committing ? "Committing…" : "Commit bundle"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Future-period confirm modal — replaces the old "Admin bypass"
+          checkbox. Triggers when the user tries to commit a period that
+          hasn't ended yet (or is in the current month). They see the
+          period explicitly and can confirm or cancel. */}
+      {showFutureConfirm && draft && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 p-4"
+          onClick={() => !committing && setShowFutureConfirm(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg shadow-xl max-w-md w-full p-5"
+          >
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-8 h-8 rounded-full bg-[#fef3c7] dark:bg-[#78350f]/40 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-4 h-4 text-[#d97706]" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">
+                  Commit a period that hasn't ended?
+                </p>
+                <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1">
+                  You're about to commit <span className="font-medium text-[#18181b] dark:text-[#fafafa]">{formatPeriod(draftPeriod)}</span>, which is the current month or in the future ({formatPeriod(currentMonth)}). Bundle data may be incomplete.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button
+                onClick={() => setShowFutureConfirm(false)}
+                disabled={committing}
+                className="text-[12px] font-medium text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] px-3 py-2 rounded cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => commitBundle_({ bypass: true })}
+                disabled={committing}
+                className="inline-flex items-center gap-2 text-[12px] font-medium bg-[#18181b] dark:bg-[#fafafa] text-white dark:text-[#18181b] hover:opacity-90 px-3 py-2 rounded cursor-pointer disabled:opacity-50"
+              >
+                {committing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                {committing ? "Committing…" : "Commit anyway"}
+              </button>
+            </div>
           </div>
         </div>
       )}
