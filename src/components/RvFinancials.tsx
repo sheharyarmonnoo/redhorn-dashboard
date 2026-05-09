@@ -73,14 +73,16 @@ function cleanLabel(li: string, opts: { stripLeadingTotal?: boolean } = {}): str
 }
 
 // True when a row carries no numeric content anywhere — these get hidden
-// inside expanded blocks so users don't scan past zero rows.
+// inside expanded blocks so users don't scan past zero rows. Subsidiary
+// tag alone (e.g. "Lake Wapusun" attached to a placeholder line) does NOT
+// rescue an otherwise-empty row from the filter — the user explicitly
+// asked for empties to be dropped on expand.
 function isRowEmpty(r: Row): boolean {
   return (
     Math.abs(r.amountMtd || 0) < 0.0001 &&
     Math.abs(r.amountYtd || 0) < 0.0001 &&
     Math.abs(r.budgetMtd || 0) < 0.0001 &&
-    Math.abs(r.budgetYtd || 0) < 0.0001 &&
-    !r.subsidiary
+    Math.abs(r.budgetYtd || 0) < 0.0001
   );
 }
 
