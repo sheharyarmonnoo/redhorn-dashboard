@@ -755,7 +755,7 @@ function ReservationLedger({
   // Past / Upcoming / Past Due toggle — defaults to Upcoming since that's
   // what the PM most often acts on. Past Due surfaces every reservation
   // (regardless of date) that still carries an unpaid balance.
-  const [filter, setFilter] = useState<"upcoming" | "past" | "past_due" | "all">("upcoming");
+  const [filter, setFilter] = useState<"current" | "upcoming" | "past" | "past_due" | "all">("upcoming");
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 7;
   // Reset to first page whenever the filter changes — otherwise switching
@@ -795,8 +795,14 @@ function ReservationLedger({
   const filtered = useMemo(() => {
     return sorted.filter((r) => {
       const isPast = !!r._departure && r._departure < today;
-      const isUpcomingOrCurrent = !!r._departure && r._departure >= today;
-      if (filter === "upcoming") return isUpcomingOrCurrent;
+      const isCurrent =
+        !!r._arrival && !!r._departure && r._arrival <= today && today <= r._departure;
+      // Strict Upcoming: arrival is in the future. In-house stays land in
+      // the Current bucket, not Upcoming — matches the user expectation
+      // that "Upcoming" means "hasn't arrived yet".
+      const isUpcoming = !!r._arrival && r._arrival > today;
+      if (filter === "current") return isCurrent;
+      if (filter === "upcoming") return isUpcoming;
       if (filter === "past") return isPast;
       if (filter === "past_due") return isPastDue(r);
       return true;
@@ -814,15 +820,19 @@ function ReservationLedger({
   const pageRows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   const counts = useMemo(() => {
+    let current = 0;
     let upcoming = 0;
     let past = 0;
     let pastDue = 0;
     for (const r of sorted) {
-      if (r._departure && r._departure < today) past += 1;
-      else if (r._departure) upcoming += 1;
+      const arr = r._arrival;
+      const dep = r._departure;
+      if (dep && dep < today) past += 1;
+      else if (arr && dep && arr <= today && today <= dep) current += 1;
+      else if (arr && arr > today) upcoming += 1;
       if ((r.balanceOnInvoice || 0) > 0.5) pastDue += 1;
     }
-    return { upcoming, past, pastDue, all: sorted.length };
+    return { current, upcoming, past, pastDue, all: sorted.length };
   }, [sorted, today]);
 
   return (
@@ -831,6 +841,7 @@ function ReservationLedger({
       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         {(
           [
+            { key: "current", label: "Current", count: counts.current },
             { key: "upcoming", label: "Upcoming", count: counts.upcoming },
             { key: "past", label: "Past", count: counts.past },
             { key: "past_due", label: "Past Due", count: counts.pastDue },
