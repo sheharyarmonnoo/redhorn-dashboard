@@ -752,10 +752,12 @@ function ReservationLedger({
   selectedConf: string | null;
   onSelect: (conf: string) => void;
 }) {
-  // Past / Upcoming / Past Due toggle — defaults to Upcoming since that's
-  // what the PM most often acts on. Past Due surfaces every reservation
-  // (regardless of date) that still carries an unpaid balance.
-  const [filter, setFilter] = useState<"current" | "upcoming" | "past" | "past_due" | "all">("upcoming");
+  // Current / Upcoming / Past / Past Due / All toggle. Initial value is
+  // "auto" — once the data resolves we auto-pick the first non-empty
+  // bucket (Current → Upcoming → Past Due → Past → All) so the user
+  // never lands on a "No reservations" empty state if there's anything
+  // to show.
+  const [filter, setFilter] = useState<"current" | "upcoming" | "past" | "past_due" | "all" | "auto">("auto");
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 7;
   // Reset to first page whenever the filter changes — otherwise switching
@@ -792,6 +794,10 @@ function ReservationLedger({
   // shows as "—"). Past stays that ended fully paid drop out.
   const isPastDue = (r: Row) => (r.balanceOnInvoice || 0) > 0.5;
 
+  // While "auto" is resolving (initial mount), treat it as Current for the
+  // underlying filtered list so the body doesn't flash an empty state.
+  const effectiveFilter = filter === "auto" ? "current" : filter;
+
   const filtered = useMemo(() => {
     return sorted.filter((r) => {
       const isPast = !!r._departure && r._departure < today;
@@ -801,13 +807,13 @@ function ReservationLedger({
       // the Current bucket, not Upcoming — matches the user expectation
       // that "Upcoming" means "hasn't arrived yet".
       const isUpcoming = !!r._arrival && r._arrival > today;
-      if (filter === "current") return isCurrent;
-      if (filter === "upcoming") return isUpcoming;
-      if (filter === "past") return isPast;
-      if (filter === "past_due") return isPastDue(r);
+      if (effectiveFilter === "current") return isCurrent;
+      if (effectiveFilter === "upcoming") return isUpcoming;
+      if (effectiveFilter === "past") return isPast;
+      if (effectiveFilter === "past_due") return isPastDue(r);
       return true;
     });
-  }, [sorted, filter, today]);
+  }, [sorted, effectiveFilter, today]);
 
   // 7 rows visible at once. Body height stays locked at this size whether
   // the filtered list has 1 row or 100 — switching tabs shouldn't make the
@@ -834,6 +840,18 @@ function ReservationLedger({
     }
     return { current, upcoming, past, pastDue, all: sorted.length };
   }, [sorted, today]);
+
+  // Resolve "auto" → the first bucket that actually has rows so the user
+  // doesn't land on an empty view. Order: Current → Upcoming → Past Due →
+  // Past → All. Locked in via useEffect so manual taps still stick.
+  useEffect(() => {
+    if (filter !== "auto") return;
+    if (counts.current > 0) setFilter("current");
+    else if (counts.upcoming > 0) setFilter("upcoming");
+    else if (counts.pastDue > 0) setFilter("past_due");
+    else if (counts.past > 0) setFilter("past");
+    else setFilter("all");
+  }, [filter, counts]);
 
   return (
     <div>
