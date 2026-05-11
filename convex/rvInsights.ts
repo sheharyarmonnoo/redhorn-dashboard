@@ -403,21 +403,21 @@ Return ONLY a JSON object. No prose, no markdown fences. Shape:
     }
 
     const today = new Date().toISOString();
-    // Attach the executive summary to the freshest insight only — the
-    // dashboard SummaryCard reads top-of-list .aiAnalysis. Putting it on
-    // every row would render N copies. Fallback to a one-liner when
-    // Claude didn't produce a summary block.
+    // Attach the executive summary to every insight. The dashboard
+    // SummaryCard reads the freshest insight's .aiAnalysis, which is
+    // sorted by _creationTime desc. Sticking the summary on every row
+    // is the simplest way to guarantee the freshest row carries it
+    // regardless of write order.
     const aiAnalysis = summary || `Generated from monthly bundle ${args.period}.`;
     let written = 0;
-    for (let i = 0; i < insights.length; i++) {
-      const ins = insights[i];
+    for (const ins of insights) {
       await ctx.runMutation(api.alerts.create, {
         propertyId: args.propertyId,
         alertType: "income_insight",
         severity: ins.severity,
         title: ins.title,
         body: ins.body,
-        aiAnalysis: i === 0 ? aiAnalysis : `Generated from monthly bundle ${args.period}.`,
+        aiAnalysis,
         dataContext: {
           period: args.period,
           bundleId: args.bundleId,
