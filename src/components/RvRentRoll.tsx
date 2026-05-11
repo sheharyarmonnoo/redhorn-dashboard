@@ -452,19 +452,21 @@ export default function RvRentRoll({
         </button>
       </PageHeader>
 
-      {/* Search + Clear filters — matches the commercial rent roll layout */}
-      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-3 text-[12px]">
+      {/* Search + Clear filters — matches the commercial rent roll layout
+          (rounded-lg pills, mb-4 rhythm, focus ring, w-64 input). */}
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">
         <div className="sm:ml-auto w-full sm:w-auto flex items-center gap-2">
           <input
             type="text"
             placeholder="Quick search all data..."
             value={quickSearch}
             onChange={(e) => setQuickSearch(e.target.value)}
-            className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded px-3 py-1.5 text-[#18181b] dark:text-[#fafafa] w-full sm:w-72"
+            className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-sm text-gray-900 dark:text-[#fafafa] placeholder-gray-400 dark:placeholder-[#71717a] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7] w-full sm:w-64"
           />
           <button
             onClick={clearFilters}
-            className="text-[12px] text-[#5a5e73] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded px-3 py-1.5 cursor-pointer whitespace-nowrap"
+            className="text-[12px] font-medium px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] hover:border-[#71717a] cursor-pointer whitespace-nowrap"
+            title="Clear all column filters and quick search"
           >
             Clear filters
           </button>
@@ -472,12 +474,12 @@ export default function RvRentRoll({
       </div>
 
       {/* Grid — alpine theme + bordered wrapper match the commercial Hollister/
-          Belgold rent roll exactly. Earlier draft used the quartz theme which
-          renders lighter/whiter cell borders and didn't sit consistently next
-          to the other pages. */}
+          Belgold rent roll exactly. Height tracks the commercial 100vh - 180px
+          / minHeight 500 budget so both grids render the same number of visible
+          rows at any given viewport. */}
       <div
         className="ag-theme-alpine w-full rounded overflow-auto border border-[#e4e4e7] dark:border-[#3f3f46]"
-        style={{ height: "calc(100vh - 320px)", minHeight: 480 }}
+        style={{ height: "calc(100vh - 180px)", minHeight: 500 }}
       >
         <AgGridReact
           ref={gridRef}
