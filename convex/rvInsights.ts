@@ -269,12 +269,25 @@ function parseInsightsObject(text: string): { summary: string; insights: Insight
     if (Array.isArray(parsed)) {
       return { summary: "", insights: normalizeInsights(parsed) };
     }
-    const summary = typeof parsed?.summary === "string" ? parsed.summary.trim() : "";
+    const summary = typeof parsed?.summary === "string" ? stripDashes(parsed.summary).trim() : "";
     const arr = Array.isArray(parsed?.insights) ? parsed.insights : [];
     return { summary, insights: normalizeInsights(arr) };
   } catch {
     return { summary: "", insights: [] };
   }
+}
+
+// Strip em-dashes (—) and en-dashes (–) from text. Claude sometimes still
+// emits them despite the prompt instruction; the dash is one of the most
+// reliable "this was AI" tells, so we scrub at parse time. Replacement:
+// "  —  " between clauses becomes ". " (sentence break); standalone — / –
+// becomes ", " (comma) which reads naturally without rewriting the sentence.
+function stripDashes(s: string): string {
+  if (!s) return s;
+  return s
+    .replace(/\s*[—–]\s*/g, ", ")
+    .replace(/,\s*,/g, ",")
+    .replace(/\.\s*,/g, ".");
 }
 
 function normalizeInsights(arr: any[]): Insight[] {
@@ -283,8 +296,8 @@ function normalizeInsights(arr: any[]): Insight[] {
       severity: (["critical", "warning", "info"].includes(row?.severity)
         ? row.severity
         : "warning") as Insight["severity"],
-      title: String(row?.title || "").slice(0, 160),
-      body: String(row?.body || "").slice(0, 1200),
+      title: stripDashes(String(row?.title || "")).slice(0, 160),
+      body: stripDashes(String(row?.body || "")).slice(0, 1200),
       category: String(row?.category || "operational").slice(0, 40),
       unit: row?.unit ? String(row.unit).slice(0, 40) : undefined,
     }))
@@ -333,19 +346,25 @@ export const extractInsightsForBundle = action({
 
     const system = `You are an analytics assistant reviewing a freshly-loaded month of RV park operating data for Redhorn Capital. Read the <data> block and produce two outputs:
 
-1. A SHORT executive summary (3-6 lines, markdown-friendly) leading with the period headline number, NOI margin, and the single most important driver. Bullet 2-3 specific call-outs with $ figures. Suitable for the dashboard SummaryCard.
-2. 3-7 specific findings the asset manager should action: budget variance drivers, A/R concentration, POS revenue swings, occupancy red flags, payment-mix shifts. Each finding must reference real numbers from the data — never invent. Suppress findings that are simply a prior false-flagged pattern with no material change.
+1. A SHORT executive summary (3 to 6 lines, markdown-friendly) leading with the period headline number, NOI margin, and the single most important driver. Bullet 2 or 3 specific call-outs with $ figures. Suitable for the dashboard SummaryCard.
+2. 3 to 7 specific findings the asset manager should action: budget variance drivers, A/R concentration, POS revenue swings, occupancy red flags, payment-mix shifts. Each finding must reference real numbers from the data. Never invent. Suppress findings that are simply a prior false-flagged pattern with no material change.
 
-Return ONLY a JSON object — no prose, no markdown fences. Shape:
+CRITICAL STYLE RULES:
+- NEVER use em-dashes (—) or en-dashes (–) anywhere in titles, bodies, or the summary. They are a tell that the text was AI-generated.
+- Use plain hyphens only inside hyphenated words (e.g. "year-over-year"). Otherwise prefer a period, comma, semicolon, colon, or starting a new sentence.
+- Do not use "—" between clauses. Rewrite as two sentences or use a colon.
+- Write in clean asset-manager English. No flowery filler, no rhetorical flourishes, no dashes for dramatic effect.
+
+Return ONLY a JSON object. No prose, no markdown fences. Shape:
 {
-  "summary": "<markdown summary, 3-6 lines, may use **bold** and '- ' bullets and \\n>",
+  "summary": "<markdown summary, 3 to 6 lines, may use **bold** and '- ' bullets and \\n>",
   "insights": [
     {
       "severity": "critical" | "warning" | "info",
       "title": "<=12 word headline",
-      "body": "2–4 sentences with specific numbers (markdown-friendly: **bold** ok, '- ' bullets ok)",
+      "body": "2 to 4 sentences with specific numbers (markdown-friendly: **bold** ok, '- ' bullets ok)",
       "category": "income" | "expense" | "occupancy" | "ar" | "pos" | "operational",
-      "unit": "<specific Campspot site code (e.g. 003, 207) OR guest name if and only if the finding is scoped to one site or one guest. Omit the field entirely otherwise — DO NOT use the property code or any portfolio-wide identifier here>"
+      "unit": "<specific Campspot site code (e.g. 003, 207) OR guest name if and only if the finding is scoped to one site or one guest. Omit the field entirely otherwise. DO NOT use the property code or any portfolio-wide identifier here>"
     }
   ]
 }`;
