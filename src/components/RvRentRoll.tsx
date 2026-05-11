@@ -399,10 +399,33 @@ export default function RvRentRoll({
   if (!propertyId) return null;
 
   if (loading) {
+    // Match the commercial rent-roll loading skeleton shape: search bar
+    // pill placeholders + a grid header + 10 row skeleton. The earlier
+    // single h-96 block read as a different page during the load flash.
     return (
       <div>
         <PageHeader title="Rent Roll" subtitle="Loading…" />
-        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6 h-96 animate-pulse" />
+        <div className="flex items-center gap-2 mb-4">
+          {[1,2,3].map(i => (
+            <div key={i} className="bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg px-3 py-1.5 h-8 w-28 animate-pulse" />
+          ))}
+        </div>
+        <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-6">
+          <div className="grid grid-cols-6 gap-3 mb-4">
+            {[1,2,3,4,5,6].map(i => (
+              <div key={i} className="h-3 bg-[#f4f4f5] dark:bg-[#27272a] rounded animate-pulse" />
+            ))}
+          </div>
+          <div className="space-y-2.5 animate-pulse">
+            {[1,2,3,4,5,6,7,8,9,10].map(i => (
+              <div key={i} className="grid grid-cols-6 gap-3">
+                {[1,2,3,4,5,6].map(j => (
+                  <div key={j} className="h-4 bg-[#f4f4f5] dark:bg-[#27272a] rounded" style={{ opacity: 0.6 + (i + j) % 5 * 0.08 }} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
