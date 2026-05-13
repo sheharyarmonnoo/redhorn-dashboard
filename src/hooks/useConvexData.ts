@@ -584,6 +584,28 @@ export function useRvFinancials(propertyId: string | undefined, period?: string 
   };
 }
 
+// Labor (weekly payroll PDF) rows for the active property. When `period` is
+// omitted, returns the latest snapshot (rows from the most recent committed
+// bundle). `periods` is the full list of monthly snapshot periods so the
+// Labor tab can offer a Period dropdown.
+export function useRvLabor(propertyId: string | undefined, period?: string | null) {
+  const labor = useQuery(
+    api.rv.listLaborForPeriod,
+    propertyId
+      ? { propertyId: propertyId as any, period: period || undefined }
+      : "skip",
+  );
+  const periods = useQuery(
+    api.rv.listLaborPeriods,
+    propertyId ? { propertyId: propertyId as any } : "skip",
+  );
+  return {
+    labor: labor ?? [],
+    periods: periods ?? [],
+    loading: !!propertyId && labor === undefined,
+  };
+}
+
 // Returns the most-recent committed bundle's timestamp + period for the
 // active property. Powers the "Last updated · X" subtitle that appears on
 // RV-park pages (Dashboard, Rent Roll, Financials, Site Plan) so the user

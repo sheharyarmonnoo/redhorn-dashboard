@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
-import { useRvFinancials, useRvLastUpdated, useDebt, formatCurrency, formatLastUpdated } from "@/hooks/useConvexData";
+import { useRvFinancials, useRvLastUpdated, useRvLabor, useDebt, formatCurrency, formatLastUpdated } from "@/hooks/useConvexData";
 
 // RV park income statement — visually mirrors the commercial Hollister/
 // Belgold /financials layout: KPI strip + Summary panel + IS table with
@@ -112,7 +112,7 @@ export default function RvFinancials({
   propertyName: string;
   propertyId: string | undefined;
 }) {
-  const [view, setView] = useState<"statement" | "budget" | "debt">("statement");
+  const [view, setView] = useState<"statement" | "budget" | "labor" | "debt">("statement");
   // Selected historical snapshot. `null` = latest committed period (the
   // useRvFinancials hook treats `undefined` as "latest"). The dropdown lets
   // the user pivot the IS / Budget vs Actuals tables to any past month
@@ -228,10 +228,12 @@ export default function RvFinancials({
     : "";
 
   // Subtitle reflects the active tab so the page header reads correctly
-  // when the user lands on Budget vs Actuals or Debt & DSCR.
+  // when the user lands on Budget vs Actuals, Labor, or Debt & DSCR.
   const tabSubtitle =
     view === "budget"
       ? `Budget vs Actuals · ${subtitlePeriod}`
+      : view === "labor"
+      ? `Labor · ${subtitlePeriod}`
       : view === "debt"
       ? "Debt & DSCR"
       : `Income Statement · ${subtitlePeriod}`;
@@ -309,8 +311,8 @@ function TabbedContent({
   totals: Totals;
   periodLabel: string;
   propertyId: string;
-  view: "statement" | "budget" | "debt";
-  onView: (v: "statement" | "budget" | "debt") => void;
+  view: "statement" | "budget" | "labor" | "debt";
+  onView: (v: "statement" | "budget" | "labor" | "debt") => void;
   periods: string[];
   selectedPeriod: string | null;
   onChangeSelectedPeriod: (p: string | null) => void;
@@ -318,7 +320,9 @@ function TabbedContent({
   const setView = onView;
   // Period selector only matters for the IS + Budget vs Actuals tabs. Debt &
   // DSCR is sourced from a separate property_debt feed and isn't period-aware.
-  const showPeriodSelector = view !== "debt" && periods.length > 0;
+  // Labor has its own period selector (weekly granularity) so we hide the
+  // monthly one here too.
+  const showPeriodSelector = view !== "debt" && view !== "labor" && periods.length > 0;
   const periodControl = showPeriodSelector ? (
     <div className="flex items-center gap-1.5 mb-3 mt-3">
       <label className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] font-medium uppercase tracking-wide">
@@ -349,6 +353,7 @@ function TabbedContent({
             [
               { key: "statement", label: "Income Statement" },
               { key: "budget", label: "Budget vs Actuals" },
+              { key: "labor", label: "Labor" },
               { key: "debt", label: "Debt & DSCR" },
             ] as const
           ).map((t) => (
@@ -380,11 +385,249 @@ function TabbedContent({
           <BudgetVsActualsView lines={lines} totals={totals} periodLabel={periodLabel} />
         </>
       )}
+      {view === "labor" && (
+        <LaborView propertyId={propertyId} />
+      )}
       {view === "debt" && (
         <DebtAndDscrView noi={totals.noi} propertyId={propertyId} />
       )}
     </>
   );
+}
+
+// Weekly labor / payroll report. One row per (week, department). The Northgate
+// PDF is uploaded weekly via Pipeline Uploads → parsed by Claude → stored in
+// rv_labor. We show department × budget vs actual variance, plus an
+// Actual-vs-Scheduled trend line if more than one week is loaded.
+function LaborView({ propertyId }: { propertyId: string }) {
+  const { labor, loading } = useRvLabor(propertyId);
+
+  // Week selector. Default to the most recent week we have data for.
+  const weeks = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of labor as any[]) {
+      if (r.periodStart) set.add(r.periodStart);
+    }
+    return Array.from(set).sort();
+  }, [labor]);
+  const latestWeek = weeks.length > 0 ? weeks[weeks.length - 1] : null;
+  const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
+  const activeWeek = selectedWeek || latestWeek;
+
+  const rows = useMemo(
+    () =>
+      (labor as any[])
+        .filter((r) => r.periodStart === activeWeek)
+        .sort((a, b) => b.budget - a.budget),
+    [labor, activeWeek],
+  );
+
+  const totals = useMemo(() => {
+    let budget = 0;
+    let sched = 0;
+    let actual = 0;
+    for (const r of rows) {
+      budget += r.budget || 0;
+      sched += r.scheduledPtd || 0;
+      actual += r.actualPtd || 0;
+    }
+    return { budget, sched, actual, variance: sched - actual };
+  }, [rows]);
+
+  const reportDay = rows[0]?.reportDay as string | undefined;
+  const periodEnd = rows[0]?.periodEnd as string | undefined;
+
+  // Cross-week trend: sum actual + scheduled per week to draw a single line
+  // chart underneath the table.
+  const trend = useMemo(() => {
+    const byWeek = new Map<string, { sched: number; actual: number }>();
+    for (const r of labor as any[]) {
+      const key = r.periodStart;
+      if (!key) continue;
+      const entry = byWeek.get(key) || { sched: 0, actual: 0 };
+      entry.sched += r.scheduledPtd || 0;
+      entry.actual += r.actualPtd || 0;
+      byWeek.set(key, entry);
+    }
+    return Array.from(byWeek.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([week, v]) => ({ week, ...v }));
+  }, [labor]);
+
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-6 h-64 animate-pulse" />
+    );
+  }
+
+  if ((labor as any[]).length === 0) {
+    return (
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-10 text-center">
+        <p className="text-[14px] font-semibold text-[#18181b] dark:text-[#fafafa]">No labor data yet</p>
+        <p className="text-[12px] text-[#71717a] dark:text-[#a1a1aa] mt-1.5">
+          Upload the weekly payroll PDF in <span className="font-medium">Pipeline Uploads</span> to populate this tab.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Week selector + period summary */}
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <div className="flex items-center gap-1.5">
+          <label className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] font-medium uppercase tracking-wide">
+            Week
+          </label>
+          <select
+            value={activeWeek || ""}
+            onChange={(e) => setSelectedWeek(e.target.value || null)}
+            className="text-[12px] px-2 py-1 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded text-[#18181b] dark:text-[#fafafa] focus:outline-none focus:border-[#71717a]"
+          >
+            {[...weeks].reverse().map((w) => (
+              <option key={w} value={w}>
+                {formatWeekLabel(w, (labor as any[]).find((r) => r.periodStart === w)?.periodEnd)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {(reportDay || periodEnd) && (
+          <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a]">
+            {periodEnd && `Period end ${formatShortDate(periodEnd)}`}
+            {reportDay && ` · Report ${formatShortDate(reportDay)}`}
+          </p>
+        )}
+      </div>
+
+      {/* KPI strip — top-of-tab labor totals for the active week. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
+        <KPIBox label="Budget" value={formatCurrency(totals.budget)} />
+        <KPIBox label="Scheduled PTD" value={formatCurrency(totals.sched)} />
+        <KPIBox label="Actual PTD" value={formatCurrency(totals.actual)} color="text-[#dc2626]" />
+        <KPIBox
+          label="Variance"
+          value={formatCurrency(totals.variance)}
+          color={totals.variance >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}
+        />
+      </div>
+
+      {/* Department table */}
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
+        <div className="grid grid-cols-[1fr_120px_120px_120px_120px_90px] px-4 py-2.5 bg-[#fafafa] dark:bg-[#27272a] border-b border-[#e4e4e7] dark:border-[#3f3f46] text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
+          <span>Department</span>
+          <span className="text-right">Budget</span>
+          <span className="text-right">Sched PTD</span>
+          <span className="text-right">Actual PTD</span>
+          <span className="text-right">Var $</span>
+          <span className="text-right">Var %</span>
+        </div>
+        {rows.map((r) => {
+          const isZero =
+            !r.budget && !r.scheduledPtd && !r.actualPtd && !r.varianceDollar;
+          const varColor =
+            (r.varianceDollar || 0) >= 0 ? "text-[#16a34a]" : "text-[#dc2626]";
+          return (
+            <div
+              key={`${r.periodStart}-${r.department}`}
+              className={`grid grid-cols-[1fr_120px_120px_120px_120px_90px] px-4 py-2 text-[12px] border-t border-[#f4f4f5] dark:border-[#27272a] items-center ${
+                isZero ? "opacity-60" : ""
+              }`}
+            >
+              <span className="text-[#18181b] dark:text-[#fafafa] truncate">{r.department}</span>
+              <span className="text-right text-[#18181b] dark:text-[#fafafa]">
+                {r.budget ? formatCurrency(r.budget) : "—"}
+              </span>
+              <span className="text-right text-[#18181b] dark:text-[#fafafa]">
+                {r.scheduledPtd ? formatCurrency(r.scheduledPtd) : "—"}
+              </span>
+              <span className="text-right text-[#18181b] dark:text-[#fafafa]">
+                {r.actualPtd ? formatCurrency(r.actualPtd) : "—"}
+              </span>
+              <span className={`text-right font-medium ${isZero ? "text-[#a1a1aa]" : varColor}`}>
+                {r.varianceDollar
+                  ? `${r.varianceDollar > 0 ? "+" : ""}${formatCurrency(r.varianceDollar)}`
+                  : "—"}
+              </span>
+              <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">
+                {typeof r.variancePct === "number" && r.variancePct > 0
+                  ? `${Math.round(r.variancePct * 100)}%`
+                  : "—"}
+              </span>
+            </div>
+          );
+        })}
+        {/* Totals row */}
+        <div className="grid grid-cols-[1fr_120px_120px_120px_120px_90px] px-4 py-2.5 bg-[#fafafa] dark:bg-[#27272a] border-t border-[#e4e4e7] dark:border-[#3f3f46] text-[12px] font-semibold text-[#18181b] dark:text-[#fafafa]">
+          <span>Total</span>
+          <span className="text-right">{formatCurrency(totals.budget)}</span>
+          <span className="text-right">{formatCurrency(totals.sched)}</span>
+          <span className="text-right">{formatCurrency(totals.actual)}</span>
+          <span
+            className={`text-right ${totals.variance >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}`}
+          >
+            {totals.variance > 0 ? "+" : ""}{formatCurrency(totals.variance)}
+          </span>
+          <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">
+            {totals.budget > 0 ? `${Math.round((totals.actual / totals.budget) * 100)}%` : "—"}
+          </span>
+        </div>
+      </div>
+
+      {trend.length > 1 && (
+        <div className="mt-4 bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4">
+          <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-1">
+            Actual vs Scheduled
+          </p>
+          <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mb-3">
+            Last {trend.length} weeks
+          </p>
+          <div className="grid grid-cols-[1fr_120px_120px_90px] text-[11px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider border-b border-[#e4e4e7] dark:border-[#3f3f46] pb-1.5">
+            <span>Week</span>
+            <span className="text-right">Scheduled</span>
+            <span className="text-right">Actual</span>
+            <span className="text-right">Var</span>
+          </div>
+          {trend.map((t) => {
+            const variance = t.sched - t.actual;
+            return (
+              <div
+                key={t.week}
+                className="grid grid-cols-[1fr_120px_120px_90px] text-[12px] py-1.5 border-t border-[#f4f4f5] dark:border-[#27272a] items-center first:border-0"
+              >
+                <span className="text-[#18181b] dark:text-[#fafafa]">{formatShortDate(t.week)}</span>
+                <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">{formatCurrency(t.sched)}</span>
+                <span className="text-right text-[#18181b] dark:text-[#fafafa]">{formatCurrency(t.actual)}</span>
+                <span
+                  className={`text-right font-medium ${variance >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}`}
+                >
+                  {variance > 0 ? "+" : ""}{formatCurrency(variance)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatWeekLabel(start: string, end?: string): string {
+  if (!start) return "—";
+  const s = formatShortDate(start);
+  const e = end ? formatShortDate(end) : "";
+  return e ? `${s} – ${e}` : s;
+}
+
+function formatShortDate(iso: string): string {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-").map((n) => parseInt(n, 10));
+  if (!y || !m || !d) return iso;
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "2-digit",
+    timeZone: "UTC",
+  });
 }
 
 // Budget vs Actuals — flat IS-style table matching the Hollister/Belgold

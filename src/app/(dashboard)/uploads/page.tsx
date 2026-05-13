@@ -13,10 +13,11 @@ const FILE_TYPE_LABELS: Record<string, string> = {
   pos: "POS Sales",
   payments: "Payment Summary",
   financial: "Financial Package",
+  labor: "Labor / Payroll",
   unknown: "Unknown",
 };
 
-const FILE_TYPE_OPTIONS = ["rentRoll", "balances", "pos", "payments", "financial", "unknown"] as const;
+const FILE_TYPE_OPTIONS = ["rentRoll", "balances", "pos", "payments", "financial", "labor", "unknown"] as const;
 
 function isoNow(): string {
   return new Date().toISOString().slice(0, 7);
@@ -285,7 +286,7 @@ export default function UploadsPage() {
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".csv,.xlsx,.xls"
+          accept=".csv,.xlsx,.xls,.pdf"
           onChange={onPick}
           className="hidden"
         />
@@ -364,6 +365,8 @@ export default function UploadsPage() {
               >
                 {f.name.toLowerCase().endsWith(".xlsx") || f.name.toLowerCase().endsWith(".xls") ? (
                   <FileSpreadsheet className="w-4 h-4 text-[#71717a]" />
+                ) : f.name.toLowerCase().endsWith(".pdf") ? (
+                  <FileText className="w-4 h-4 text-[#dc2626]" />
                 ) : (
                   <FileText className="w-4 h-4 text-[#71717a]" />
                 )}

@@ -137,6 +137,16 @@ function detectFileType(name: string): string {
   if (n.includes("guests with balance") || n.includes("guest balance")) return "balances";
   if (n.includes("pos category") || (n.includes("pos") && n.includes("sales"))) return "pos";
   if (n.includes("total payment") || n.includes("payment summary")) return "payments";
+  // Payroll PDF: Northgate exports a weekly labor report with names like
+  // "2026_18.pdf" (year + ISO week number). Match the .pdf extension + the
+  // YYYY_WW pattern, or the literal "payroll" / "labor" keyword.
+  if (n.endsWith(".pdf") && (
+    /^\d{4}[_-]\d{1,2}\.pdf$/i.test(n) ||
+    n.includes("payroll") ||
+    n.includes("labor")
+  )) {
+    return "labor";
+  }
   if (n.includes("financial package") || n.endsWith(".xlsx") || n.endsWith(".xls")) {
     return "financial";
   }
@@ -325,6 +335,7 @@ export const _deleteRowsForBundle = internalMutation({
       "rv_payments",
       "rv_financials",
       "rv_pos_sales",
+      "rv_labor",
     ] as const;
     for (const t of tables) {
       const all = await ctx.db.query(t).collect();
@@ -409,6 +420,7 @@ export const _flipLatestForBundle = internalMutation({
       "rv_payments",
       "rv_financials",
       "rv_pos_sales",
+      "rv_labor",
     ] as const;
     for (const table of tables) {
       const latest = await ctx.db
@@ -484,6 +496,13 @@ export const _bulkInsertFinancials = internalMutation({
   args: { rows: v.array(v.any()) },
   handler: async (ctx, args) => {
     for (const r of args.rows) await ctx.db.insert("rv_financials", r);
+  },
+});
+
+export const _bulkInsertLabor = internalMutation({
+  args: { rows: v.array(v.any()) },
+  handler: async (ctx, args) => {
+    for (const r of args.rows) await ctx.db.insert("rv_labor", r);
   },
 });
 
@@ -620,6 +639,58 @@ export const listFinancialPeriods = query({
       if (r.snapshotPeriod) set.add(r.snapshotPeriod);
     }
     return Array.from(set).sort();
+  },
+});
+
+// ---------- Labor (weekly payroll PDF) ----------
+// Latest snapshot rows across every week the most-recent bundle contains.
+// Each weekly PDF in the bundle contributes one row per department, so the
+// returned set is { departments × weeks } for the current bundle period.
+export const listLatestLabor = query({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) =>
+    await ctx.db
+      .query("rv_labor")
+      .withIndex("by_property_latest", (q) =>
+        q.eq("propertyId", args.propertyId).eq("isLatest", true),
+      )
+      .collect(),
+});
+
+// Distinct snapshot months (YYYY-MM) that have committed labor data. Powers
+// the Period dropdown on the Labor tab when the user has historical bundles.
+export const listLaborPeriods = query({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("rv_labor")
+      .withIndex("by_property_period", (q) => q.eq("propertyId", args.propertyId))
+      .collect();
+    const set = new Set<string>();
+    for (const r of rows) {
+      if (r.snapshotPeriod) set.add(r.snapshotPeriod);
+    }
+    return Array.from(set).sort();
+  },
+});
+
+export const listLaborForPeriod = query({
+  args: { propertyId: v.id("properties"), period: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (args.period) {
+      return await ctx.db
+        .query("rv_labor")
+        .withIndex("by_property_period", (q) =>
+          q.eq("propertyId", args.propertyId).eq("snapshotPeriod", args.period!),
+        )
+        .collect();
+    }
+    return await ctx.db
+      .query("rv_labor")
+      .withIndex("by_property_latest", (q) =>
+        q.eq("propertyId", args.propertyId).eq("isLatest", true),
+      )
+      .collect();
   },
 });
 
