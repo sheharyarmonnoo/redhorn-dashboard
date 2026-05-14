@@ -742,9 +742,48 @@ export const commitBundle = action({
       period: bundle.period,
       excludeBundleId: args.bundleId,
     });
+    // Determine which rv_* tables this NEW bundle will repopulate. Partial
+    // uploads (e.g. just a labor PDF) must not wipe the prior bundle's
+    // rows in non-overlapping tables.
+    const fileTypeToTable: Record<string, string> = {
+      rentRoll: "rv_reservations",
+      balances: "rv_balances",
+      pos: "rv_pos_sales",
+      payments: "rv_payments",
+      financial: "rv_financials",
+      labor: "rv_labor",
+    };
+    const newTables = Array.from(
+      new Set(
+        (bundle.files as any[])
+          .map((f: any) => fileTypeToTable[f.fileType])
+          .filter(Boolean),
+      ),
+    );
     for (const prior of priorBundles) {
-      await ctx.runMutation(internal.rv._deleteRowsForBundle, { bundleId: prior.id });
-      await ctx.runMutation(internal.rv._markBundleSuperseded, { bundleId: prior.id });
+      const priorTables = Array.from(
+        new Set(
+          (prior.files as any[])
+            .map((f: any) => fileTypeToTable[f.fileType])
+            .filter(Boolean),
+        ),
+      );
+      // Wipe ONLY the tables the new bundle will overwrite.
+      const overlap = newTables.filter((t) => priorTables.includes(t));
+      if (overlap.length > 0) {
+        await ctx.runMutation(internal.rv._deleteRowsForBundle, {
+          bundleId: prior.id,
+          onlyTables: overlap,
+        });
+      }
+      // Only mark the prior bundle as superseded if the new bundle covers
+      // every table the prior bundle wrote to. Otherwise the prior bundle
+      // still has live rows in non-overlapping tables and must stay
+      // "committed" so listLatest* queries continue to see them.
+      const supersedesAll = priorTables.every((t) => newTables.includes(t));
+      if (supersedesAll) {
+        await ctx.runMutation(internal.rv._markBundleSuperseded, { bundleId: prior.id });
+      }
     }
 
     const period: string = bundle.period;

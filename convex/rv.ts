@@ -108,11 +108,16 @@ export const listAllCommittedBundles = query({
   args: {},
   handler: async (ctx) => {
     const bundles = await ctx.db.query("rv_upload_bundles").collect();
-    const committed = bundles.filter((b) => b.status === "committed");
-    if (committed.length === 0) return [];
+    // Include superseded bundles too — the file references stay on storage
+    // and Max needs to see the upload history regardless of whether the rows
+    // are still live. Drafts (incomplete uploads) are still hidden.
+    const visible = bundles.filter(
+      (b) => b.status === "committed" || b.status === "superseded",
+    );
+    if (visible.length === 0) return [];
     const properties = await ctx.db.query("properties").collect();
     const propById = new Map(properties.map((p) => [p._id as string, p]));
-    return committed
+    return visible
       .map((b) => ({
         ...b,
         propertyName: propById.get(b.propertyId as unknown as string)?.name || "",
@@ -323,13 +328,22 @@ export const _findPriorBundleForPeriod = internalQuery({
   },
 });
 
-// Wipe the row inserts a prior bundle made. Annual scale stays small (a few
-// hundred rows per file × 12 months), so a full-table scan is acceptable.
-// If RV park scale grows, swap to a by_bundle index per table.
+// Wipe the row inserts a prior bundle made — but only in the specific
+// tables the NEW bundle is going to repopulate. A partial upload (e.g.
+// only a labor PDF) must not wipe the prior bundle's rent roll / POS /
+// financials. Callers pass `onlyTables` derived from the new bundle's
+// file types; an undefined value falls back to wiping every rv_* table
+// (legacy behavior used by full-supersede paths).
+//
+// Annual scale stays small (a few hundred rows per file × 12 months),
+// so a full-table scan is acceptable.
 export const _deleteRowsForBundle = internalMutation({
-  args: { bundleId: v.id("rv_upload_bundles") },
+  args: {
+    bundleId: v.id("rv_upload_bundles"),
+    onlyTables: v.optional(v.array(v.string())),
+  },
   handler: async (ctx, args) => {
-    const tables = [
+    const allTables = [
       "rv_reservations",
       "rv_balances",
       "rv_payments",
@@ -337,14 +351,20 @@ export const _deleteRowsForBundle = internalMutation({
       "rv_pos_sales",
       "rv_labor",
     ] as const;
-    for (const t of tables) {
+    const target = args.onlyTables
+      ? allTables.filter((t) => args.onlyTables!.includes(t))
+      : allTables;
+    let deleted = 0;
+    for (const t of target) {
       const all = await ctx.db.query(t).collect();
       for (const r of all) {
         if ((r as any).bundleId === args.bundleId) {
           await ctx.db.delete(r._id);
+          deleted++;
         }
       }
     }
+    return { deleted, tables: target };
   },
 });
 
@@ -529,6 +549,19 @@ export const _bulkInsertFinancials = internalMutation({
 // isLatest=true (everything else false). Used to recover from the bug
 // where _flipLatestForBundle marked every prior table's rows non-latest
 // even when the new bundle only wrote to a single table.
+// Repair: flip a superseded bundle's status back to draft so commitBundle
+// can re-run on it. Used to recover from the pre-fix bug where a partial
+// upload superseded the prior atomic bundle and wiped its rows.
+export const reopenSupersededBundle = mutation({
+  args: { bundleId: v.id("rv_upload_bundles") },
+  handler: async (ctx, args) => {
+    const bundle = await ctx.db.get(args.bundleId);
+    if (!bundle) throw new Error("Bundle not found");
+    await ctx.db.patch(args.bundleId, { status: "draft" });
+    return { id: args.bundleId, files: bundle.files };
+  },
+});
+
 export const repairIsLatest = mutation({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, args) => {
