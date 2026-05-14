@@ -255,12 +255,12 @@ export default function RvFinancials({
   // when the user lands on Budget vs Actuals, Labor, or Debt & DSCR.
   const tabSubtitle =
     view === "budget"
-      ? `Budget vs Actuals · ${subtitlePeriod}`
+      ? `Budget vs Actuals${subtitlePeriod ? ` · ${subtitlePeriod}` : ""}`
       : view === "labor"
-      ? `Labor · ${subtitlePeriod}`
+      ? `Labor${subtitlePeriod ? ` · ${subtitlePeriod}` : ""}`
       : view === "debt"
       ? "Debt & DSCR"
-      : `Income Statement · ${subtitlePeriod}`;
+      : `Income Statement${subtitlePeriod ? ` · ${subtitlePeriod}` : ""}`;
 
   return (
     <div>
@@ -592,7 +592,7 @@ function LaborView({ propertyId }: { propertyId: string }) {
             {totals.variance > 0 ? "+" : ""}{formatCurrency(totals.variance)}
           </span>
           <span className="text-right text-[#71717a] dark:text-[#a1a1aa]">
-            {totals.budget > 0 ? `${Math.round((totals.actual / totals.budget) * 100)}%` : "—"}
+            {totals.sched > 0 ? `${Math.round((totals.actual / totals.sched) * 100)}%` : "—"}
           </span>
         </div>
       </div>
