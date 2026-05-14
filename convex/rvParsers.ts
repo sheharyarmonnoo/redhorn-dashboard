@@ -775,6 +775,18 @@ export const commitBundle = action({
           // PDF document attachment → Claude → structured department rows.
           const { rows } = await parseLaborPdf(blob, bundleId, propertyId, period);
           if (rows.length > 0) {
+            // Week-level dedup: a payroll PDF for week N is the same data
+            // whether Max files it under April or May. Wipe any prior rows
+            // with the same (propertyId, periodStart) from other bundles so
+            // the table never carries duplicate weeks.
+            const periodStart = rows[0]?.periodStart;
+            if (periodStart) {
+              await ctx.runMutation(internal.rv._deleteLaborWeek, {
+                propertyId: propertyId as any,
+                periodStart,
+                exceptBundleId: bundleId as any,
+              });
+            }
             for (let i = 0; i < rows.length; i += 200) {
               await ctx.runMutation(internal.rv._bulkInsertLabor, {
                 rows: rows.slice(i, i + 200),

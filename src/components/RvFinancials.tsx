@@ -438,13 +438,32 @@ function LaborView({ propertyId }: { propertyId: string }) {
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const activeWeek = selectedWeek || latestWeek;
 
-  const rows = useMemo(
-    () =>
-      (labor as any[])
-        .filter((r) => r.periodStart === activeWeek)
-        .sort((a, b) => b.budget - a.budget),
-    [labor, activeWeek],
-  );
+  const rows = useMemo(() => {
+    // Dedupe at the (week, department) grain — when the same week is uploaded
+    // across two different bundle periods (e.g. Max files the labor PDF under
+    // both April and May), keep only the most recently written row per dept.
+    const byKey = new Map<string, any>();
+    for (const r of labor as any[]) {
+      if (r.periodStart !== activeWeek) continue;
+      const key = `${r.periodStart}::${r.department}`;
+      const existing = byKey.get(key);
+      if (!existing || (r._creationTime || 0) > (existing._creationTime || 0)) {
+        byKey.set(key, r);
+      }
+    }
+    // Hide rows with no budget AND no scheduled/actual/variance signal.
+    // Park Services (budget $180, no actuals) survives; Management /
+    // Landscaping / Security / etc (zeros across the board) drop out.
+    return Array.from(byKey.values())
+      .filter(
+        (r) =>
+          (r.budget || 0) > 0 ||
+          (r.scheduledPtd || 0) > 0 ||
+          (r.actualPtd || 0) > 0 ||
+          Math.abs(r.varianceDollar || 0) > 0,
+      )
+      .sort((a, b) => b.budget - a.budget);
+  }, [labor, activeWeek]);
 
   const totals = useMemo(() => {
     let budget = 0;

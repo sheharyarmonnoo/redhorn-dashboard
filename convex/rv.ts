@@ -575,6 +575,35 @@ export const _bulkInsertLabor = internalMutation({
   },
 });
 
+// Week-level wipe used by the labor parser. A weekly payroll PDF is the
+// same actionable record regardless of which bundle period it's filed
+// under, so before inserting fresh rows we drop any matching
+// (propertyId, periodStart) rows from OTHER bundles. Keeps the table at
+// one snapshot per week.
+export const _deleteLaborWeek = internalMutation({
+  args: {
+    propertyId: v.id("properties"),
+    periodStart: v.string(),
+    exceptBundleId: v.id("rv_upload_bundles"),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("rv_labor")
+      .withIndex("by_property_week", (q) =>
+        q.eq("propertyId", args.propertyId).eq("periodStart", args.periodStart),
+      )
+      .collect();
+    let deleted = 0;
+    for (const r of rows) {
+      if (r.bundleId !== args.exceptBundleId) {
+        await ctx.db.delete(r._id);
+        deleted += 1;
+      }
+    }
+    return { deleted };
+  },
+});
+
 export const _upsertSites = internalMutation({
   args: {
     propertyId: v.id("properties"),
