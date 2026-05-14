@@ -307,6 +307,146 @@ function parsePayments(text: string, bundleId: string, propertyId: string, perio
 // ---------- Financial Package (xlsx) ----------
 // 4 sheets: FPAGLSummaryISvsBudgetMTD, BalanceSheet, GeneralLedger, CashFlow.
 // We flatten each into rv_financials rows tagged with kind.
+// ---------- Labor PDF (Northgate weekly payroll report) ----------
+//
+// The PDF is too irregular for a CSV/regex parser: it's a multi-page Excel
+// export with merged headers, sub-tables, and #N/A cells. We send it to
+// Claude as a document attachment and ask for structured JSON.
+//
+// Page 1 carries the actionable table: department × (Budget, Sched PTD,
+// Act PTD, Var $, Var %, Sch.1, Est.1, Var 1). The other pages are
+// drill-downs (per-employee, hourly, missed punches) we ignore for v1.
+async function parseLaborPdf(
+  blob: Blob,
+  bundleId: string,
+  propertyId: string,
+  snapshotPeriod: string,
+): Promise<{ rows: any[]; raw: any }> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "ANTHROPIC_API_KEY not set on the Convex deployment. Run `npx convex env set ANTHROPIC_API_KEY sk-ant-...` to enable labor PDF parsing.",
+    );
+  }
+
+  // Base64-encode the PDF for the document content block.
+  const arrayBuf = await blob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuf);
+  // Chunk to avoid stack overflow on String.fromCharCode(...big array).
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)));
+  }
+  const base64 = btoa(binary);
+
+  const prompt = `You are parsing a weekly labor / payroll report PDF for an RV park. Page 1 has the actionable summary table with columns:
+
+Department · Budget · Day Performance (Sch / Act / Var) · Period-to-Date Performance (Sch / Act / Var $ / Var %) · Expected Final Performance (Sch.1 / Est.1 / Var 1)
+
+Extract the Period Start, Period End, Report Day, and ONE row per department (Management, Maintenance, Park Services, Landscaping, Security, Housekeeping, Aquatic Operations, Guest Services, Recreation, Store, Food Service, Restaurant, Dock, Fast Tracks, Pre Historic, Amusement, Events) from the Period-to-Date Performance + Expected Final Performance columns. Skip the Total row (we recompute it).
+
+Return ONLY valid JSON in this exact shape, no markdown fences, no commentary:
+
+{
+  "periodStart": "YYYY-MM-DD",
+  "periodEnd": "YYYY-MM-DD",
+  "reportDay": "YYYY-MM-DD",
+  "departments": [
+    {
+      "department": "Maintenance",
+      "budget": 1208,
+      "scheduledPtd": 700,
+      "actualPtd": 746,
+      "varianceDollar": -46,
+      "variancePct": 1.07,
+      "scheduledRemaining": 0,
+      "estimatedFinal": 746,
+      "expectedVariance": 462
+    }
+  ]
+}
+
+Rules:
+- All dollar values as plain numbers (1208 not "$1,208").
+- variancePct as a decimal (0.87 not "87%" or 87).
+- Missing / dash values become 0.
+- Include ALL listed departments even if every column is 0; downstream UI needs the full set for the table to render with consistent rows.`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5",
+      max_tokens: 4000,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: {
+                type: "base64",
+                media_type: "application/pdf",
+                data: base64,
+              },
+            },
+            { type: "text", text: prompt },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Anthropic ${res.status}: ${text.slice(0, 400)}`);
+  }
+  const json: any = await res.json();
+  const textBlocks = (json?.content || []).filter((b: any) => b.type === "text");
+  const raw = textBlocks.map((b: any) => b.text || "").join("\n").trim();
+
+  // Strip accidental markdown fences just in case.
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch (err: any) {
+    throw new Error(`Claude returned unparseable JSON: ${err?.message || err}. Body starts with: ${cleaned.slice(0, 200)}`);
+  }
+
+  const periodStart = isoDate(String(parsed.periodStart || ""));
+  const periodEnd = isoDate(String(parsed.periodEnd || ""));
+  const reportDay = parsed.reportDay ? isoDate(String(parsed.reportDay)) : undefined;
+  const depts: any[] = Array.isArray(parsed.departments) ? parsed.departments : [];
+
+  const rows = depts
+    .map((d) => ({
+      bundleId,
+      propertyId,
+      snapshotPeriod,
+      isLatest: true,
+      periodStart,
+      periodEnd,
+      reportDay,
+      department: str(d.department),
+      budget: num(d.budget),
+      scheduledPtd: num(d.scheduledPtd),
+      actualPtd: num(d.actualPtd),
+      varianceDollar: num(d.varianceDollar),
+      variancePct: typeof d.variancePct === "number" ? d.variancePct : undefined,
+      scheduledRemaining: typeof d.scheduledRemaining === "number" ? d.scheduledRemaining : undefined,
+      estimatedFinal: typeof d.estimatedFinal === "number" ? d.estimatedFinal : undefined,
+      expectedVariance: typeof d.expectedVariance === "number" ? d.expectedVariance : undefined,
+    }))
+    .filter((r) => r.department);
+
+  return { rows, raw: parsed };
+}
+
 function parseFinancialPackage(buffer: ArrayBuffer, bundleId: string, propertyId: string, period: string) {
   const wb = XLSX.read(buffer, { type: "array" });
   const out: any[] = [];
@@ -616,6 +756,7 @@ export const commitBundle = action({
     let totalPos = 0;
     let totalPayments = 0;
     let totalFinancials = 0;
+    let totalLabor = 0;
     const allSites: any[] = [];
 
     for (const f of bundle.files) {
@@ -626,6 +767,25 @@ export const commitBundle = action({
             bundleId: args.bundleId,
             fileId: f.id,
             parseError: "Storage object missing",
+          });
+          continue;
+        }
+
+        if (f.fileType === "labor") {
+          // PDF document attachment → Claude → structured department rows.
+          const { rows } = await parseLaborPdf(blob, bundleId, propertyId, period);
+          if (rows.length > 0) {
+            for (let i = 0; i < rows.length; i += 200) {
+              await ctx.runMutation(internal.rv._bulkInsertLabor, {
+                rows: rows.slice(i, i + 200),
+              });
+            }
+          }
+          totalLabor += rows.length;
+          await ctx.runMutation(internal.rv._markFileParsed, {
+            bundleId: args.bundleId,
+            fileId: f.id,
+            rowsParsed: rows.length,
           });
           continue;
         }
@@ -748,7 +908,8 @@ export const commitBundle = action({
     try {
       const totals =
         `${totalReservations} reservations, ${totalBalances} balances, ` +
-        `${totalPos} POS lines, ${totalPayments} payments, ${totalFinancials} financial rows`;
+        `${totalPos} POS lines, ${totalPayments} payments, ${totalFinancials} financial rows, ` +
+        `${totalLabor} labor rows`;
       await ctx.runMutation(api.activityLog.log, {
         type: "sync",
         description: `RV bundle committed for ${period} — ${totals}`,
@@ -778,6 +939,7 @@ export const commitBundle = action({
       pos: totalPos,
       payments: totalPayments,
       financials: totalFinancials,
+      labor: totalLabor,
     };
   },
 });

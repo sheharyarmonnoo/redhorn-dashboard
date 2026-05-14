@@ -751,4 +751,34 @@ export default defineSchema({
     .index("by_property_latest", ["propertyId", "isLatest"])
     .index("by_property_kind_latest", ["propertyId", "kind", "isLatest"])
     .index("by_property_period", ["propertyId", "snapshotPeriod"]),
+
+  // ===== RV LABOR (weekly payroll report PDF) =====
+  // One row per (week, department). The Northgate payroll PDF is a weekly
+  // budget-vs-scheduled-vs-actual report. Multiple weekly PDFs can roll
+  // up into a single monthly bundle. Parsed via Claude PDF document
+  // attachment in rvParsers.parseLaborPdf.
+  rv_labor: defineTable({
+    bundleId: v.id("rv_upload_bundles"),
+    propertyId: v.id("properties"),
+    snapshotPeriod: v.string(),                  // "YYYY-MM" — bundle month for _flipLatestForBundle
+    isLatest: v.boolean(),
+    periodStart: v.string(),                     // "YYYY-MM-DD" — week start (Sun)
+    periodEnd: v.string(),                       // "YYYY-MM-DD" — week end (Sat)
+    reportDay: v.optional(v.string()),           // "YYYY-MM-DD" — report-generation day
+    department: v.string(),                      // "Maintenance" | "Housekeeping" | "Guest Services" | etc
+    // Period-to-Date Performance columns
+    budget: v.number(),                          // adjusted budget per dept (based on forecasted rev)
+    scheduledPtd: v.number(),                    // PTD scheduled labor $
+    actualPtd: v.number(),                       // PTD actual labor $
+    varianceDollar: v.number(),                  // sched - actual; positive = under budget
+    variancePct: v.optional(v.number()),         // 0..1 (0.87 = 87% of budget)
+    // Expected Final Performance columns
+    scheduledRemaining: v.optional(v.number()),  // sch.1 — remaining scheduled labor for period
+    estimatedFinal: v.optional(v.number()),      // est.1 — projected total for the week
+    expectedVariance: v.optional(v.number()),    // var 1 — expected variance vs budget
+  })
+    .index("by_property_latest", ["propertyId", "isLatest"])
+    .index("by_property_period", ["propertyId", "snapshotPeriod"])
+    .index("by_property_week", ["propertyId", "periodStart"])
+    .index("by_bundle", ["bundleId"]),
 });

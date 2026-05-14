@@ -173,8 +173,9 @@ export default function RvDashboard({
 
       {/* KPI strip — six cards, same shape as the commercial dashboard.
           Each card is clickable to open RvKPIDrawer with the matching
-          breakdown panel. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-4">
+          breakdown panel. Breakpoints mirror the commercial KPI grid so
+          both dashboards reflow at the same screen widths. */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3 mb-6">
         <KPICard
           title="Income"
           value={formatCurrency(ipKpis.income)}
@@ -216,12 +217,13 @@ export default function RvDashboard({
       </div>
 
       {/* POS revenue chart — last 5 months, parallels the commercial Revenue
-          Breakdown bar chart. Single series since RV POS rolls up monthly. */}
-      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg p-5">
-        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa]">
+          Breakdown bar chart. Single series since RV POS rolls up monthly.
+          Matches the commercial chart's rounded + p-4 + mb-6 rhythm. */}
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded p-4 mb-6">
+        <p className="text-[13px] font-semibold text-[#18181b] dark:text-[#fafafa] mb-1">
           POS Revenue
         </p>
-        <p className="text-[11px] text-[#71717a] dark:text-[#a1a1aa] mt-0.5">
+        <p className="text-[11px] text-[#a1a1aa] dark:text-[#71717a] mb-3">
           Camp-store sales · last {posSeries.length} month{posSeries.length === 1 ? "" : "s"}
         </p>
         {posSeries.length === 0 ? (
@@ -229,8 +231,7 @@ export default function RvDashboard({
             No POS data yet for this property.
           </div>
         ) : (
-          <div className="mt-3">
-            <Chart
+          <Chart
               type="bar"
               height={260}
               series={[
@@ -276,7 +277,6 @@ export default function RvDashboard({
                 },
               }}
             />
-          </div>
         )}
       </div>
 

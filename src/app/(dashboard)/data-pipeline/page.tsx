@@ -599,6 +599,7 @@ export default function DataPipelinePage() {
       pos: "POS Sales",
       payments: "Total Payment",
       financial: "Financial Package",
+      labor: "Labor / Payroll",
     };
     for (const b of (rvBundles || []) as any[]) {
       const committedAtIso = b.committedAt ? new Date(b.committedAt).toISOString() : "";
