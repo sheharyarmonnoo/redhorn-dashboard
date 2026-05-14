@@ -411,9 +411,11 @@ export const _flipLatestForBundle = internalMutation({
     period: v.string(),
   },
   handler: async (ctx, args) => {
-    // Mark prior "isLatest" rows as historical for any table whose newly-
-    // committed bundle covers a more recent period. We keep all snapshots —
-    // just toggle the latest pointer.
+    // Mark prior "isLatest" rows as historical only for tables whose this-
+    // bundle actually populated. If Max uploads ONLY a labor PDF for May,
+    // we keep April's rent-roll / POS / balances flagged latest so the
+    // dashboard keeps reading them. Otherwise a partial monthly bundle
+    // would silently zero out the property's reservations / POS / etc.
     const tables = [
       "rv_reservations",
       "rv_balances",
@@ -422,7 +424,29 @@ export const _flipLatestForBundle = internalMutation({
       "rv_pos_sales",
       "rv_labor",
     ] as const;
+    // Look up the bundle's fileTypes so we only flip tables this bundle
+    // actually wrote rows to. Avoids zeroing out April reservations when
+    // Max uploads only a May labor PDF.
+    const bundle = await ctx.db.get(args.bundleId);
+    const fileTypes = new Set(
+      (bundle?.files || []).map((f: any) => String(f.fileType || "")),
+    );
+    const fileTypeToTable: Record<string, string> = {
+      rentRoll: "rv_reservations",
+      balances: "rv_balances",
+      pos: "rv_pos_sales",
+      payments: "rv_payments",
+      financial: "rv_financials",
+      labor: "rv_labor",
+    };
+    const touchedTables = new Set(
+      Array.from(fileTypes)
+        .map((t) => fileTypeToTable[t])
+        .filter(Boolean),
+    );
+
     for (const table of tables) {
+      if (!touchedTables.has(table)) continue;
       const latest = await ctx.db
         .query(table)
         .withIndex("by_property_latest", (q) =>
@@ -430,7 +454,8 @@ export const _flipLatestForBundle = internalMutation({
         )
         .collect();
       for (const row of latest) {
-        // Older rows stay flagged latest until a NEWER period replaces them.
+        // Older rows stay flagged latest until a NEWER period in the SAME
+        // table replaces them.
         if (row.snapshotPeriod < args.period) {
           await ctx.db.patch(row._id, { isLatest: false });
         }
@@ -496,6 +521,50 @@ export const _bulkInsertFinancials = internalMutation({
   args: { rows: v.array(v.any()) },
   handler: async (ctx, args) => {
     for (const r of args.rows) await ctx.db.insert("rv_financials", r);
+  },
+});
+
+// Repair: for each rv_* table independently, find the most recent
+// snapshotPeriod that has rows for this property and mark those rows as
+// isLatest=true (everything else false). Used to recover from the bug
+// where _flipLatestForBundle marked every prior table's rows non-latest
+// even when the new bundle only wrote to a single table.
+export const repairIsLatest = mutation({
+  args: { propertyId: v.id("properties") },
+  handler: async (ctx, args) => {
+    const tables = [
+      "rv_reservations",
+      "rv_balances",
+      "rv_payments",
+      "rv_financials",
+      "rv_pos_sales",
+      "rv_labor",
+    ] as const;
+    const summary: Record<string, { flippedTrue: number; flippedFalse: number; period: string | null }> = {};
+    for (const table of tables) {
+      // One-off scan — perf doesn't matter for a repair pass and table-by-
+      // table index differences make the filtered approach simpler.
+      const rows = await ctx.db.query(table).collect();
+      const all = rows.filter((r: any) => r.propertyId === args.propertyId);
+      let maxPeriod: string | null = null;
+      for (const r of all as any[]) {
+        if (r.snapshotPeriod && (!maxPeriod || r.snapshotPeriod > maxPeriod)) {
+          maxPeriod = r.snapshotPeriod;
+        }
+      }
+      let flippedTrue = 0;
+      let flippedFalse = 0;
+      for (const r of all as any[]) {
+        const shouldBeLatest = r.snapshotPeriod === maxPeriod;
+        if (r.isLatest !== shouldBeLatest) {
+          await ctx.db.patch(r._id, { isLatest: shouldBeLatest });
+          if (shouldBeLatest) flippedTrue++;
+          else flippedFalse++;
+        }
+      }
+      summary[table] = { flippedTrue, flippedFalse, period: maxPeriod };
+    }
+    return summary;
   },
 });
 
