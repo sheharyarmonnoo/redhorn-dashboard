@@ -6,6 +6,7 @@ import PageHeader from "@/components/PageHeader";
 import RevenueFilter from "@/components/RevenueFilter";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
 import RvDashboard from "@/components/RvDashboard";
+import SyncStatusBanner from "@/components/SyncStatusBanner";
 import Link from "next/link";
 import { Wrench } from "lucide-react";
 import { useActiveProperty, useTenants, useUnits, useMonthlyRevenue, useAlerts, useMaintenance, formatCurrency, useDashboardLoading, isExpiringWithin, isExpired, leasedUnitKeys, useReceivableDetails, normalizeTenantName } from "@/hooks/useConvexData";
@@ -195,10 +196,16 @@ export default function DashboardPage() {
         <div className="mb-4 bg-[#fef9c3] dark:bg-[#422006]/40 border border-[#fde68a] dark:border-[#854d0e] rounded p-3">
           <p className="text-[12px] font-semibold text-[#713f12] dark:text-[#fde68a]">No Yardi data yet for {property.name}</p>
           <p className="text-[11px] text-[#854d0e] dark:text-[#fcd34d] mt-0.5">
-            The KPIs below will show zeros until a Yardi sync runs — or this property may not have a Yardi feed at all. Check the Data Pipeline page to import data.
+            The KPIs below will show zeros until a Yardi sync runs, or this property may not have a Yardi feed at all. Check the Data Pipeline page to import data.
           </p>
         </div>
       )}
+
+      {/* "Last sync failed / partial" banner: tells the user when the AR /
+          electric-posting / aging numbers below are reading prior-day data
+          because a Yardi report didn't come through (typical mode: SSRS
+          Lease Ledger retried twice and both attempts hit a network race). */}
+      <SyncStatusBanner propertyCode={property.code} />
 
       {/* KPI Cards — bump xl to 6 cols when the optional Expired card is present */}
       <div className={`grid grid-cols-2 md:grid-cols-3 ${expiredCount > 0 ? "xl:grid-cols-6" : "xl:grid-cols-5"} gap-2 sm:gap-3 mb-6`}>

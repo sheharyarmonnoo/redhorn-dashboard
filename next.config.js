@@ -4,11 +4,15 @@ const nextConfig = {
   // <meta name="generator" content="Next.js"> tag so the framework isn't
   // advertised on every request / page-source view.
   poweredByHeader: false,
+  // CI runs `tsc --noEmit` and `next lint` on every PR (see
+  // .github/workflows/ci.yml) so we no longer hide build-time errors here.
+  // If you need to ship a hotfix past a transient type error, gate it
+  // intentionally rather than turning these back on globally.
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   images: {
     remotePatterns: [

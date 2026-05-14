@@ -54,6 +54,28 @@ export const latest = query({
   },
 });
 
+/**
+ * Most recent yardi_sync row for a given property code. Powers the dashboard
+ * "stale data" banner: when the last sync was partial/failed (e.g. SSRS Lease
+ * Ledger retries both failed), the dashboard's AR / electric-posting columns
+ * are reading yesterday's data and the user has no way to tell unless we say
+ * so. Returns null when the property has never been synced.
+ */
+export const latestForPropertyCode = query({
+  args: { propertyCode: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("sync_jobs")
+      .withIndex("by_property", (q) => q.eq("propertyCode", args.propertyCode))
+      .order("desc")
+      .take(5);
+    // Only consider live yardi_sync rows — historical backfills and demo
+    // cleanup jobs shouldn't drive the banner.
+    const live = rows.filter((r) => r.source === "yardi_sync");
+    return live[0] ?? null;
+  },
+});
+
 export const create = mutation({
   args: {
     source: v.string(),

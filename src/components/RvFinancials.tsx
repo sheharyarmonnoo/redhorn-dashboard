@@ -554,8 +554,11 @@ function LaborView({ propertyId }: { propertyId: string }) {
         />
       </div>
 
-      {/* Department table */}
-      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-hidden">
+      {/* Department table. Outer wrapper scrolls horizontally on phones —
+          inner min-w keeps the fixed-px grid template intact so columns
+          don't collapse below 600px viewport. */}
+      <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded overflow-x-auto">
+       <div className="min-w-[640px]">
         <div className="grid grid-cols-[1fr_120px_120px_120px_120px_90px] px-4 py-2.5 bg-[#fafafa] dark:bg-[#27272a] border-b border-[#e4e4e7] dark:border-[#3f3f46] text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
           <span>Department</span>
           <span className="text-right">Budget</span>
@@ -614,6 +617,7 @@ function LaborView({ propertyId }: { propertyId: string }) {
             {totals.sched > 0 ? `${Math.round((totals.actual / totals.sched) * 100)}%` : "—"}
           </span>
         </div>
+       </div>
       </div>
 
       {trend.length > 1 && (
@@ -688,7 +692,8 @@ function BudgetVsActualsView({
 }) {
   void _totals;
   return (
-    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-x-auto">
+     <div className="min-w-[820px]">
       <div className="grid grid-cols-[1fr_140px_140px_90px_140px_140px_90px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2.5 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
         <span>Line Item</span>
         <span className="text-right">{periodLabel} Actual</span>
@@ -701,6 +706,7 @@ function BudgetVsActualsView({
       {lines.map((r: Row, i: number) => (
         <BudgetRow key={`${r._id}-${i}`} row={r} />
       ))}
+     </div>
     </div>
   );
 }
@@ -1088,7 +1094,8 @@ function SummaryPanel({
   ];
 
   return (
-    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden mb-4">
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-x-auto mb-4">
+     <div className="min-w-[760px]">
       <div className="grid grid-cols-[1fr_120px_120px_90px_120px_120px_90px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2.5 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
         <span>Summary</span>
         <span className="text-right">{periodLabel}</span>
@@ -1132,6 +1139,7 @@ function SummaryPanel({
           </div>
         );
       })}
+     </div>
     </div>
   );
 }
@@ -1264,7 +1272,8 @@ function IncomeStatementTable({
   }
 
   return (
-    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-hidden">
+    <div className="bg-white dark:bg-[#18181b] border border-[#e4e4e7] dark:border-[#3f3f46] rounded-lg overflow-x-auto">
+     <div className="min-w-[720px]">
       <div className="grid grid-cols-[1fr_120px_120px_120px_90px_90px] border-b border-[#e4e4e7] dark:border-[#3f3f46] bg-[#fafafa] dark:bg-[#27272a] px-4 py-2.5 text-[10px] font-semibold text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wider">
         <span>Line Item</span>
         <span className="text-right">{periodLabel}</span>
@@ -1297,6 +1306,7 @@ function IncomeStatementTable({
         }
         return <ISRow key={`${item._id}-${idx}`} row={item} totalIncome={totalIncome} />;
       })}
+     </div>
     </div>
   );
 }

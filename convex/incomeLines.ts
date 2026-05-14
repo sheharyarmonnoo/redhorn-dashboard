@@ -146,10 +146,13 @@ export const bulkInsertByCode = mutation({
 
     const isHistorical = args.historical === true;
 
-    // Only flip the prior latest pointer when we're ingesting current data.
-    // Historical backfills should slot in alongside existing snapshots.
+    // Only flip the prior latest pointer when we're ingesting current data
+    // AND this call actually carries new rows. A failed Yardi parse that
+    // passes rows:[] would otherwise demote every prior latest row and
+    // leave the property with NO income statement on the dashboard until
+    // the next clean sync. Guard against that.
     let priorCount = 0;
-    if (!isHistorical) {
+    if (!isHistorical && args.rows.length > 0) {
       const prior = await ctx.db
         .query("income_lines")
         .withIndex("by_property_latest", (q) =>
