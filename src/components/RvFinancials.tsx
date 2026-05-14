@@ -113,13 +113,34 @@ export default function RvFinancials({
   propertyId: string | undefined;
 }) {
   const [view, setView] = useState<"statement" | "budget" | "labor" | "debt">("statement");
+  // Auto-land on Labor when there's no IS data yet but labor rows exist —
+  // otherwise the user sees an empty Income Statement table and has to click
+  // the Labor tab manually to find the data they just uploaded.
   // Selected historical snapshot. `null` = latest committed period (the
   // useRvFinancials hook treats `undefined` as "latest"). The dropdown lets
   // the user pivot the IS / Budget vs Actuals tables to any past month
   // matching the commercial /financials Period selector pattern.
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
   const { financials, periods, loading } = useRvFinancials(propertyId, selectedPeriod);
+  // Pull labor here too so the empty-state guard knows whether the Labor tab
+  // has anything to show. Otherwise the page short-circuits to "No financial
+  // data yet" even when labor rows exist (common during early rollout when a
+  // payroll PDF was uploaded but the IS xlsx hasn't been ingested).
+  const { labor: laborForGuard } = useRvLabor(propertyId);
   const { committedAt, period: lastBundlePeriod } = useRvLastUpdated(propertyId);
+
+  // One-shot auto-default: if labor exists but IS doesn't, jump to the Labor
+  // tab on first load. Guarded by a ref-equivalent (only fires when default
+  // "statement" view is still active) so the user can navigate back to IS.
+  const [autoDefaulted, setAutoDefaulted] = useState(false);
+  useEffect(() => {
+    if (!autoDefaulted && view === "statement" && financials.length === 0 && laborForGuard.length > 0) {
+      setView("labor");
+      setAutoDefaulted(true);
+    } else if (!autoDefaulted && financials.length > 0) {
+      setAutoDefaulted(true);
+    }
+  }, [autoDefaulted, view, financials.length, laborForGuard.length]);
   const lastUpdated = formatLastUpdated(committedAt, lastBundlePeriod);
 
   void propertyName;
@@ -205,7 +226,10 @@ export default function RvFinancials({
     );
   }
 
-  if (lines.length === 0) {
+  // Only show the global empty-state when there's NOTHING to render — no IS
+  // rows AND no labor rows. If labor data exists but the IS xlsx hasn't been
+  // ingested, fall through and let the Labor tab carry the page.
+  if (lines.length === 0 && laborForGuard.length === 0) {
     return (
       <div>
         <PageHeader title="Financials" subtitle="Income Statement" />
