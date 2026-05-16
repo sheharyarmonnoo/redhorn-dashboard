@@ -2,17 +2,36 @@
 import { useState } from "react";
 import { useActiveProperty, useTenants, useUnits, showsElectricIndicator } from "@/hooks/useConvexData";
 
-type TenantStatus = "current" | "past_due" | "locked_out" | "vacant" | "expiring_soon";
+type TenantStatus = string;
 type Tenant = any;
 
+// Status → block fill for the site plan grid. Includes the Slice 2 manual
+// override statuses (auction_posted, in_eviction, needs_review, etc.)
+// so a unit overridden in the rent roll picks up the right color here.
+// Color semantics mirror StatusPill.tsx: green Current, yellow Past Due,
+// orange Locked Out / Auction Posted, red In Eviction, blue Needs Review,
+// gray Vacant / Auction Completed.
+const STATUS_BLOCK: Record<string, { bg: string; text: string }> = {
+  current: { bg: "bg-[#16a34a]", text: "text-white" },
+  past_due: { bg: "bg-[#ca8a04]", text: "text-white" },
+  locked_out: { bg: "bg-[#ea580c]", text: "text-white" },
+  auction_posted: { bg: "bg-[#ea580c]", text: "text-white" },
+  in_eviction: { bg: "bg-[#dc2626]", text: "text-white" },
+  expiring_soon: { bg: "bg-[#2563eb]", text: "text-white" },
+  needs_review: { bg: "bg-[#2563eb]", text: "text-white" },
+  auction_completed: {
+    bg: "bg-[#e4e4e7] dark:bg-[#3f3f46]",
+    text: "text-[#52525b] dark:text-[#a1a1aa]",
+  },
+  vacant: {
+    bg: "bg-[#e4e4e7] dark:bg-[#3f3f46]",
+    text: "text-[#71717a] dark:text-[#a1a1aa]",
+  },
+};
+
 function statusColor(status: TenantStatus) {
-  switch (status) {
-    case "current": return { bg: "bg-[#16a34a]", text: "text-white" };
-    case "past_due": return { bg: "bg-[#dc2626]", text: "text-white" };
-    case "locked_out": return { bg: "bg-[#d97706]", text: "text-white" };
-    case "vacant": return { bg: "bg-[#e4e4e7] dark:bg-[#3f3f46]", text: "text-[#71717a] dark:text-[#a1a1aa]" };
-    case "expiring_soon": return { bg: "bg-[#2563eb]", text: "text-white" };
-  }
+  const key = String(status || "").toLowerCase();
+  return STATUS_BLOCK[key] || STATUS_BLOCK.vacant;
 }
 
 function compactUnit(unit: string): string {
@@ -237,27 +256,44 @@ function BelgoldRow({
 
 // Same translucent fill palette Hollister uses (SitePlanFullSite). Keeping
 // the visual language consistent across properties so the dashboard reads
-// as one site-plan, not two skinned-differently grids.
+// as one site-plan, not two skinned-differently grids. Past Due is now
+// yellow (not red) to match the Slice 1 pill semantics; red is reserved
+// for In Eviction. Slice 2 statuses (auction_posted, in_eviction,
+// needs_review, auction_completed) are wired here so a unit overridden
+// in the rent roll picks up the correct fill instead of falling back to
+// vacant gray.
 const BELGOLD_FILL: Record<string, string> = {
-  current:       "rgba(22,163,74,0.10)",
-  past_due:      "rgba(220,38,38,0.16)",
-  expiring_soon: "rgba(37,99,235,0.14)",
-  locked_out:    "rgba(217,119,6,0.14)",
-  vacant:        "transparent",
+  current:           "rgba(22,163,74,0.10)",
+  past_due:          "rgba(202,138,4,0.16)",
+  locked_out:        "rgba(234,88,12,0.16)",
+  auction_posted:    "rgba(234,88,12,0.16)",
+  in_eviction:       "rgba(220,38,38,0.16)",
+  expiring_soon:     "rgba(37,99,235,0.14)",
+  needs_review:      "rgba(37,99,235,0.14)",
+  auction_completed: "rgba(100,116,139,0.10)",
+  vacant:            "transparent",
 };
 const BELGOLD_HOVER: Record<string, string> = {
-  current:       "rgba(22,163,74,0.16)",
-  past_due:      "rgba(220,38,38,0.22)",
-  expiring_soon: "rgba(37,99,235,0.20)",
-  locked_out:    "rgba(217,119,6,0.20)",
-  vacant:        "rgba(100,116,139,0.16)",
+  current:           "rgba(22,163,74,0.16)",
+  past_due:          "rgba(202,138,4,0.22)",
+  locked_out:        "rgba(234,88,12,0.22)",
+  auction_posted:    "rgba(234,88,12,0.22)",
+  in_eviction:       "rgba(220,38,38,0.22)",
+  expiring_soon:     "rgba(37,99,235,0.20)",
+  needs_review:      "rgba(37,99,235,0.20)",
+  auction_completed: "rgba(100,116,139,0.16)",
+  vacant:            "rgba(100,116,139,0.16)",
 };
 const BELGOLD_STROKE: Record<string, string> = {
-  current:       "rgba(22,163,74,0.55)",
-  past_due:      "rgba(220,38,38,0.70)",
-  expiring_soon: "rgba(37,99,235,0.65)",
-  locked_out:    "rgba(217,119,6,0.65)",
-  vacant:        "rgba(161,161,170,0.50)",
+  current:           "rgba(22,163,74,0.55)",
+  past_due:          "rgba(202,138,4,0.70)",
+  locked_out:        "rgba(234,88,12,0.70)",
+  auction_posted:    "rgba(234,88,12,0.70)",
+  in_eviction:       "rgba(220,38,38,0.70)",
+  expiring_soon:     "rgba(37,99,235,0.65)",
+  needs_review:      "rgba(37,99,235,0.65)",
+  auction_completed: "rgba(161,161,170,0.50)",
+  vacant:            "rgba(161,161,170,0.50)",
 };
 
 function BelgoldUnitBlock({ tenant, onSelect, isSelected, propertyCode }: {
@@ -267,7 +303,8 @@ function BelgoldUnitBlock({ tenant, onSelect, isSelected, propertyCode }: {
   propertyCode?: string;
 }) {
   const [hovered, setHovered] = useState(false);
-  const status = (tenant.status || "vacant") as keyof typeof BELGOLD_FILL;
+  const rawStatus = String(tenant.status || "vacant").toLowerCase();
+  const status = (rawStatus in BELGOLD_FILL ? rawStatus : "vacant") as keyof typeof BELGOLD_FILL;
   const fill = hovered ? BELGOLD_HOVER[status] : BELGOLD_FILL[status];
   const stroke = isSelected ? BELGOLD_STROKE[status] : "rgba(63,63,70,0.6)";
   const fullUnit = tenant.unit || "";
