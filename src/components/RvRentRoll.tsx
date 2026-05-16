@@ -5,6 +5,7 @@ import { Download, X } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, RowClickedEvent } from "ag-grid-community";
 import PageHeader from "@/components/PageHeader";
+import StatusPill from "@/components/StatusPill";
 import { useRvData, useRvLastUpdated, formatCurrency, formatLastUpdated } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
 
@@ -192,30 +193,12 @@ function rollupBySite(reservations: Row[], sites: Row[]): SiteRow[] {
   return rows;
 }
 
-// Status cell mirrors the commercial rent roll exactly: dot + label, same
-// palette commercial uses for past_due/current/vacant. The dot keeps the
-// row scan-able without the full-bleed pill that previously dominated the
-// column.
+// Status cell uses the shared StatusPill so RV occupancy reads with the
+// same color semantics as commercial: green Occupied, yellow Past Due,
+// blue Departing, gray Vacant. Single source of truth means status color
+// changes only need to be made in StatusPill.tsx.
 function StatusCellRenderer(props: { value: string }) {
-  const status = props.value;
-  const dot: Record<string, string> = {
-    occupied: "bg-[#16a34a]",
-    past_due: "bg-[#dc2626]",
-    departing: "bg-[#d97706]",
-    vacant: "bg-[#a1a1aa]",
-  };
-  const label: Record<string, string> = {
-    occupied: "Occupied",
-    past_due: "Past Due",
-    departing: "Departing",
-    vacant: "Vacant",
-  };
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b] dark:text-[#fafafa]">
-      <span className={`w-1.5 h-1.5 rounded-full ${dot[status] || "bg-[#a1a1aa]"}`} />
-      {label[status] || status}
-    </span>
-  );
+  return <StatusPill status={props.value} />;
 }
 
 function CurrencyCellRenderer(props: { value: number }) {
