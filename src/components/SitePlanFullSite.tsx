@@ -137,29 +137,54 @@ const BUILDINGS: BuildingDef[] = [
 // Status colors. Vacant default is transparent (so the card bg shows
 // through and unit text stays legible in both themes); on hover we
 // flash a subtle slate so vacants get a clear hit-area cue.
-// Status colors aligned with RentRollDrawer pills: current=green, past_due=red,
-// expiring_soon=BLUE (was orange), locked_out=orange, vacant=neutral.
+// Status colors aligned with StatusPill (Slice 1): green Current, yellow
+// Past Due, orange Locked Out / Auction Posted, red In Eviction, blue
+// Needs Review / Expiring Soon, gray Vacant / Auction Completed. Slice 2
+// statuses are wired so a unit overridden in the rent roll picks up the
+// right fill on the site plan instead of falling through to black.
+// Unknown statuses route to vacant via fillFor() below.
 const STATUS_FILL: Record<string, string> = {
-  current:       "rgba(22,163,74,0.10)",
-  past_due:      "rgba(220,38,38,0.16)",
-  expiring_soon: "rgba(37,99,235,0.14)",
-  locked_out:    "rgba(217,119,6,0.14)",
-  vacant:        "transparent",
+  current:           "rgba(22,163,74,0.10)",
+  past_due:          "rgba(202,138,4,0.16)",
+  locked_out:        "rgba(234,88,12,0.16)",
+  auction_posted:    "rgba(234,88,12,0.16)",
+  in_eviction:       "rgba(220,38,38,0.16)",
+  expiring_soon:     "rgba(37,99,235,0.14)",
+  needs_review:      "rgba(37,99,235,0.14)",
+  auction_completed: "rgba(100,116,139,0.10)",
+  vacant:            "transparent",
 };
 const HOVER_FILL: Record<string, string> = {
-  current:       "rgba(22,163,74,0.16)",
-  past_due:      "rgba(220,38,38,0.22)",
-  expiring_soon: "rgba(37,99,235,0.20)",
-  locked_out:    "rgba(217,119,6,0.20)",
-  vacant:        "rgba(100,116,139,0.16)",
+  current:           "rgba(22,163,74,0.16)",
+  past_due:          "rgba(202,138,4,0.22)",
+  locked_out:        "rgba(234,88,12,0.22)",
+  auction_posted:    "rgba(234,88,12,0.22)",
+  in_eviction:       "rgba(220,38,38,0.22)",
+  expiring_soon:     "rgba(37,99,235,0.20)",
+  needs_review:      "rgba(37,99,235,0.20)",
+  auction_completed: "rgba(100,116,139,0.16)",
+  vacant:            "rgba(100,116,139,0.16)",
 };
 const STATUS_STROKE: Record<string, string> = {
-  current:       "rgba(22,163,74,0.55)",
-  past_due:      "rgba(220,38,38,0.70)",
-  expiring_soon: "rgba(37,99,235,0.65)",
-  locked_out:    "rgba(217,119,6,0.65)",
-  vacant:        "rgba(161,161,170,0.50)",
+  current:           "rgba(22,163,74,0.55)",
+  past_due:          "rgba(202,138,4,0.70)",
+  locked_out:        "rgba(234,88,12,0.70)",
+  auction_posted:    "rgba(234,88,12,0.70)",
+  in_eviction:       "rgba(220,38,38,0.70)",
+  expiring_soon:     "rgba(37,99,235,0.65)",
+  needs_review:      "rgba(37,99,235,0.65)",
+  auction_completed: "rgba(161,161,170,0.50)",
+  vacant:            "rgba(161,161,170,0.50)",
 };
+
+// Normalize whatever status the merged tenant row carries into a key
+// every color map above knows about. Unknown values render as vacant
+// rather than producing an undefined SVG fill (which the browser paints
+// black/transparent inconsistently).
+function normStatusKey(s: string | undefined): keyof typeof STATUS_FILL {
+  const k = String(s || "").toLowerCase();
+  return (k in STATUS_FILL ? k : "vacant") as keyof typeof STATUS_FILL;
+}
 
 function findLeaseForUnit(unit: string, tenants: Tenant[]): Tenant | null {
   const target = NORM(unit);
@@ -363,10 +388,9 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
               const dec = decorated[r.unit];
               const isSelected = selectedUnit === r.unit;
               const isHovered = hovered === r.unit;
-              const fill = isHovered
-                ? HOVER_FILL[dec.status]
-                : STATUS_FILL[dec.status];
-              const stroke = isSelected ? STATUS_STROKE[dec.status] : "#3f3f46";
+              const sKey = normStatusKey(dec.status);
+              const fill = isHovered ? HOVER_FILL[sKey] : STATUS_FILL[sKey];
+              const stroke = isSelected ? STATUS_STROKE[sKey] : "#3f3f46";
               const strokeWidth = isSelected ? 2.5 : 1;
               return (
                 <g
@@ -387,8 +411,8 @@ export default function SitePlanFullSite({ tenants, units, selectedUnit, onSelec
                     style={{ transition: "fill 140ms ease, stroke 140ms ease" }}
                     className={!isSelected ? "dark:[stroke:#52525b]" : ""}
                   />
-                  {dec.status !== "vacant" && (
-                    <circle cx={r.x + r.w - 6} cy={r.y + 6} r={3} fill={STATUS_STROKE[dec.status]} />
+                  {sKey !== "vacant" && (
+                    <circle cx={r.x + r.w - 6} cy={r.y + 6} r={3} fill={STATUS_STROKE[sKey]} />
                   )}
                   <text
                     x={r.x + r.w / 2}
