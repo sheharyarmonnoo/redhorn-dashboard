@@ -5,6 +5,8 @@ import { formatCurrency, normalizeTenantName, useReceivableDetails, usePropertie
 import EmailComposer, { type EmailContext } from "./EmailComposer";
 import ConfirmDialog from "./ConfirmDialog";
 import StatusPill, { ManualOverrideBadge } from "./StatusPill";
+import StatusEditor from "./StatusEditor";
+import { useUser } from "@clerk/nextjs";
 
 type Tenant = any;
 
@@ -37,6 +39,9 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
     tenant?.unit
   );
   const { updateNotes: updateTenantNotes, setContactOverride } = useTenantMutations();
+  const { user: drawerUser } = useUser();
+  const drawerCurrentUser =
+    drawerUser?.fullName || drawerUser?.firstName || drawerUser?.username || "User";
   const [editingContact, setEditingContact] = useState(false);
   const [contactDraft, setContactDraft] = useState<{ tenantContactName: string; tenantEmail: string; tenantPhone: string }>({ tenantContactName: "", tenantEmail: "", tenantPhone: "" });
 
@@ -265,15 +270,34 @@ export default function RentRollDrawer({ tenant, onClose }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Status">
               <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-                <StatusPill status={tenant.status} />
-                {tenant.hasOverride && (
+                <StatusEditor
+                  status={tenant.status}
+                  isOverridden={!!tenant.statusOverridden}
+                  onSelect={async (next) => {
+                    await setContactOverride({
+                      propertyId: tenant.propertyId,
+                      unit: tenant.unit,
+                      fields: { status: next },
+                      updatedBy: drawerCurrentUser,
+                    });
+                  }}
+                  onClear={async () => {
+                    await setContactOverride({
+                      propertyId: tenant.propertyId,
+                      unit: tenant.unit,
+                      fields: { status: "" },
+                      updatedBy: drawerCurrentUser,
+                    });
+                  }}
+                />
+                {tenant.statusOverridden && (
                   <ManualOverrideBadge by={tenant.overrideUpdatedBy} at={tenant.overrideUpdatedAt} size="xs" />
                 )}
               </div>
               <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">
-                {tenant.hasOverride
-                  ? "Manual override active. System status hidden."
-                  : "System status. Calculated from rent roll and ledger data."}
+                {tenant.statusOverridden
+                  ? `Manual override active. System status was ${tenant.systemStatus || "unknown"}.`
+                  : "System status. Calculated from rent roll and ledger data. Click pill to override."}
               </p>
             </Field>
             <Field label="Lease Type">

@@ -692,10 +692,23 @@ export function useTenantMutations() {
   const updateNotes = useMutation(api.tenants.updateNotes);
   const updateDelinquency = useMutation(api.tenants.updateDelinquency);
   const updateElectricPosted = useMutation(api.tenants.updateElectricPosted);
-  // Manual contact overrides — email / phone / contact name aren't in Yardi
-  // exports, so we layer them on via the tenant_overrides table.
-  const setContactOverride = useMutation(api.tenantOverrides.setOverride);
-  return { updateStatus, updateNotes, updateDelinquency, updateElectricPosted, setContactOverride };
+  // tenant_overrides handles two distinct concerns. Manual contact info
+  // (email/phone/name) layers on because Yardi exports don't carry it.
+  // Slice 2 adds manual status override (Auction Posted, In Eviction,
+  // Needs Review) routed through the same setOverride mutation via the
+  // `status` field. clearOverride wipes the row entirely — used when
+  // reverting to system status if no other overrides are in play.
+  const setOverride = useMutation(api.tenantOverrides.setOverride);
+  const clearOverride = useMutation(api.tenantOverrides.clearOverride);
+  return {
+    updateStatus,
+    updateNotes,
+    updateDelinquency,
+    updateElectricPosted,
+    setContactOverride: setOverride,
+    setOverride,
+    clearOverride,
+  };
 }
 
 // ===== HELPER: format currency =====

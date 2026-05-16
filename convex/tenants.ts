@@ -8,9 +8,16 @@ function mergeOverride(tenant: any, override: any): any {
   if (!override) return { ...tenant, hasOverride: false };
   const merged: any = { ...tenant };
   const applied: string[] = [];
+  // status is included so Slice 2's manual status override replaces the
+  // synced tenant.status. Downstream UI reads tenant.status without
+  // caring whether the value came from sync or override; the
+  // overrideFields array lets the drawer/grid distinguish for display
+  // (Manual Override badge) and the systemStatus field below preserves
+  // the synced value for the "system status" caption.
   const fieldKeys = [
     "notes",
     "tenantEmail", "tenantPhone", "tenantContactName",
+    "status",
   ];
   for (const k of fieldKeys) {
     if (override[k] !== undefined && override[k] !== null) {
@@ -20,7 +27,9 @@ function mergeOverride(tenant: any, override: any): any {
   }
   return {
     ...merged,
+    systemStatus: tenant.status,
     hasOverride: applied.length > 0,
+    statusOverridden: applied.includes("status"),
     overrideFields: applied,
     overrideUpdatedAt: override.updatedAt,
     overrideUpdatedBy: override.updatedBy,
