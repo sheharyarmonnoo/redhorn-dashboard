@@ -112,29 +112,47 @@ function findLeaseForUnit(unit: string, tenants: Tenant[]): Tenant | null {
   ) || null;
 }
 
-// Status colors aligned with RentRollDrawer pills: expiring_soon=BLUE (was
-// orange — collided with locked_out and looked identical to a non-action state).
+// Status colors aligned with StatusPill (Slice 1+2): green Current,
+// yellow Past Due, orange Locked Out / Auction Posted, red In Eviction,
+// blue Needs Review / Expiring Soon, gray Vacant / Auction Completed.
+// Unknown statuses route to vacant via normStatusKey() below.
 const STATUS_FILL: Record<string, string> = {
-  current:       "rgba(22,163,74,0.10)",
-  past_due:      "rgba(220,38,38,0.16)",
-  expiring_soon: "rgba(37,99,235,0.14)",
-  locked_out:    "rgba(217,119,6,0.14)",
-  vacant:        "transparent",
+  current:           "rgba(22,163,74,0.10)",
+  past_due:          "rgba(202,138,4,0.16)",
+  locked_out:        "rgba(234,88,12,0.16)",
+  auction_posted:    "rgba(234,88,12,0.16)",
+  in_eviction:       "rgba(220,38,38,0.16)",
+  expiring_soon:     "rgba(37,99,235,0.14)",
+  needs_review:      "rgba(37,99,235,0.14)",
+  auction_completed: "rgba(100,116,139,0.10)",
+  vacant:            "transparent",
 };
 const HOVER_FILL: Record<string, string> = {
-  current:       "rgba(22,163,74,0.16)",
-  past_due:      "rgba(220,38,38,0.22)",
-  expiring_soon: "rgba(37,99,235,0.20)",
-  locked_out:    "rgba(217,119,6,0.20)",
-  vacant:        "rgba(100,116,139,0.16)",
+  current:           "rgba(22,163,74,0.16)",
+  past_due:          "rgba(202,138,4,0.22)",
+  locked_out:        "rgba(234,88,12,0.22)",
+  auction_posted:    "rgba(234,88,12,0.22)",
+  in_eviction:       "rgba(220,38,38,0.22)",
+  expiring_soon:     "rgba(37,99,235,0.20)",
+  needs_review:      "rgba(37,99,235,0.20)",
+  auction_completed: "rgba(100,116,139,0.16)",
+  vacant:            "rgba(100,116,139,0.16)",
 };
 const STATUS_STROKE: Record<string, string> = {
-  current:       "rgba(22,163,74,0.55)",
-  past_due:      "rgba(220,38,38,0.70)",
-  expiring_soon: "rgba(37,99,235,0.65)",
-  locked_out:    "rgba(217,119,6,0.65)",
-  vacant:        "rgba(161,161,170,0.40)",
+  current:           "rgba(22,163,74,0.55)",
+  past_due:          "rgba(202,138,4,0.70)",
+  locked_out:        "rgba(234,88,12,0.70)",
+  auction_posted:    "rgba(234,88,12,0.70)",
+  in_eviction:       "rgba(220,38,38,0.70)",
+  expiring_soon:     "rgba(37,99,235,0.65)",
+  needs_review:      "rgba(37,99,235,0.65)",
+  auction_completed: "rgba(161,161,170,0.40)",
+  vacant:            "rgba(161,161,170,0.40)",
 };
+function normStatusKey(s: string | undefined): keyof typeof STATUS_FILL {
+  const k = String(s || "").toLowerCase();
+  return (k in STATUS_FILL ? k : "vacant") as keyof typeof STATUS_FILL;
+}
 
 export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSelect, propertyId }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
@@ -233,10 +251,9 @@ export default function SitePlanFloorPlan({ tenants, units, selectedUnit, onSele
           const dec = decorated[r.unit!];
           const isSelected = selectedUnit === r.unit;
           const isHovered = hovered === r.unit;
-          const fill = isHovered
-            ? HOVER_FILL[dec.status]
-            : STATUS_FILL[dec.status];
-          const stroke = isSelected ? STATUS_STROKE[dec.status] : "#1f2937";
+          const sKey = normStatusKey(dec.status);
+          const fill = isHovered ? HOVER_FILL[sKey] : STATUS_FILL[sKey];
+          const stroke = isSelected ? STATUS_STROKE[sKey] : "#1f2937";
           const strokeWidth = isSelected ? 3 : 2;
           return (
             <g
