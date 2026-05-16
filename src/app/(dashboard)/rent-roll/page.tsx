@@ -9,35 +9,22 @@ import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
 import RvRentRoll from "@/components/RvRentRoll";
-import { Download } from "lucide-react";
-
-type TenantStatus = "current" | "past_due" | "locked_out" | "vacant" | "expiring_soon";
-
-function getStatusLabel(status: TenantStatus): string {
-  switch (status) {
-    case "current": return "Current";
-    case "past_due": return "Past Due";
-    case "locked_out": return "Locked Out";
-    case "vacant": return "Vacant";
-    case "expiring_soon": return "Expiring Soon";
-  }
-}
+import StatusPill, { ManualOverrideBadge } from "@/components/StatusPill";
+import { Download, X } from "lucide-react";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-function StatusCellRenderer(props: { value: string }) {
-  const status = props.value;
-  const dotColors: Record<string, string> = {
-    current: "bg-[#16a34a]",
-    past_due: "bg-[#dc2626]",
-    expiring_soon: "bg-[#2563eb]",
-    vacant: "bg-[#a1a1aa]",
-    locked_out: "bg-[#d97706]",
-  };
+// Row renderer for the Status column. Color-coded pill (StatusPill) plus
+// an optional Manual Override badge inline next to it when the tenant row
+// has a tenant_overrides entry. Inline (vs stacked) keeps the existing
+// row height — the full override metadata (by/when) still surfaces in
+// the drawer.
+function StatusCellRenderer(props: { value: string; data: any }) {
+  const d = props.data || {};
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-[#18181b] dark:text-[#fafafa]">
-      <span className={`w-1.5 h-1.5 rounded-full ${dotColors[status] || "bg-[#a1a1aa]"}`} />
-      {getStatusLabel(status as TenantStatus)}
+    <span className="inline-flex items-center gap-1.5">
+      <StatusPill status={props.value} />
+      {d.hasOverride && <ManualOverrideBadge size="xs" />}
     </span>
   );
 }
@@ -513,16 +500,47 @@ export default function RentRollPage() {
         </div>
       )}
 
-      {/* Summary bar */}
+      {/* Summary bar. Search input has an inline clear-X (visible only when
+          text is present) and an active filter chip surfaces the current
+          query so the user always knows they're filtered. */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">
+        {quickSearch && (
+          <span
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-blue-50 dark:bg-blue-950/30 text-[#2563eb] dark:text-[#60a5fa] border-blue-200 dark:border-blue-900/50"
+            title={`Active filter: ${quickSearch}`}
+          >
+            <span className="text-[#a1a1aa]">Filter:</span>
+            <span className="truncate max-w-[180px]">{quickSearch}</span>
+            <button
+              type="button"
+              onClick={() => setQuickSearch("")}
+              className="hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+              aria-label="Clear active filter"
+            >
+              <X size={11} />
+            </button>
+          </span>
+        )}
         <div className="sm:ml-auto w-full sm:w-auto flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Quick search all data..."
-            value={quickSearch}
-            className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-sm text-gray-900 dark:text-[#fafafa] placeholder-gray-400 dark:placeholder-[#71717a] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7] w-full sm:w-64"
-            onChange={(e) => setQuickSearch(e.target.value)}
-          />
+          <div className="relative w-full sm:w-64">
+            <input
+              type="text"
+              placeholder="Search tenant, unit, lease…"
+              value={quickSearch}
+              className="w-full px-3 py-1.5 pr-7 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-sm text-gray-900 dark:text-[#fafafa] placeholder-gray-400 dark:placeholder-[#71717a] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]"
+              onChange={(e) => setQuickSearch(e.target.value)}
+            />
+            {quickSearch && (
+              <button
+                type="button"
+                onClick={() => setQuickSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+                aria-label="Clear search"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
           <button
             onClick={clearAllFilters}
             className="text-[12px] font-medium px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] hover:border-[#71717a] cursor-pointer whitespace-nowrap"
