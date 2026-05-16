@@ -610,7 +610,7 @@ export default function DataPipelinePage() {
           jobId: b._id,
           storageId: f.storageId,
           filename: f.name,
-          property: b.propertyName || "RV Park",
+          property: b.propertyName || "Wapuson RV Resort",
           source: "Manual Upload",
           type: friendlyRvType[f.fileType] || f.fileType || "",
           records: typeof f.rowsParsed === "number" ? f.rowsParsed : 0,
@@ -785,8 +785,8 @@ function FileVolumeChart({ syncJobs, rvBundles, loading }: { syncJobs: any[]; rv
     const propNames: Record<string, string> = {
       hol: "Hollister",
       bel: "Belgold",
-      brad: "RV Park",
-      "rv-ohio": "RV Ohio",
+      brad: "Wapuson RV Resort",
+      "rv-ohio": "Wapuson RV Resort",
     };
     const buckets: Record<string, Record<string, number>> = {}; // propCode -> bucketKey -> count
 

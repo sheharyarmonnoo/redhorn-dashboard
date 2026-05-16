@@ -13,14 +13,17 @@ import { Zap, DollarSign, CalendarClock, AlertTriangle, Mail } from "lucide-reac
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-// Humanize a property code like "rv-ohio" → "RV Ohio" so the alerts grid
-// reads naturally. Pre-existing income_insight alerts had Claude's
-// (now-fixed) property-code-as-unit slip stored verbatim — we still need
-// to surface them legibly until those rows are regenerated.
+// Humanize a property code like "rv-ohio" → "Wapuson RV Resort" so the
+// alerts grid reads naturally. Pre-existing income_insight alerts had
+// Claude's (now-fixed) property-code-as-unit slip stored verbatim, so we
+// still need to surface them legibly until those rows are regenerated.
+// rv-ohio is the only RV park today; future RV properties fall back to
+// a generic "RV {tail}" form.
 function humanizeUnit(raw: string | undefined | null): string {
   if (!raw) return "—";
   const s = String(raw).trim();
   if (!s || s === "—") return "—";
+  if (s.toLowerCase() === "rv-ohio") return "Wapuson RV Resort";
   if (/^rv-/i.test(s)) {
     const tail = s.slice(3);
     return `RV ${tail.charAt(0).toUpperCase()}${tail.slice(1).toLowerCase()}`;
