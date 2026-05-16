@@ -33,6 +33,14 @@ export default defineSchema({
     tenantEmail: v.optional(v.string()),
     tenantPhone: v.optional(v.string()),
     tenantContactName: v.optional(v.string()),
+    // Manual delinquency status override (Slice 2). When present, replaces
+    // the synced tenant.status for display and filter purposes. Values
+    // match the TenantStatusKey enum in StatusPill.tsx: current, past_due,
+    // locked_out, auction_posted, in_eviction, needs_review, vacant,
+    // auction_completed. Cleared by deleting the override row entirely
+    // (clearOverride mutation) — there's no "revert just status" path
+    // because the field shares the row with notes/contact overrides.
+    status: v.optional(v.string()),
     updatedAt: v.string(),
     updatedBy: v.optional(v.string()),
   })

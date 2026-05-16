@@ -6,6 +6,12 @@ const OVERRIDE_FIELDS = v.object({
   tenantEmail: v.optional(v.string()),
   tenantPhone: v.optional(v.string()),
   tenantContactName: v.optional(v.string()),
+  // Manual delinquency status. Slice 2 introduces this for asset
+  // managers to set states the synced data can't represent (Auction
+  // Posted, In Eviction, Needs Review, etc.). Empty string is treated
+  // by setOverride as "clear this field" so callers can revert just
+  // the status without nuking notes/contact overrides.
+  status: v.optional(v.string()),
 });
 
 /**
@@ -22,6 +28,19 @@ export const setOverride = mutation({
   },
   handler: async (ctx, args) => {
     const now = new Date().toISOString();
+    // Empty string in the incoming fields means "clear this column" so the
+    // synced value falls through again. Patch() treats undefined as "leave
+    // as-is", so we map "" → undefined-via-explicit-delete by re-inserting
+    // without the cleared key. Easier: split into a write patch with the
+    // non-empty fields and a clear patch with the empty ones nulled out.
+    const incoming = args.fields as Record<string, string | undefined>;
+    const writePatch: Record<string, string | undefined> = {};
+    const clearPatch: Record<string, undefined> = {};
+    for (const [k, v] of Object.entries(incoming)) {
+      if (v === undefined) continue;
+      if (v === "") clearPatch[k] = undefined;
+      else writePatch[k] = v;
+    }
     const existing = await ctx.db
       .query("tenant_overrides")
       .withIndex("by_property_unit", (q) =>
@@ -30,7 +49,8 @@ export const setOverride = mutation({
       .first();
     if (existing) {
       await ctx.db.patch(existing._id, {
-        ...args.fields,
+        ...clearPatch,
+        ...writePatch,
         updatedAt: now,
         updatedBy: args.updatedBy,
       });
@@ -39,7 +59,7 @@ export const setOverride = mutation({
     return await ctx.db.insert("tenant_overrides", {
       propertyId: args.propertyId,
       unit: args.unit,
-      ...args.fields,
+      ...writePatch,
       updatedAt: now,
       updatedBy: args.updatedBy,
     });

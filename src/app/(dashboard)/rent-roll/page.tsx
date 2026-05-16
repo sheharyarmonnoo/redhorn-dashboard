@@ -3,27 +3,65 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, ColDef, ColGroupDef, RowClickedEvent } from "ag-grid-community";
-import { useTenantsWithLoading, useUnits, useActiveProperty, formatCurrency, leasedUnitKeys, useChargeSummary, normalizeTenantName, showsElectricIndicator } from "@/hooks/useConvexData";
+import { useTenantsWithLoading, useUnits, useActiveProperty, useTenantMutations, formatCurrency, leasedUnitKeys, useChargeSummary, normalizeTenantName, showsElectricIndicator } from "@/hooks/useConvexData";
 import { useAgGridPersistence } from "@/hooks/useAgGridPersistence";
+import { useUser } from "@clerk/nextjs";
 import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
 import RvRentRoll from "@/components/RvRentRoll";
 import StatusPill, { ManualOverrideBadge } from "@/components/StatusPill";
+import StatusEditor from "@/components/StatusEditor";
 import { Download, X } from "lucide-react";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-// Row renderer for the Status column. Color-coded pill (StatusPill) plus
-// an optional Manual Override badge inline next to it when the tenant row
-// has a tenant_overrides entry. Inline (vs stacked) keeps the existing
-// row height — the full override metadata (by/when) still surfaces in
-// the drawer.
-function StatusCellRenderer(props: { value: string; data: any }) {
+// Row renderer for the Status column. Wraps the StatusPill in a StatusEditor
+// so clicking the pill opens the manual-override dropdown. Vacant rows
+// expose synthetic row IDs (vacant-A-103) — disable the editor for those
+// since there's no real tenant unit to attach the override to. The Manual
+// badge appears inline when the row's status came from tenant_overrides.
+function StatusCellRenderer(props: {
+  value: string;
+  data: any;
+  context: { propertyId?: string; currentUser?: string; setOverride: any; clearOverride: any };
+}) {
   const d = props.data || {};
+  const ctx = props.context || ({} as any);
+  const isVacantSynthetic = String(d._id || "").startsWith("vacant-");
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <StatusPill status={props.value} />
+    <span
+      className="inline-flex items-center gap-1.5"
+      // Swallow native click so AG Grid's row handler doesn't open the
+      // drawer when the user is interacting with the status dropdown.
+      onClick={(e) => e.stopPropagation()}
+    >
+      <StatusEditor
+        status={props.value}
+        isOverridden={!!d.statusOverridden}
+        disabled={isVacantSynthetic || !ctx.propertyId}
+        onSelect={async (next) => {
+          await ctx.setOverride({
+            propertyId: ctx.propertyId,
+            unit: d.unit,
+            fields: { status: next },
+            updatedBy: ctx.currentUser || "User",
+          });
+        }}
+        onClear={async () => {
+          // Clear just the status override by setting it to empty
+          // string (treated as "drop this field"); leaves notes/contact
+          // overrides intact. clearOverride mutation would wipe the
+          // whole row, which is too destructive when other fields are
+          // set.
+          await ctx.setOverride({
+            propertyId: ctx.propertyId,
+            unit: d.unit,
+            fields: { status: "" },
+            updatedBy: ctx.currentUser || "User",
+          });
+        }}
+      />
       {d.hasOverride && <ManualOverrideBadge size="xs" />}
     </span>
   );
@@ -71,6 +109,9 @@ export default function RentRollPage() {
   const { tenants: tenantsLeased, loading: tenantsLoading } = useTenantsWithLoading(activeProperty?._id);
   const unitsAll = useUnits(activeProperty?._id);
   const { byTenant: chargeSummary, latestMonth: chargeMonth } = useChargeSummary(activeProperty?._id);
+  const { setOverride } = useTenantMutations();
+  const { user } = useUser();
+  const currentUser = user?.fullName || user?.firstName || user?.username || "User";
 
   // Deep-link support: ?unit=A-103 (or ?unit=A-103,A-112,A-85 for multi-unit
   // leases) opens the rent-roll filtered to that unit and auto-opens the
@@ -563,7 +604,12 @@ export default function RentRollPage() {
           // Context flows to every cell renderer + valueGetter so the
           // electric-posting indicator can read the active property code
           // and apply the per-property allowlist.
-          context={{ propertyCode: activeProperty?.code }}
+          context={{
+            propertyCode: activeProperty?.code,
+            propertyId: activeProperty?._id,
+            currentUser,
+            setOverride,
+          }}
           groupDisplayType="groupRows"
           groupDefaultExpanded={1}
           onGridReady={persistence.onGridReady}
