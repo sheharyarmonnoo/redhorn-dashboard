@@ -3,6 +3,9 @@ import { useState, useEffect, useMemo } from "react";
 import { X } from "lucide-react";
 import { useUnitNotes, useReceivableDetails, normalizeTenantName, formatCurrency, useTenantMutations, useActiveProperty, showsElectricIndicator } from "@/hooks/useConvexData";
 import ConfirmDialog from "./ConfirmDialog";
+import StatusPill, { ManualOverrideBadge } from "./StatusPill";
+import StatusEditor from "./StatusEditor";
+import { useUser } from "@clerk/nextjs";
 
 interface Props {
   tenant: any | null;
@@ -288,8 +291,11 @@ export default function UnitDetailPanel({ tenant: tenantProp, onClose, onUpdated
                 </div>
               )}
 
-              {/* Status — auto-derived from Yardi data */}
-              <StatusBadge status={tenant.status} />
+              {/* Status — shared StatusEditor so the site-plan drawer can
+                  set/clear the manual override the same way the rent roll
+                  does. ManualOverrideBadge appears beside the pill when
+                  the row's status came from tenant_overrides. */}
+              <StatusBlock tenant={tenant} />
 
 
 
@@ -490,23 +496,59 @@ function formatMonth(m: string): string {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const s = status || "current";
-  const configs: Record<string, { label: string; cls: string }> = {
-    current:       { label: "Current",       cls: "bg-green-100 dark:bg-green-950/40 text-[#16a34a] border-green-200 dark:border-green-900" },
-    past_due:      { label: "Past Due",      cls: "bg-red-100 dark:bg-red-950/40 text-[#dc2626] border-red-200 dark:border-red-900" },
-    expiring_soon: { label: "Expiring Soon", cls: "bg-blue-100 dark:bg-blue-950/40 text-[#2563eb] border-blue-200 dark:border-blue-900" },
-    locked_out:    { label: "Locked Out",    cls: "bg-orange-100 dark:bg-orange-950/40 text-[#d97706] border-orange-200 dark:border-orange-900" },
-    vacant:        { label: "Vacant",        cls: "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] border-[#e4e4e7] dark:border-[#3f3f46]" },
-  };
-  const cfg = configs[s] || { label: s, cls: "bg-[#f4f4f5] dark:bg-[#27272a] text-[#71717a] border-[#e4e4e7] dark:border-[#3f3f46]" };
+// Wraps StatusEditor with the override-aware caption so the site-plan
+// drawer matches the rent-roll drawer behavior exactly. When the tenant
+// row has a tenant_overrides entry the caption flips to "Manual override
+// active. System status was X" and a Manual badge appears beside the
+// pill. Vacant synthetic rows (no real tenant) keep the pill but disable
+// the editor since there's no unit row to attach the override to.
+function StatusBlock({ tenant }: { tenant: any }) {
+  const { setOverride } = useTenantMutations();
+  const { user } = useUser();
+  const currentUser =
+    user?.fullName || user?.firstName || user?.username || "User";
+  const isVacantSynthetic = String(tenant?._id || "").startsWith("vacant-");
+  const overridden = !!tenant?.statusOverridden;
   return (
     <div>
-      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">Status</p>
-      <span className={`inline-block text-[11px] font-semibold px-2.5 py-1 rounded border ${cfg.cls}`}>
-        {cfg.label}
-      </span>
-      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">Auto-derived from Yardi sync data.</p>
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] uppercase tracking-wide font-medium mb-2">
+        Status
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <StatusEditor
+          status={tenant?.status}
+          isOverridden={overridden}
+          disabled={isVacantSynthetic || !tenant?.propertyId}
+          onSelect={async (next) => {
+            await setOverride({
+              propertyId: tenant.propertyId,
+              unit: tenant.unit,
+              fields: { status: next },
+              updatedBy: currentUser,
+            });
+          }}
+          onClear={async () => {
+            await setOverride({
+              propertyId: tenant.propertyId,
+              unit: tenant.unit,
+              fields: { status: "" },
+              updatedBy: currentUser,
+            });
+          }}
+        />
+        {overridden && (
+          <ManualOverrideBadge
+            by={tenant?.overrideUpdatedBy}
+            at={tenant?.overrideUpdatedAt}
+            size="xs"
+          />
+        )}
+      </div>
+      <p className="text-[10px] text-[#a1a1aa] dark:text-[#71717a] mt-1.5">
+        {overridden
+          ? `Manual override active. System status was ${tenant?.systemStatus || "unknown"}.`
+          : "System status. Click pill to override."}
+      </p>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import RentRollDrawer from "@/components/RentRollDrawer";
 import PageHeader from "@/components/PageHeader";
 import ComingSoonBanner from "@/components/ComingSoonBanner";
 import RvRentRoll from "@/components/RvRentRoll";
-import StatusPill, { ManualOverrideBadge } from "@/components/StatusPill";
+import StatusPill from "@/components/StatusPill";
 import StatusEditor from "@/components/StatusEditor";
 import { Download, X } from "lucide-react";
 
@@ -19,8 +19,9 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 // Row renderer for the Status column. Wraps the StatusPill in a StatusEditor
 // so clicking the pill opens the manual-override dropdown. Vacant rows
 // expose synthetic row IDs (vacant-A-103) — disable the editor for those
-// since there's no real tenant unit to attach the override to. The Manual
-// badge appears inline when the row's status came from tenant_overrides.
+// since there's no real tenant unit to attach the override to. Manual
+// override metadata (by/when) lives in the drawer only; the grid row
+// stays clean to keep the rent roll scan-able.
 function StatusCellRenderer(props: {
   value: string;
   data: any;
@@ -62,7 +63,6 @@ function StatusCellRenderer(props: {
           });
         }}
       />
-      {d.hasOverride && <ManualOverrideBadge size="xs" />}
     </span>
   );
 }

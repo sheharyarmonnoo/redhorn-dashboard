@@ -107,8 +107,10 @@ export function getStatusLabel(status: string | undefined | null): string {
   return STATUS_META[normalize(status)].label;
 }
 
-// Compact pill suitable for AG Grid cells. Uses border + tint so it
-// reads cleanly on both light and dark themes at the small row height.
+// Compact pill suitable for AG Grid cells. Linear/Notion-style: tint
+// background, darker text, no inner dot (the color already conveys
+// state), slightly rounded but not fully circular. Reads cleanly at
+// the AG row height without looking squished.
 export default function StatusPill({
   status,
   size = "sm",
@@ -119,42 +121,53 @@ export default function StatusPill({
   const meta = STATUS_META[normalize(status)];
   const sizeCls =
     size === "xs"
-      ? "text-[10px] px-1.5 py-0.5"
-      : "text-[11px] px-2 py-0.5";
+      ? "text-[10px] px-1.5 py-[1px] leading-[14px]"
+      : "text-[11px] px-2 py-[1px] leading-[16px]";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border font-medium ${sizeCls} ${meta.cls}`}
+      className={`inline-flex items-center rounded font-medium whitespace-nowrap ${sizeCls} ${meta.cls}`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
       {meta.label}
     </span>
   );
 }
 
-// Override badge shown next to (or below) the status pill when a row
-// has been touched by a Red Horn team member. Purple/gray per the spec.
+// Override indicator. In-grid it's a single tinted dot (no text)
+// purely to flag "this row was touched" without crowding the status
+// pill. In the drawer the full "Manual · by Max · 2d ago" label is
+// surfaced because there's room for the metadata.
 export function ManualOverrideBadge({
   by,
   at,
   size = "sm",
+  compact = false,
 }: {
   by?: string;
   at?: string;
   size?: "xs" | "sm";
+  compact?: boolean;
 }) {
-  const sizeCls =
-    size === "xs"
-      ? "text-[10px] px-1.5 py-0.5"
-      : "text-[11px] px-2 py-0.5";
   const tail = [by ? `by ${by}` : null, at ? formatRelative(at) : null]
     .filter(Boolean)
     .join(" · ");
+  if (compact) {
+    return (
+      <span
+        className="inline-block w-1.5 h-1.5 rounded-full bg-[#7c3aed]"
+        title={`Manual override${tail ? ` · ${tail}` : ""}`}
+        aria-label={`Manual override${tail ? ` ${tail}` : ""}`}
+      />
+    );
+  }
+  const sizeCls =
+    size === "xs"
+      ? "text-[10px] px-1.5 py-[1px] leading-[14px]"
+      : "text-[11px] px-2 py-[1px] leading-[16px]";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border font-medium bg-purple-50 dark:bg-purple-950/30 text-[#7c3aed] dark:text-[#a78bfa] border-purple-200 dark:border-purple-900/50 ${sizeCls}`}
+      className={`inline-flex items-center rounded font-medium whitespace-nowrap bg-purple-50 dark:bg-purple-950/30 text-[#7c3aed] dark:text-[#a78bfa] ${sizeCls}`}
       title={`Manual override${tail ? ` ${tail}` : ""}`}
     >
-      <span className="w-1.5 h-1.5 rounded-full bg-[#7c3aed]" />
       Manual{tail ? ` · ${tail}` : ""}
     </span>
   );
