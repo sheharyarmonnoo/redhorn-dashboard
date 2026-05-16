@@ -458,17 +458,47 @@ export default function RvRentRoll({
         </button>
       </PageHeader>
 
-      {/* Search + Clear filters — matches the commercial rent roll layout
-          (rounded-lg pills, mb-4 rhythm, focus ring, w-64 input). */}
+      {/* Search + Clear filters — matches the commercial rent roll Slice 1
+          layout exactly: active filter chip on the left, search input with
+          inline clear-X, then Clear filters button. */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4 mb-4 text-[12px]">
+        {quickSearch && (
+          <span
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-blue-50 dark:bg-blue-950/30 text-[#2563eb] dark:text-[#60a5fa] border-blue-200 dark:border-blue-900/50"
+            title={`Active filter: ${quickSearch}`}
+          >
+            <span className="text-[#a1a1aa]">Filter:</span>
+            <span className="truncate max-w-[180px]">{quickSearch}</span>
+            <button
+              type="button"
+              onClick={() => setQuickSearch("")}
+              className="hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+              aria-label="Clear active filter"
+            >
+              <X size={11} />
+            </button>
+          </span>
+        )}
         <div className="sm:ml-auto w-full sm:w-auto flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Quick search all data..."
-            value={quickSearch}
-            onChange={(e) => setQuickSearch(e.target.value)}
-            className="px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-sm text-gray-900 dark:text-[#fafafa] placeholder-gray-400 dark:placeholder-[#71717a] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7] w-full sm:w-64"
-          />
+          <div className="relative w-full sm:w-64">
+            <input
+              type="text"
+              placeholder="Search guest, site, package…"
+              value={quickSearch}
+              onChange={(e) => setQuickSearch(e.target.value)}
+              className="w-full px-3 py-1.5 pr-7 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-sm text-gray-900 dark:text-[#fafafa] placeholder-gray-400 dark:placeholder-[#71717a] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]"
+            />
+            {quickSearch && (
+              <button
+                type="button"
+                onClick={() => setQuickSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] cursor-pointer"
+                aria-label="Clear search"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
           <button
             onClick={clearFilters}
             className="text-[12px] font-medium px-3 py-1.5 bg-white dark:bg-[#18181b] border border-[#e8eaef] dark:border-[#3f3f46] rounded-lg text-[#71717a] dark:text-[#a1a1aa] hover:text-[#18181b] dark:hover:text-[#fafafa] hover:border-[#71717a] cursor-pointer whitespace-nowrap"
