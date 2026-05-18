@@ -175,12 +175,18 @@ export default function AIChatbot() {
         />
       )}
 
-      {/* Drawer — full-height right-edge OR half-height bottom-right docked. */}
+      {/* Drawer — anchored to the bottom-right corner in BOTH states so the
+          half↔full transition interpolates width/height from a single
+          fixed point. Earlier the half state used `sm:bottom-3 sm:right-3`
+          while full used `top-0 right-0`, which made the browser
+          interpolate `bottom: 12px` ↔ `bottom: auto` — the animation
+          read as "shrink to top" when expanding. With both states anchored
+          bottom-right, the panel always grows / shrinks from the corner. */}
       <aside
-        className={`fixed z-50 bg-white dark:bg-[#0c0c0d] border border-[#e4e4e7] dark:border-[#27272a] shadow-2xl transition-all duration-200 flex flex-col ${
+        className={`fixed z-50 bg-white dark:bg-[#0c0c0d] border border-[#e4e4e7] dark:border-[#27272a] shadow-2xl transition-all duration-200 flex flex-col bottom-0 right-0 ${
           size === "half"
-            ? "bottom-0 right-0 h-[55vh] w-full sm:w-[420px] sm:bottom-3 sm:right-3 sm:rounded-lg"
-            : "top-0 right-0 h-full w-full sm:w-[640px] lg:w-[720px] border-l"
+            ? "h-[55vh] w-full sm:w-[420px] sm:bottom-3 sm:right-3 sm:rounded-lg"
+            : "h-full w-full sm:w-[640px] lg:w-[720px] border-l"
         } ${open ? "translate-x-0 translate-y-0 opacity-100" : (size === "half" ? "translate-y-full opacity-0 pointer-events-none invisible" : "translate-x-full opacity-0 pointer-events-none invisible")}`}
         aria-hidden={!open}
       >
